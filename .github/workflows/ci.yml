@@ -82,8 +82,16 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      # Built with no DATABASE_URL on purpose. `next build` imports every route
+      # module to collect its page data, and src/db/client.ts throws without a
+      # connection string, so a route that imports the client at the top of the
+      # file fails any build that has no database — which is exactly what the
+      # image build is. Catching it here costs seconds; the image build catches
+      # it two minutes in, and only compose-smoke runs that.
       - name: Build
         run: npm run build
+        env:
+          DATABASE_URL: ""
 
       # Last on purpose: a formatting nit must never be the reason a real
       # failure goes unseen.
