@@ -9,10 +9,18 @@ on:
     - cron: "*/30 * * * *"
   workflow_dispatch:
 
-# Never two ingests at once. The advisory lock in src/worker/lock.ts would make
-# a second run decline harmlessly, but a declined run still spends a runner
-# minute, and queueing is wrong here: a pass skipped because the previous one
-# is still going is the intended behaviour, not a backlog to work through.
+# Never two ingests at once, by two mechanisms that cover different failures.
+#
+# Here: a run arriving while one is going is QUEUED, not skipped — and if a
+# third arrives while one is already pending, GitHub cancels the pending one so
+# the newest takes its place. So at most one run ever waits and a backlog
+# cannot build, which is the property that matters; it is not the same as
+# skipping, and saying so matters because a queued run still costs a minute.
+#
+# And in the worker: if the queued run starts while the previous is somehow
+# still working, the advisory lock in src/worker/lock.ts declines it and it
+# exits 0 having done nothing. Belt and braces, because the schedule and the
+# compose loop can both be running against one database.
 concurrency:
   group: ingest
   cancel-in-progress: false
