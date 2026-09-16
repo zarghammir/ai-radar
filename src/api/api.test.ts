@@ -61,7 +61,7 @@ withDb("API routes", () => {
 
   beforeEach(async () => {
     await sql.unsafe(
-      `TRUNCATE story_topics, raw_items, stories, topics, ingest_runs, saved_items, read_state, sources RESTART IDENTITY CASCADE`,
+      `TRUNCATE story_topics, raw_items, stories, topics, ingest_runs, saved_items, read_state, sources, user_preferences RESTART IDENTITY CASCADE`,
     );
   }, 30_000);
 
@@ -326,6 +326,24 @@ withDb("API routes", () => {
       expect(blog.engagement).toBeNull();
     });
 
+    it("counts one source once when it files two items on the same story", async () => {
+      // Every other test gives each story one item per source, so nothing was
+      // asserting the de-duplication a card depends on to explain its badge.
+      const src = await source("verge-ai", { name: "The Verge" });
+      await story({ slug: "twice", sourceIds: [src, src] });
+      const { GET } = await import("@/app/api/stories/[slug]/route");
+      const d = await body(
+        await GET(req("/api/stories/twice"), {
+          params: Promise.resolve({ slug: "twice" }),
+        } as never),
+      );
+      // Two items, one source. The card's source list is what the verification
+      // badge is derived from, so a duplicate there would claim corroboration
+      // the story does not have.
+      expect(d.items as unknown as unknown[]).toHaveLength(2);
+      expect((d.sources as unknown as { key: string }[]).map((x) => x.key)).toEqual(["verge-ai"]);
+    });
+
     it("is a 404 for an unknown slug", async () => {
       const { GET } = await import("@/app/api/stories/[slug]/route");
       const res = await GET(req("/api/stories/nope"), {
@@ -496,6 +514,308 @@ withDb("API routes", () => {
         expect(err.code).toBe("VALIDATION_ERROR");
         expect(err.message.toLowerCase()).toContain(fragment);
       }
+    });
+  });
+
+  // ── Saved, read and hidden ────────────────────────────────────────────────
+
+  describe("saving", () => {
+    it("saves, updates on a second save, and unsaves", async () => {
+      const src = await source("verge-ai");
+      const id = await story({ slug: "a", sourceIds: [src] });
+      const { POST, DELETE } = await import("@/app/api/saved/[storyId]/route");
+      const ctx = { params: Promise.resolve({ storyId: String(id) }) } as never;
+
+      const first = await POST(
+        new Request(`${BASE}/api/saved/${id}`, {
+          method: "POST",
+          body: JSON.stringify({ note: "read later" }),
+        }) as never,
+        ctx,
+      );
+      expect(first.status).toBe(200);
+      expect(await body(first)).toMatchObject({ saved: true, note: "read later", tags: [] });
+
+      // Idempotent: a second tap on a phone must not be an error.
+      const again = await POST(
+        new Request(`${BASE}/api/saved/${id}`, {
+          method: "POST",
+          body: JSON.stringify({ note: "changed", tags: ["ai"] }),
+        }) as never,
+        ctx,
+      );
+      expect(again.status).toBe(200);
+      expect(await body(again)).toMatchObject({ saved: true, note: "changed", tags: ["ai"] });
+
+      const removed = await DELETE(new Request(`${BASE}/api/saved/${id}`) as never, ctx);
+      expect(await body(removed)).toMatchObject({ saved: false });
+      // Also idempotent the other way.
+      expect((await DELETE(new Request(`${BASE}/api/saved/${id}`) as never, ctx)).status).toBe(200);
+    });
+
+    it("saves with no body at all", async () => {
+      const src = await source("verge-ai");
+      const id = await story({ slug: "a", sourceIds: [src] });
+      const { POST } = await import("@/app/api/saved/[storyId]/route");
+      const res = await POST(
+        new Request(`${BASE}/api/saved/${id}`, { method: "POST" }) as never,
+        {
+          params: Promise.resolve({ storyId: String(id) }),
+        } as never,
+      );
+      expect(res.status).toBe(200);
+      expect(await body(res)).toMatchObject({ saved: true, note: null, tags: [] });
+    });
+
+    it("is a 404 for a story that does not exist, and a 400 for a bad id", async () => {
+      const { POST } = await import("@/app/api/saved/[storyId]/route");
+      const missing = await POST(
+        new Request(`${BASE}/api/saved/999`, { method: "POST" }) as never,
+        {
+          params: Promise.resolve({ storyId: "999" }),
+        } as never,
+      );
+      expect(missing.status).toBe(404);
+
+      const bad = await POST(
+        new Request(`${BASE}/api/saved/abc`, { method: "POST" }) as never,
+        {
+          params: Promise.resolve({ storyId: "abc" }),
+        } as never,
+      );
+      expect(bad.status).toBe(400);
+    });
+
+    it("lists saved stories newest first, with the note and when it was saved", async () => {
+      const src = await source("verge-ai");
+      const one = await story({ slug: "one", sourceIds: [src] });
+      const two = await story({ slug: "two", sourceIds: [src] });
+      const { POST } = await import("@/app/api/saved/[storyId]/route");
+      for (const id of [one, two]) {
+        await POST(
+          new Request(`${BASE}/api/saved/${id}`, {
+            method: "POST",
+            body: JSON.stringify({ note: `n${id}` }),
+          }) as never,
+          {
+            params: Promise.resolve({ storyId: String(id) }),
+          } as never,
+        );
+      }
+      const { GET } = await import("@/app/api/saved/route");
+      const data = await body(await GET(req("/api/saved")));
+      const list = data.stories as unknown as {
+        slug: string;
+        note: string;
+        savedAt: string;
+        saved: boolean;
+      }[];
+      expect(list.map((x) => x.slug)).toEqual(["two", "one"]);
+      expect(list[0].note).toBe(`n${two}`);
+      expect(list[0].savedAt).toMatch(/^\d{4}-/);
+      expect(list[0].saved).toBe(true);
+    });
+  });
+
+  describe("read and hidden are separate facts", () => {
+    it("marks read without hiding, and hides without marking read", async () => {
+      const src = await source("verge-ai");
+      const id = await story({ slug: "a", sourceIds: [src] });
+      const read = await import("@/app/api/read/[storyId]/route");
+      const hide = await import("@/app/api/hide/[storyId]/route");
+      const ctx = { params: Promise.resolve({ storyId: String(id) }) } as never;
+
+      const marked = await body(
+        await read.POST(new Request(`${BASE}/api/read/${id}`, { method: "POST" }) as never, ctx),
+      );
+      expect(marked).toMatchObject({ read: true });
+      expect(marked.readAt).not.toBeNull();
+
+      // Still visible: reading is not hiding.
+      const { GET } = await import("@/app/api/radar/route");
+      expect(
+        (await body(await GET(req("/api/radar")))).stories as unknown as unknown[],
+      ).toHaveLength(1);
+
+      const hidden = await body(
+        await hide.POST(new Request(`${BASE}/api/hide/${id}`, { method: "POST" }) as never, ctx),
+      );
+      expect(hidden).toMatchObject({ hidden: true });
+      // Hiding must not have cleared the read mark.
+      const [row] = await sql.unsafe(
+        `select read_at, hidden from read_state where story_id = ${id}`,
+      );
+      expect(row.read_at).not.toBeNull();
+      expect(row.hidden).toBe(true);
+
+      // And now it is out of the list, while still reachable by link.
+      expect(
+        (await body(await GET(req("/api/radar")))).stories as unknown as unknown[],
+      ).toHaveLength(0);
+    });
+
+    it("unmarks and unhides when asked", async () => {
+      const src = await source("verge-ai");
+      const id = await story({ slug: "a", sourceIds: [src] });
+      const read = await import("@/app/api/read/[storyId]/route");
+      const hide = await import("@/app/api/hide/[storyId]/route");
+      const ctx = { params: Promise.resolve({ storyId: String(id) }) } as never;
+
+      await read.POST(new Request(`${BASE}/api/read/${id}`, { method: "POST" }) as never, ctx);
+      const un = await body(
+        await read.POST(
+          new Request(`${BASE}/api/read/${id}`, {
+            method: "POST",
+            body: JSON.stringify({ read: false }),
+          }) as never,
+          ctx,
+        ),
+      );
+      expect(un).toMatchObject({ read: false, readAt: null });
+
+      await hide.POST(new Request(`${BASE}/api/hide/${id}`, { method: "POST" }) as never, ctx);
+      const shown = await body(
+        await hide.POST(
+          new Request(`${BASE}/api/hide/${id}`, {
+            method: "POST",
+            body: JSON.stringify({ hidden: false }),
+          }) as never,
+          ctx,
+        ),
+      );
+      expect(shown).toMatchObject({ hidden: false });
+    });
+  });
+
+  // ── Preferences ───────────────────────────────────────────────────────────
+
+  describe("preferences", () => {
+    it("answers with defaults on a fresh install rather than a 404", async () => {
+      const { GET } = await import("@/app/api/preferences/route");
+      const data = await body(await GET());
+      expect(data).toMatchObject({
+        briefTime: "07:30",
+        timezone: "UTC",
+        briefLength: "10",
+        theme: "system",
+      });
+      expect(data.topicKeys).toEqual([]);
+    });
+
+    it("updates only the fields it is given", async () => {
+      await topic("openai", "OpenAI");
+      const { GET, PUT } = await import("@/app/api/preferences/route");
+      await GET();
+      const res = await PUT(
+        new Request(`${BASE}/api/preferences`, {
+          method: "PUT",
+          body: JSON.stringify({ briefLength: "5", topicKeys: ["openai"] }),
+        }) as never,
+      );
+      expect(res.status).toBe(200);
+      const data = await body(res);
+      expect(data).toMatchObject({ briefLength: "5", briefTime: "07:30" });
+      expect(data.topicKeys).toEqual(["openai"]);
+    });
+
+    it("rejects an unknown topic rather than dropping it", async () => {
+      const { PUT } = await import("@/app/api/preferences/route");
+      const res = await PUT(
+        new Request(`${BASE}/api/preferences`, {
+          method: "PUT",
+          body: JSON.stringify({ topicKeys: ["nope"] }),
+        }) as never,
+      );
+      expect(res.status).toBe(400);
+      expect(((await body(res)).error as unknown as { message: string }).message).toContain("nope");
+    });
+
+    it("rejects a bad time, a bad zone, a bad theme and an unknown field", async () => {
+      const { PUT } = await import("@/app/api/preferences/route");
+      for (const patch of [
+        { briefTime: "7:30" },
+        { timezone: "Mars/Olympus" },
+        { theme: "neon" },
+        { somethingElse: true },
+      ]) {
+        const res = await PUT(
+          new Request(`${BASE}/api/preferences`, {
+            method: "PUT",
+            body: JSON.stringify(patch),
+          }) as never,
+        );
+        expect(res.status, JSON.stringify(patch)).toBe(400);
+      }
+    });
+  });
+
+  // ── Brief ─────────────────────────────────────────────────────────────────
+
+  describe("GET /api/brief", () => {
+    it("returns a window, a count and the reading time of what it returned", async () => {
+      const src = await source("verge-ai");
+      await story({ slug: "a", sourceIds: [src], lastActivityAt: new Date(Date.now() - 60_000) });
+      const { GET } = await import("@/app/api/brief/route");
+      const data = await body(await GET(req("/api/brief")));
+
+      expect(data.length).toBe("10");
+      expect(data.count).toBe(1);
+      const window = data.window as unknown as { from: string; to: string; briefTime: string };
+      expect(window.briefTime).toBe("07:30");
+      expect(Date.parse(window.from)).toBeLessThan(Date.parse(window.to));
+      // count and readingMinutes describe the RESPONSE, not the window.
+      const stories = data.stories as unknown as { readingMinutes: number }[];
+      expect(stories).toHaveLength(data.count as unknown as number);
+      expect(data.readingMinutes).toBe(stories.reduce((n, s) => n + s.readingMinutes, 0));
+    });
+
+    it("leaves out anything older than the window", async () => {
+      const src = await source("verge-ai");
+      await story({
+        slug: "recent",
+        sourceIds: [src],
+        lastActivityAt: new Date(Date.now() - 60_000),
+      });
+      await story({
+        slug: "ancient",
+        sourceIds: [src],
+        lastActivityAt: new Date(Date.now() - 40 * 3_600_000),
+      });
+      const { GET } = await import("@/app/api/brief/route");
+      const data = await body(await GET(req("/api/brief")));
+      expect((data.stories as unknown as { slug: string }[]).map((x) => x.slug)).toEqual([
+        "recent",
+      ]);
+    });
+
+    it("leaves a hidden story out of the brief too", async () => {
+      // The contract says hidden stories leave EVERY list, and nothing was
+      // holding the brief to that: removing the filter reddened nothing.
+      const src = await source("verge-ai");
+      await story({
+        slug: "shown",
+        sourceIds: [src],
+        lastActivityAt: new Date(Date.now() - 60_000),
+      });
+      await story({
+        slug: "hidden-one",
+        sourceIds: [src],
+        lastActivityAt: new Date(Date.now() - 60_000),
+        hidden: true,
+      });
+      const { GET } = await import("@/app/api/brief/route");
+      const data = await body(await GET(req("/api/brief")));
+      expect((data.stories as unknown as { slug: string }[]).map((x) => x.slug)).toEqual(["shown"]);
+      expect(data.count).toBe(1);
+    });
+
+    it("rejects a length it does not offer", async () => {
+      const { GET } = await import("@/app/api/brief/route");
+      const res = await GET(req("/api/brief?length=7"));
+      expect(res.status).toBe(400);
+      expect(((await body(res)).error as unknown as { message: string }).message).toContain(
+        "length",
+      );
     });
   });
 

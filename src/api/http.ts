@@ -60,3 +60,19 @@ export async function handle(run: () => Promise<Response>): Promise<Response> {
     return errorResponse("INTERNAL", "Something went wrong handling this request.");
   }
 }
+
+/**
+ * An optional JSON body.
+ *
+ * Several routes take a body only to override a default, so an empty one is
+ * normal rather than an error. Malformed JSON still is.
+ */
+export async function readOptionalJson(request: Request): Promise<unknown> {
+  const raw = await request.text();
+  if (raw.trim() === "") return {};
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new ApiError("VALIDATION_ERROR", "body must be JSON");
+  }
+}

@@ -29,6 +29,16 @@ function trendExpr(windowStart: Date): SQL<number> {
   )`;
 }
 
+/**
+ * Hidden stories leave every list. Hiding is not deleting: the story stays
+ * reachable by direct link, which is what the contract promises.
+ */
+export function notHidden(): SQL {
+  return sql`not exists (
+    select 1 from read_state rs where rs.story_id = ${stories.id} and rs.hidden = true
+  )`;
+}
+
 function filterConditions(filters: RadarFilters): SQL[] {
   const conditions: SQL[] = [gte(stories.lastActivityAt, filters.since)];
 
@@ -50,11 +60,7 @@ function filterConditions(filters: RadarFilters): SQL[] {
     )`);
   }
 
-  // Hidden stories leave every list. Hiding is not deleting: the story stays
-  // reachable by direct link, which is what the contract promises.
-  conditions.push(sql`not exists (
-    select 1 from read_state rs where rs.story_id = ${stories.id} and rs.hidden = true
-  )`);
+  conditions.push(notHidden());
 
   return conditions;
 }
