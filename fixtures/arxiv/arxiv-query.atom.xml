@@ -1,0 +1,515 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<feed xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/" xmlns:arxiv="http://arxiv.org/schemas/atom" xmlns="http://www.w3.org/2005/Atom">
+  <id>https://arxiv.org/api/NkbpdyvyknH5jHKr5MbOLfd+HfI</id>
+  <title>arXiv Query: search_query=cat:cs.AI OR cat:cs.LG OR cat:cs.CL&amp;id_list=&amp;start=0&amp;max_results=12</title>
+  <updated>2026-09-16T19:55:17Z</updated>
+  <link href="https://arxiv.org/api/query?search_query=cat:cs.AI+OR+(cat:cs.LG+OR+cat:cs.CL)&amp;start=0&amp;max_results=12&amp;id_list=" type="application/atom+xml"/>
+  <opensearch:itemsPerPage>12</opensearch:itemsPerPage>
+  <opensearch:totalResults>463888</opensearch:totalResults>
+  <opensearch:startIndex>0</opensearch:startIndex>
+  <entry>
+    <id>http://arxiv.org/abs/2609.17527v1</id>
+    <title>Agentic Societies Need a Social Harness</title>
+    <updated>2026-09-15T17:57:27Z</updated>
+    <link href="https://arxiv.org/abs/2609.17527v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2609.17527v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>An agentic society is a collection of AI agents that coordinate autonomously across trust boundaries, on behalf of different principals whose objectives may only partially align. We show experimentally that in agentic societies even honest, competent agents often fail to reach satisfactory outcomes with existing harnesses and messaging primitives, and that faulty or malicious agents can stall collaboration, influence outcomes, and pursue other harmful goals by exploiting vulnerabilities in communication (``speech''). We argue that agentic societies need a \emph{social harness} for inter-agent interactions, in addition to each agent's \emph{personal harness}, which manages its private context and communication with its principal. We propose a layered architecture for social harnesses which (i) prevents classes of failures outright, (ii) enables agents to detect invalid messages at runtime, and (iii) supports post-facto investigation and consequences, and highlight directions for future research to realize these capabilities.</summary>
+    <category term="cs.MA" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.NI" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-09-15T17:57:27Z</published>
+    <arxiv:primary_category term="cs.MA"/>
+    <author>
+      <name>Tapan Chugh</name>
+    </author>
+    <author>
+      <name>Vidushi Singh</name>
+    </author>
+    <author>
+      <name>Krish Jain</name>
+    </author>
+    <author>
+      <name>Arvind Krishnamurthy</name>
+    </author>
+    <author>
+      <name>Ratul Mahajan</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2609.17523v1</id>
+    <title>ScienceBuddy: Recursive-in-Recursive Self-Improvement for Interactive Scientific Agents</title>
+    <updated>2026-09-15T17:55:28Z</updated>
+    <link href="https://arxiv.org/abs/2609.17523v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2609.17523v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>We introduce and release ScienceBuddy, an interactive scientific research workspace that brings continually improving scientific agents into researchers' everyday workflows. ScienceBuddy supports researchers in carrying out scientific tasks while transforming their requests, feedback, and execution evidence into tasks and evaluation rubrics for continual learning. At its core is recursive-in-recursive self-improvement, a paradigm that couples harness evolution with model reinforcement learning: the inner recursion improves the harness with the model fixed, while the outer recursion trains the model under the improved harness. Harness evolution shapes training experience, and model learning creates new opportunities for harness adaptation. We present case studies of researcher interaction, harness refinement, and model learning, with the benchmark cases spanning four scientific task families. By releasing ScienceBuddy as a research product, we make this paradigm available to the scientific community and take a step toward discovery intelligence: scientific AI that advances through sustained collaboration with researchers and evolves alongside the research it supports. Website: http://science-buddy.io</summary>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-09-15T17:55:28Z</published>
+    <arxiv:comment>Website: http://science-buddy.io, Code: https://github.com/Gen-Verse/ScienceBuddy-RSI</arxiv:comment>
+    <arxiv:primary_category term="cs.AI"/>
+    <author>
+      <name>Shuhan Xue</name>
+    </author>
+    <author>
+      <name>Jianyuan Zhong</name>
+    </author>
+    <author>
+      <name>Ziyuan Nan</name>
+    </author>
+    <author>
+      <name>Wenbin Li</name>
+    </author>
+    <author>
+      <name>Zhaochen Yu</name>
+    </author>
+    <author>
+      <name>Jinchao Ding</name>
+    </author>
+    <author>
+      <name>Qiang Gao</name>
+    </author>
+    <author>
+      <name>Pengyu Zhan</name>
+    </author>
+    <author>
+      <name>Yuntong Zhang</name>
+    </author>
+    <author>
+      <name>Tian Cheng</name>
+    </author>
+    <author>
+      <name>Zhenfei Yin</name>
+    </author>
+    <author>
+      <name>Yingcheng Wu</name>
+    </author>
+    <author>
+      <name>Ling Yang</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2609.17521v1</id>
+    <title>PhysStream: Streaming Physics-Grounded Video Generation with Structured Scene Memory and Fine-Grained Motion Control</title>
+    <updated>2026-09-15T17:55:13Z</updated>
+    <link href="https://arxiv.org/abs/2609.17521v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2609.17521v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Interactive control for video generation is moving from coarse prompts toward fine-grained, physically meaningful manipulation of dynamic scenes. Yet existing controllable methods either require the full control schedule before generation starts, or use pixel-space signals that dictate object positions rather than physical dynamics. To address these limitations, we propose PhysStream, an autoregressive model for physics-grounded image-to-video synthesis that incorporates structured scene memory---positional maps and object tracking maps derived online from previously generated frames---and supports fine-grained motion control via sparse velocity-increment signals that encode physical quantities, letting the model learn the underlying dynamics. We train our model in two stages: a bidirectional model is first finetuned with motion-control conditioning, then a causal autoregressive model is trained with additional structured scene memory, further improving physical consistency. PhysStream enables interactive, mid-generation control over multi-object tabletop rigid-body scenes---a capability not supported by prior methods---reducing motion distribution distance (FVMD) by 33% and trajectory error by 12% over the strongest baselines on synthetic benchmarks, and is preferred by human evaluators in over 85% of in-the-wild comparisons. Please check our website for more details: https://czzzzh.github.io/PhysStream</summary>
+    <category term="cs.CV" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.GR" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-09-15T17:55:13Z</published>
+    <arxiv:primary_category term="cs.CV"/>
+    <author>
+      <name>Chuhao Chen</name>
+    </author>
+    <author>
+      <name>Peter Wonka</name>
+    </author>
+    <author>
+      <name>Chaoyang Wang</name>
+    </author>
+    <author>
+      <name>Chen Wang</name>
+    </author>
+    <author>
+      <name>Qiao Feng</name>
+    </author>
+    <author>
+      <name>Sergey Tulyakov</name>
+    </author>
+    <author>
+      <name>Lingjie Liu</name>
+    </author>
+    <arxiv:doi>10.1145/3829340.3842176</arxiv:doi>
+    <link rel="related" href="https://doi.org/10.1145/3829340.3842176" title="doi"/>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2609.17516v1</id>
+    <title>When Should LLMs Abstain? Chain-of-Self-Questioning for Selective Risk Control</title>
+    <updated>2026-09-15T17:52:24Z</updated>
+    <link href="https://arxiv.org/abs/2609.17516v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2609.17516v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Large language models can produce fluent answers when their factual support is weak. This paper introduces Chain-of-Self-Questioning (CoSQ), a prompt-only framework that makes answer commitment conditional on an explicit assessment of the information required to answer a question. We evaluate three CoSQ variants under seventeen conditions on the 817-item TruthfulQA multiple-choice validation set using eleven open-weight and hosted model families. In the final balanced-option protocol, Grounded-CoSQ at τ=0.90 reduces the mean unconditional wrong-commitment rate from 13.1% under chain-of-thought prompting to 8.9%, a 32.1% relative reduction, while increasing answered accuracy from 86.9% to 89.7% and answering 87.6% of questions. Both improvements hold for all eleven models and at every evaluated threshold. Critical-CoSQ and Adaptive-CoSQ provide neighboring operating points with 88.6% and 86.5% coverage, respectively, while remaining more reliable than the baseline. A secondary Natural Questions Short-Answer evaluation provides convergent open-form evidence. These findings show that self-assessment can support explicit, tunable answer-or-abstain decisions when an unsupported commitment is more costly than referral or review.</summary>
+    <category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-09-15T17:52:24Z</published>
+    <arxiv:primary_category term="cs.CL"/>
+    <author>
+      <name>Ali Şenol</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2609.17515v1</id>
+    <title>What Breaks Under Pruning in Smart Homes, and When? Evaluating LLM Degradation Across Architectures and Task Complexity</title>
+    <updated>2026-09-15T17:51:48Z</updated>
+    <link href="https://arxiv.org/abs/2609.17515v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2609.17515v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Pruning can reduce the deployment cost of large language models (LLMs), but its impact on context-grounded tool calling remains poorly understood. We systematically study pruning-induced degradation in smart-home tool calling across four LLMs spanning dense Transformer, dense hybrid, and mixture-of-experts (MoE) architectures, together with depth, width, hybrid, and expert pruning methods. After post-pruning supervised fine-tuning (SFT), we evaluate more than 19,500 instances from three smart-home datasets. Beyond aggregate task accuracy, we characterize degradation along two dimensions: action components (i.e., operation, device, argument, and value) and task complexity. Our results show that dense models have narrow safe pruning regions followed by sharp degradation, while MoE models tolerate substantially more pruning. Pruning degrades grounded specificity before schema-level intent, and aggressive dense pruning can induce systematic over-refusal. These findings highlight the importance of evaluating pruning beyond aggregate accuracy when selecting pruned LLMs for reliable tool execution.</summary>
+    <category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-09-15T17:51:48Z</published>
+    <arxiv:comment>Submitted to EACL Industry Track</arxiv:comment>
+    <arxiv:primary_category term="cs.CL"/>
+    <author>
+      <name>Congjing Zhang</name>
+    </author>
+    <author>
+      <name>Vashishtha Patil</name>
+    </author>
+    <author>
+      <name>Henning Lange</name>
+    </author>
+    <author>
+      <name>Usman Aleem</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2609.17509v1</id>
+    <title>LACE: Layer-Wise Compression for Dynamic Frame Rate Codecs</title>
+    <updated>2026-09-15T17:46:51Z</updated>
+    <link href="https://arxiv.org/abs/2609.17509v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2609.17509v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Neural audio codecs are a key component in speech language modeling. However, their high frame rates lead to long sequence lengths, increasing computational costs. Dynamic frame rate codecs mitigate this by reducing the effective frame rate using a compression step to merge multiple frames together. However, most prior methods either operate on single-codebook codecs or apply a single compression step before multi-layer quantization. This forces all quantization layers to share the same segmentation boundaries, despite the residual embeddings at different quantization layers exhibiting different rates of change over time. We propose LACE (Layer-Adaptive Codec Encoding), a dynamic frame rate codec that applies an independent compression step at each quantization layer, enabling layer-specific segmentation boundaries. To use LACE tokens in downstream text-to-speech (TTS), we further introduce union alignment and boundary anchor mechanisms to make durations consistent across layers while preserving compression benefits. Experiments on LibriTTS show that LACE offers a better rate-quality tradeoff than prior dynamic frame rate methods on the reconstruction task and improves TTS inference efficiency while maintaining competitive synthesis quality. Our code is released as part of the ESPnet3 codec recipe.</summary>
+    <category term="cs.SD" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-09-15T17:46:51Z</published>
+    <arxiv:comment>Accepted to SLT 2026. 8 pages, 5 figures</arxiv:comment>
+    <arxiv:primary_category term="cs.SD"/>
+    <author>
+      <name>Thanapat Trachu</name>
+    </author>
+    <author>
+      <name>Samuele Cornell</name>
+    </author>
+    <author>
+      <name>William Chen</name>
+    </author>
+    <author>
+      <name>Shinji Watanabe</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2609.17499v1</id>
+    <title>ENCP: Episode-Normalized Conformal Prediction for Vision-and-Language Navigation</title>
+    <updated>2026-09-15T17:42:15Z</updated>
+    <link href="https://arxiv.org/abs/2609.17499v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2609.17499v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Uncertainty estimation for Vision-Language-Navigation (VLN) models is a critical task since it can help identify ambiguous and unreliable predictions, enabling agents to make safer navigation decisions. As one of the most advanced uncertainty estimation frameworks, conformal prediction (CP) offers a promising approach for uncertainty estimation in VLN. However, given that VLN agent requires a sequence of steps, standard calibration in conformal prediction fails to provide coverage guarantee it promises over a dependent, variable-length VLN episode. To this end, we propose Episode-Normalized Conformal Prediction (ENCP), which rescales a nonconformity score by the policy's residual confidence and calibrates one maximum score per episode. Under exchangeable calibration and test episodes, this construction covers the ground truth at every step with probability at least $1 - α$, while allowing dependence among steps within an episode. Across four VLN policies and three nonconformity scores on R2R and REVERIE dataset, ENCP meets all reported empirical step-coverage targets on the seen-to-unseen evaluation. These results demonstrate that ENCP can provide model-agnostic uncertainty estimates, which might be useful for determining when a VLN agent should defer to a more capable predictor, including human assistance.</summary>
+    <category term="cs.LG" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.RO" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-09-15T17:42:15Z</published>
+    <arxiv:comment>8 pages, 5 figures</arxiv:comment>
+    <arxiv:primary_category term="cs.LG"/>
+    <author>
+      <name>Vicky Feliren</name>
+    </author>
+    <author>
+      <name>A. Taufiq Asyhari</name>
+    </author>
+    <author>
+      <name>Muhamad Risqi U. Saputra</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2609.17496v1</id>
+    <title>Verifiable Social Reasoning for LLM Assistants</title>
+    <updated>2026-09-15T17:37:29Z</updated>
+    <link href="https://arxiv.org/abs/2609.17496v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2609.17496v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>LLM assistants are widely used for daily social advice, yet evaluating their social reasoning in such consultation settings remains challenging since (i) it requires setups where the assistant learns about social situations from subjective user narratives, and (ii) social properties, such as others' intentions, typically lack verifiable ground truth. To address these challenges, we introduce Fuse, a multi-agent simulation framework for studying user-mediated social reasoning. In Fuse, a target agent with a hidden motive interacts with other agents including one representing the user, who then consults the evaluated assistant to infer the target's motive, providing verifiable ground truth by construction. Simulation faithfulness is validated through a human study with 24k annotations. We apply Fuse to 12 LLMs and demonstrate its analytical utility by systematically isolating key factors, showing that (i) user mediation compounds the inherent difficulty of social reasoning; (ii) LLMs exhibit systematic sensitivity to biased user framing; (iii) models can require more details than humans need to reach a correct prediction; and (iv) longer conversations do not always improve performance despite providing opportunities for clarifying questions. We open-source Fuse and a dataset with 21k examples.</summary>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-09-15T17:37:29Z</published>
+    <arxiv:comment>First two authors contributed equally and the order between them was chosen randomly</arxiv:comment>
+    <arxiv:primary_category term="cs.AI"/>
+    <author>
+      <name>Amir Taubenfeld</name>
+    </author>
+    <author>
+      <name>Zorik Gekhman</name>
+    </author>
+    <author>
+      <name>Avigail Grinstein-Dabush</name>
+    </author>
+    <author>
+      <name>Itay Laish</name>
+    </author>
+    <author>
+      <name>Ariel Goldstein</name>
+    </author>
+    <author>
+      <name>Marian Croak</name>
+    </author>
+    <author>
+      <name>Avinatan Hassidim</name>
+    </author>
+    <author>
+      <name>Yossi Matias</name>
+    </author>
+    <author>
+      <name>Amir Feder</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2609.17491v1</id>
+    <title>FreqSpaNet: Frequency and Spatial Learning of SFPF for Physical Layer Hardware Integrity Detection</title>
+    <updated>2026-09-15T17:32:12Z</updated>
+    <link href="https://arxiv.org/abs/2609.17491v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2609.17491v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Unauthorized hardware replacement can preserve a wireless device's logical identity while altering its physical implementation, posing a challenge to hardware integrity verification. Spatio-frequency polarization fingerprints (SFPFs) capture device-dependent responses across multiple frequencies and directions, but their frequency and spatial dimensions exhibit different structural dependencies. We propose FreqSpaNet, an SFPF representation learning network for open set hardware anomaly detection. A frequency branch captures local variations among neighboring frequencies, while a geometry-aware spatial branch models directional relationships using angular information. The two representations are combined through adaptive fusion, and complementary pretraining further captures shared information while preserving the distinct characteristics of the frequency and spatial representations. Experiments show that FreqSpaNet achieves a mean AUROC of 96.31\%, 9.05 points above the baseline. Results under seven hardware replacement scenarios further verify the effectiveness of FreqSpaNet.</summary>
+    <category term="cs.LG" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-09-15T17:32:12Z</published>
+    <arxiv:comment>5 pages, 6 figures</arxiv:comment>
+    <arxiv:primary_category term="cs.LG"/>
+    <author>
+      <name>Xiaoxuan Huang</name>
+    </author>
+    <author>
+      <name>Jinlong Xu</name>
+    </author>
+    <author>
+      <name>YiZhe Wang</name>
+    </author>
+    <author>
+      <name>Meng Zhang</name>
+    </author>
+    <author>
+      <name>Xian Li</name>
+    </author>
+    <author>
+      <name>Yuying Bian</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2609.17488v1</id>
+    <title>LimiX-2: A Contextual Mechanism Network Towards General Structured-Data Intelligence</title>
+    <updated>2026-09-15T17:30:02Z</updated>
+    <link href="https://arxiv.org/abs/2609.17488v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2609.17488v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>We introduce LimiX-2, a new model in the LimiX family, developed through model and data scaling guided by our previously established scaling laws. LimiX-2 adopts the Contextual Mechanism Networks (CMNs) paradigm and is pretrained with Context-Conditional Masked Modeling (CCMM). CMNs shifts the organizing principle of in-context learning from target-centric prediction to mechanism-oriented joint modeling. Rather than centering the network on the $p(y \mid x, D_{\mathrm{context}})$ objective of conventional tabular PFNs, it is designed around learning $p(x, y \mid D_{\mathrm{context}})$, a context-dependent representation of the joint structure underlying data generation. Pretraining uses synthetic datasets generated by structural causal models (SCMs) spanning diverse graph structures, functional mechanisms, and observation processes. Evaluations on TabArena, TALENT, and BCCO show that LimiX-2 outperforms current dataset-specific models and tabular foundation models. Beyond predictive performance, the CMN paradigm also promotes causal awareness in LimiX-2: its feature attention encodes direct causal relationships, enabling accurate causal skeleton recovery.</summary>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-09-15T17:30:02Z</published>
+    <arxiv:primary_category term="cs.AI"/>
+    <author>
+      <name>Xingxuan Zhang</name>
+    </author>
+    <author>
+      <name>Gang Ren</name>
+    </author>
+    <author>
+      <name>Hao Yuan</name>
+    </author>
+    <author>
+      <name>Hao Zou</name>
+    </author>
+    <author>
+      <name>Hongze Tan</name>
+    </author>
+    <author>
+      <name>Hui Wang</name>
+    </author>
+    <author>
+      <name>Jianhao Song</name>
+    </author>
+    <author>
+      <name>Jiansheng Li</name>
+    </author>
+    <author>
+      <name>Jiayao Zhang</name>
+    </author>
+    <author>
+      <name>Jinghan Zhang</name>
+    </author>
+    <author>
+      <name>Kaifang Li</name>
+    </author>
+    <author>
+      <name>Lang Mo</name>
+    </author>
+    <author>
+      <name>Li Mao</name>
+    </author>
+    <author>
+      <name>Mingchao Hao</name>
+    </author>
+    <author>
+      <name>Nuo Xu</name>
+    </author>
+    <author>
+      <name>Rui Ding</name>
+    </author>
+    <author>
+      <name>Ruiji Zhang</name>
+    </author>
+    <author>
+      <name>Shuyang Li</name>
+    </author>
+    <author>
+      <name>Siyu Mei</name>
+    </author>
+    <author>
+      <name>Tianyang Zhang</name>
+    </author>
+    <author>
+      <name>Weiyang Mu</name>
+    </author>
+    <author>
+      <name>Yancheng Dong</name>
+    </author>
+    <author>
+      <name>Yongxian Wei</name>
+    </author>
+    <author>
+      <name>Yuan Xue</name>
+    </author>
+    <author>
+      <name>Yuanrui Wang</name>
+    </author>
+    <author>
+      <name>Yue He</name>
+    </author>
+    <author>
+      <name>Zijia Yang</name>
+    </author>
+    <author>
+      <name>Ziyun Li</name>
+    </author>
+    <author>
+      <name>Dongzhe Li</name>
+    </author>
+    <author>
+      <name>Fuqiang Wang</name>
+    </author>
+    <author>
+      <name>Jiandong Liu</name>
+    </author>
+    <author>
+      <name>Jiawei Chen</name>
+    </author>
+    <author>
+      <name>Jiaxin Du</name>
+    </author>
+    <author>
+      <name>Kaijie Cheng</name>
+    </author>
+    <author>
+      <name>Kehan Li</name>
+    </author>
+    <author>
+      <name>Lei Sun</name>
+    </author>
+    <author>
+      <name>Linjun Zhou</name>
+    </author>
+    <author>
+      <name>Ningbo Dai</name>
+    </author>
+    <author>
+      <name>Qi Wang</name>
+    </author>
+    <author>
+      <name>Renzhe Xu</name>
+    </author>
+    <author>
+      <name>Shaoxing Du</name>
+    </author>
+    <author>
+      <name>Shumeng Yang</name>
+    </author>
+    <author>
+      <name>Wang Lu</name>
+    </author>
+    <author>
+      <name>Wenjing Chu</name>
+    </author>
+    <author>
+      <name>Xiannan Huang</name>
+    </author>
+    <author>
+      <name>Xiaoyu Lin</name>
+    </author>
+    <author>
+      <name>Xing Ai</name>
+    </author>
+    <author>
+      <name>Xinyan Han</name>
+    </author>
+    <author>
+      <name>Xuanyue Li</name>
+    </author>
+    <author>
+      <name>Xuanyue Su</name>
+    </author>
+    <author>
+      <name>Xukun Zhang</name>
+    </author>
+    <author>
+      <name>Yan Lu</name>
+    </author>
+    <author>
+      <name>Yaxin Zhang</name>
+    </author>
+    <author>
+      <name>Yi Qin</name>
+    </author>
+    <author>
+      <name>Yifei Huang</name>
+    </author>
+    <author>
+      <name>Yihan Xu</name>
+    </author>
+    <author>
+      <name>Yongle Lv</name>
+    </author>
+    <author>
+      <name>Yuanyuan Jiang</name>
+    </author>
+    <author>
+      <name>Yushan Han</name>
+    </author>
+    <author>
+      <name>Peng Cui</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2609.17483v1</id>
+    <title>Bridging the Gap Between Homogeneous and Heterogeneous Asynchronous Optimization Is Surprisingly Difficult</title>
+    <updated>2026-09-15T17:24:09Z</updated>
+    <link href="https://arxiv.org/abs/2609.17483v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2609.17483v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Modern large-scale machine learning tasks often require multiple workers, devices, CPUs, or GPUs to compute stochastic gradients in parallel and asynchronously to train model weights. Theoretical results typically distinguish between two settings: (i) the homogeneous setting, where all workers have access to the same data distribution, and (ii) the heterogeneous setting, where each worker operates on different data distributions. Known optimal time complexities in these settings reveal a significant gap, with far more pessimistic guarantees in the heterogeneous case. In this work, we investigate whether these pessimistic optimal time complexities can be overcome under different assumptions. Surprisingly, we show that improvement is provably impossible under widely used first- and second-order similarity assumptions for any randomized algorithm. We then turn to the interpolation regime and demonstrate that the weak interpolation assumption alone is also insufficient. Finally, we introduce a minimal combination of irreducible assumptions, strong interpolation and the local Polyak-Lojasiewicz condition, to derive a new time complexity bound that matches the dependence on worker computation times in the best-known result in the homogeneous setting, without requiring identical data distributions.</summary>
+    <category term="math.OC" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.LG" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-09-15T17:24:09Z</published>
+    <arxiv:primary_category term="math.OC"/>
+    <author>
+      <name>Alexander Tyurin</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2609.17479v1</id>
+    <title>Det-LIME: Detector-Aware, Multi-Instance Local Interpretable Model-Agnostic Explanations for Automated Marine Mammal Detection</title>
+    <updated>2026-09-15T17:20:16Z</updated>
+    <link href="https://arxiv.org/abs/2609.17479v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2609.17479v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Despite the rapid uptake of black-box object detectors in marine mammal research and monitoring, explainability techniques are rarely integrated into conservation workflows. Furthermore, most classification-oriented explainability tools are ill-suited to detection tasks involving imagery of social organisms or those with colonial life histories, as they ignore multiple detections within a scene and produce single-instance outputs that blur evidence across individuals. These methods also generate low-resolution, often biologically irrelevant visuals, limiting their utility for debugging, targeted data augmentation, and refined data collection.
+  We proposed Det-LIME, a detector-aware, multi-instance adaptation of Local Interpretable Model-Agnostic Explanations (LIME) that produced instance-specific, box-aligned explanations by combining per-detection weighting, a proximity kernel that emphasizes regions near each box, and Intersection-over-Union-based matching to track the same instance across perturbations. We evaluated Det-LIME on aerial drone imagery for harbor seal detection, with an additional seabird case study to assess generality, and compared it with vanilla LIME, Stabilized LIME, Deterministic LIME, and gradient-based attribution methods.
+  Using the Attribution Ratio and Max Saliency Hit Rate metrics, we showed that Det-LIME consistently improved multi-instance attribution. In practice, these higher-resolution, instance-aware explanations provide insight into model outputs and support post-processing, debugging, and actionable improvements in modeling and data collection or augmentation.</summary>
+    <category term="cs.CV" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-09-15T17:20:16Z</published>
+    <arxiv:primary_category term="cs.CV"/>
+    <author>
+      <name>Jiayi Zhou</name>
+    </author>
+    <author>
+      <name>David W. Johnston</name>
+    </author>
+    <author>
+      <name>Brinnae Bent</name>
+    </author>
+    <arxiv:doi>10.1111/mms.70276</arxiv:doi>
+    <link rel="related" href="https://doi.org/10.1111/mms.70276" title="doi"/>
+  </entry>
+</feed>
