@@ -129,3 +129,26 @@ describe("deriveVerification with the analyst tier", () => {
     expect(deriveVerification([willison, willison, willison]).level).toBe("EMERGING");
   });
 });
+
+describe("corroborated note wording", () => {
+  it("does not call one newsroom plus an analyst independent reporting", () => {
+    // "Independently reported by Reuters" overclaims when Reuters is the only
+    // newsroom on the story and the second source is a reading of it.
+    const r = deriveVerification([reuters, interconnects]);
+    expect(r.level).toBe("CORROBORATED");
+    expect(r.note).toBe("Reported by Reuters, analysed by Interconnects.");
+  });
+
+  it("still says independently reported when two newsrooms agree", () => {
+    expect(deriveVerification([reuters, verge]).note).toBe(
+      "Independently reported by Reuters, The Verge.",
+    );
+  });
+
+  it("names every newsroom and every analyst when both are plural", () => {
+    const r = deriveVerification([reuters, verge, willison, interconnects]);
+    expect(r.note).toBe(
+      "Reported by Reuters, The Verge, analysed by Simon Willison, Interconnects.",
+    );
+  });
+});

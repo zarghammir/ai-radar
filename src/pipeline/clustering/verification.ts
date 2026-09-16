@@ -51,9 +51,11 @@ export function deriveVerification(items: ItemForVerification[]): VerificationRe
   if (named.length >= 2 && hq.length >= 1) {
     return {
       level: "CORROBORATED",
-      note:
-        `Independently reported by ${names(hq)}` +
-        (analyst.length ? `, with analysis from ${names(analyst)}.` : "."),
+      // "Independently reported by Reuters" overclaims when Reuters is the
+      // only newsroom on the story and the other source is a reading of it.
+      note: analyst.length
+        ? `Reported by ${names(hq)}, analysed by ${names(analyst)}.`
+        : `Independently reported by ${names(hq)}.`,
     };
   }
   if (analyst.length >= 2) {
