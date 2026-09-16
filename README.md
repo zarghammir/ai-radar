@@ -26,8 +26,7 @@ Then open http://localhost:3000. Docker Compose is being added in Phase 1; until
 ```bash
 npm install
 npm run db:migrate
-npm run dev        # web app
-npm run worker     # ingestion worker, in a second terminal
+npm run dev
 ```
 
 ## License
