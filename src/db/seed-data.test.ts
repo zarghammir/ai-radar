@@ -79,6 +79,34 @@ describe("source catalogue", () => {
     expect(hn!.defaultContentType).not.toBe("DISCUSSION");
   });
 
+  it("gives first-party sources a default topic that resolves to a real topic", () => {
+    // A primary source with a vague headline ("Introducing our new model")
+    // matches no keyword, so without this it carries no company topic at all.
+    const withDefaults = SOURCE_SEEDS.filter((s) => (s.config?.topicKeys as string[])?.length);
+    // Floor: every assertion below passes on an empty list.
+    expect(withDefaults.length).toBeGreaterThanOrEqual(6);
+
+    const known = new Set(TOPIC_SEEDS.map((t) => t.key));
+    for (const s of withDefaults) {
+      for (const key of s.config!.topicKeys as string[]) {
+        expect(known.has(key), `${s.key} defaults to unknown topic "${key}"`).toBe(true);
+      }
+    }
+  });
+
+  it("only gives defaults to sources that speak for one organisation", () => {
+    // An outlet reports on everyone, so a default topic there would tag every
+    // story it files with whoever the outlet happens to be about.
+    for (const s of SOURCE_SEEDS) {
+      const defaults = (s.config?.topicKeys as string[]) ?? [];
+      if (s.tier === "PRIMARY" && s.kind === "rss") continue;
+      expect(
+        defaults,
+        `${s.key} is not a first-party source and must carry no default topic`,
+      ).toEqual([]);
+    }
+  });
+
   it("asks arXiv for the AI categories the brief names", () => {
     const arxiv = SOURCE_SEEDS.find((s) => s.kind === "arxiv");
     expect(arxiv).toBeDefined();
