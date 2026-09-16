@@ -164,7 +164,17 @@ function safeCount(n: number | undefined): number {
   return typeof n === "number" && Number.isFinite(n) && n > 0 ? n : 0;
 }
 
-/** Human labels for the developer "why ranked" view. */
+/**
+ * Human labels for the developer "why ranked" view.
+ *
+ * DO NOT ANNOTATE THIS AS Record<string, string>. The absence of that
+ * annotation is load-bearing: it is what keeps the literal keys, which is what
+ * makes ComponentKey a real union, which is what makes an unlabelled component
+ * fail to compile. With the annotation the keys widen to `string`, ComponentKey
+ * becomes `string`, and the guard silently permits everything while still
+ * looking like protection. `satisfies` below gives the same shape checking
+ * without costing the literals.
+ */
 export const COMPONENT_LABELS = {
   recency: "Recently active",
   primarySource: "Primary source",
