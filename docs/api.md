@@ -133,6 +133,7 @@ What a list renders. Returned by `/api/brief`, `/api/radar` and `/api/saved`.
   "slug": "introducing-gpt-6",
   "title": "Introducing GPT-6",
   "summary": null,
+  "whyItMatters": null,
   "excerpt": "A new flagship model with a one million token context window…",
   "url": "https://openai.com/index/gpt-6/",
   "contentType": "NEWS",
@@ -151,6 +152,12 @@ What a list renders. Returned by `/api/brief`, `/api/radar` and `/api/saved`.
       "name": "The Verge",
       "tier": "HIGH_QUALITY_REPORTING",
       "homepage": "https://www.theverge.com/ai-artificial-intelligence"
+    },
+    {
+      "key": "hackernews-ai",
+      "name": "Hacker News",
+      "tier": "COMMUNITY",
+      "homepage": "https://news.ycombinator.com"
     }
   ],
   "primarySource": {
@@ -161,10 +168,10 @@ What a list renders. Returned by `/api/brief`, `/api/radar` and `/api/saved`.
   },
   "topics": [{ "key": "openai", "name": "OpenAI", "group": "company" }],
   "publishedAt": "2026-09-16T09:00:00.000Z",
-  "firstSeenAt": "2026-09-16T09:12:00.000Z",
+  "firstSeenAt": "2026-09-16T09:00:00.000Z",
   "lastActivityAt": "2026-09-16T11:40:00.000Z",
-  "readingMinutes": 2,
-  "score": 41.3,
+  "readingMinutes": 1,
+  "score": 43.1,
   "saved": false,
   "read": false
 }
@@ -174,6 +181,14 @@ What a list renders. Returned by `/api/brief`, `/api/radar` and `/api/saved`.
 entry per source however many items that source filed. It is the same list the
 verification level is derived from, so a client can always explain the badge
 from the card alone.
+
+`whyItMatters` is on the card as well as the detail, because Today shows it in
+the list and a client cannot fetch one story's detail per row to get it. It is
+`null` on every story until the Phase 2 summariser lands — a null here is the
+feature not having arrived, not a fault. `scoreComponents` deliberately stays
+on `StoryDetail` only: a card shows importance as size and trust as its meter,
+not a per-component breakdown, and every field on a list payload is paid for
+once per story in the list.
 
 `url` and `publishedAt` come from the story's primary item — the first-party
 source where one exists, the earliest item otherwise. That is the link a reader
@@ -207,6 +222,42 @@ Everything in `StoryCard`, plus:
         "homepage": "https://openai.com/news",
         "kind": "rss"
       },
+      "engagement": null
+    },
+    {
+      "id": 981,
+      "title": "OpenAI announces GPT-6",
+      "url": "https://www.theverge.com/2026/9/16/gpt-6",
+      "excerpt": "The model arrives with…",
+      "author": "A Reporter",
+      "publishedAt": "2026-09-16T10:05:00.000Z",
+      "fetchedAt": "2026-09-16T10:20:00.000Z",
+      "role": "report",
+      "source": {
+        "key": "verge-ai",
+        "name": "The Verge",
+        "tier": "HIGH_QUALITY_REPORTING",
+        "homepage": "https://www.theverge.com/ai-artificial-intelligence",
+        "kind": "rss"
+      },
+      "engagement": null
+    },
+    {
+      "id": 982,
+      "title": "Introducing GPT-6",
+      "url": "https://openai.com/index/gpt-6/",
+      "excerpt": null,
+      "author": "someone",
+      "publishedAt": "2026-09-16T11:40:00.000Z",
+      "fetchedAt": "2026-09-16T11:45:00.000Z",
+      "role": "discussion",
+      "source": {
+        "key": "hackernews-ai",
+        "name": "Hacker News",
+        "tier": "COMMUNITY",
+        "homepage": "https://news.ycombinator.com",
+        "kind": "hackernews"
+      },
       "engagement": { "points": 412, "comments": 96 }
     }
   ],
@@ -218,13 +269,29 @@ Everything in `StoryCard`, plus:
       "role": "primary",
       "title": "Introducing GPT-6",
       "url": "https://openai.com/index/gpt-6/"
+    },
+    {
+      "at": "2026-09-16T10:05:00.000Z",
+      "sourceKey": "verge-ai",
+      "sourceName": "The Verge",
+      "role": "report",
+      "title": "OpenAI announces GPT-6",
+      "url": "https://www.theverge.com/2026/9/16/gpt-6"
+    },
+    {
+      "at": "2026-09-16T11:40:00.000Z",
+      "sourceKey": "hackernews-ai",
+      "sourceName": "Hacker News",
+      "role": "discussion",
+      "title": "Introducing GPT-6",
+      "url": "https://openai.com/index/gpt-6/"
     }
   ],
   "scoreComponents": [
     { "key": "recency", "label": "Recently active", "value": 13.1 },
     { "key": "primarySource", "label": "Primary source", "value": 20 },
     { "key": "corroboration", "label": "Corroborating sources", "value": 8 },
-    { "key": "emergingPenalty", "label": "Not yet corroborated", "value": -2 }
+    { "key": "contentType", "label": "Content type", "value": 2 }
   ]
 }
 ```
@@ -261,6 +328,16 @@ verification level. They are two keys rather than one only because the label
 map is static, and a single key would print "Unverified claim" on a story that
 is merely emerging. Nothing that lays out the negative side of a bar should
 reserve room for two.
+
+On an `EMERGING` story the entry looks like this:
+
+```json
+{ "key": "emergingPenalty", "label": "Not yet corroborated", "value": -2 }
+```
+
+It is here rather than in the worked example above because that story is
+`PRIMARY_SOURCE`, and neither penalty can occur on one: a lab publishing its
+own announcement is neither unverified nor merely emerging.
 
 No negative value is produced until #9 lands, but a chart that assumes
 non-negative values will render wrongly the day it does.
@@ -570,6 +647,7 @@ contract without filling a row here.
 | field                                         | source                                                                                      |
 | --------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | `id`, `slug`, `title`, `contentType`          | `stories` columns                                                                           |
+| `whyItMatters`                                | `stories.why_it_matters`, on both the card and the detail                                   |
 | `verification`, `verificationNote`            | `stories`, written by `deriveVerification` in the pipeline                                  |
 | `sourceCount`                                 | `stories.source_count`, recomputed by the pipeline                                          |
 | `firstSeenAt`, `lastActivityAt`               | `stories` columns                                                                           |
