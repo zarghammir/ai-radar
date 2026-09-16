@@ -91,13 +91,30 @@ export const hackerNewsAdapter: SourceAdapter = {
       { fetchImpl: ctx.fetch },
     );
     const slice = ids.slice(0, limit);
+    // A fetch that failed is not the same as a story that does not exist:
+    // swallowing both as null makes an outage look like a quiet news day.
+    const failures: { id: number; reason: string }[] = [];
     const items = await Promise.all(
       slice.map((id) =>
         fetchJson<HnItem | null>(`https://hacker-news.firebaseio.com/v0/item/${id}.json`, {
           fetchImpl: ctx.fetch,
-        }).catch(() => null),
+        }).catch((err: unknown) => {
+          failures.push({ id, reason: err instanceof Error ? err.message : String(err) });
+          return null;
+        }),
       ),
     );
+    if (failures.length) {
+      const ids = failures
+        .map((f) => f.id)
+        .sort((a, b) => a - b)
+        .slice(0, 10)
+        .join(", ");
+      ctx.log(
+        `hackernews: ${failures.length} of ${slice.length} item fetches failed ` +
+          `(ids ${ids}${failures.length > 10 ? ", …" : ""}); first reason: ${failures[0].reason}`,
+      );
+    }
 
     const out: FetchedItem[] = [];
     for (const it of items) {
