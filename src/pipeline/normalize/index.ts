@@ -26,8 +26,11 @@ export function normalizeItem(
   const excerptRaw = item.excerpt ? stripHtml(item.excerpt) : "";
   const excerpt = excerptRaw ? truncate(excerptRaw, EXCERPT_MAX) : null;
   let publishedAt = item.publishedAt ?? now;
-  // Guard against feeds with future timestamps or unparseable dates.
-  if (publishedAt.getTime() > now.getTime() + 60 * 60 * 1000) publishedAt = now;
+  // Guard against feeds with unparseable dates or timestamps in the future.
+  // An Invalid Date compares false against every bound, so it has to be tested
+  // for on its own or it reaches the database as NaN.
+  if (Number.isNaN(publishedAt.getTime())) publishedAt = now;
+  else if (publishedAt.getTime() > now.getTime() + 60 * 60 * 1000) publishedAt = now;
   const contentType: ContentType = item.contentType ?? source.defaultContentType;
   return {
     sourceId: source.id,

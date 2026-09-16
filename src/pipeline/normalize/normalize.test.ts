@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { canonicalizeUrl } from "./url";
 import { stripHtml, truncate, slugify, readingMinutes } from "./text";
-import { normalizeItem, fingerprintFor } from "./index";
+import { normalizeItem, fingerprintFor, EXCERPT_MAX } from "./index";
 
 describe("canonicalizeUrl", () => {
   it("drops tracking params, www, hash, trailing slash and sorts params", () => {
-    expect(
-      canonicalizeUrl("http://www.example.com/post/?utm_source=x&b=2&a=1#frag"),
-    ).toBe("https://example.com/post?a=1&b=2");
+    expect(canonicalizeUrl("http://www.example.com/post/?utm_source=x&b=2&a=1#frag")).toBe(
+      "https://example.com/post?a=1&b=2",
+    );
   });
   it("unifies arXiv abs/pdf and strips versions", () => {
     const a = canonicalizeUrl("https://arxiv.org/abs/2509.01234v2");
@@ -74,9 +74,112 @@ describe("normalizeItem", () => {
       now,
     );
     expect(row!.publishedAt).toEqual(now);
-    expect(normalizeItem({ externalId: "x", url: "", title: "t", publishedAt: null }, source)).toBeNull();
+    expect(
+      normalizeItem({ externalId: "x", url: "", title: "t", publishedAt: null }, source),
+    ).toBeNull();
   });
   it("gives different sources different fingerprints for the same url", () => {
     expect(fingerprintFor("a", "https://e.com")).not.toBe(fingerprintFor("b", "https://e.com"));
+  });
+});
+
+describe("normalizeItem date guarding", () => {
+  const source = { id: 1, key: "test", defaultContentType: "NEWS" as const };
+  const now = new Date("2026-09-16T10:00:00Z");
+
+  it("falls back to now when the feed date is unparseable", () => {
+    const row = normalizeItem(
+      {
+        externalId: "x",
+        url: "https://e.com/x",
+        title: "t",
+        publishedAt: new Date("definitely not a date"),
+      },
+      source,
+      now,
+    );
+    expect(row).not.toBeNull();
+    expect(Number.isNaN(row!.publishedAt.getTime())).toBe(false);
+    expect(row!.publishedAt).toEqual(now);
+  });
+
+  it("keeps a valid past date untouched", () => {
+    const published = new Date("2026-09-15T08:00:00Z");
+    const row = normalizeItem(
+      { externalId: "x", url: "https://e.com/x", title: "t", publishedAt: published },
+      source,
+      now,
+    );
+    expect(row!.publishedAt).toEqual(published);
+  });
+});
+
+describe("cross-source identity", () => {
+  const now = new Date("2026-09-16T10:00:00Z");
+  const blog = { id: 1, key: "openai-blog", defaultContentType: "RELEASE" as const };
+  const news = { id: 2, key: "verge", defaultContentType: "NEWS" as const };
+
+  it("collapses the same article to one canonical url but keeps one row per source", () => {
+    // Clustering counts distinct sources, so these must agree on the canonical
+    // url and disagree on the fingerprint. If the fingerprints matched, the
+    // unique index would drop the second source and corroboration would vanish.
+    const a = normalizeItem(
+      {
+        externalId: "a1",
+        url: "https://www.example.com/post/?utm_source=hn",
+        title: "Model released",
+        publishedAt: now,
+      },
+      blog,
+      now,
+    );
+    const b = normalizeItem(
+      {
+        externalId: "b1",
+        url: "http://example.com/post",
+        title: "Model released",
+        publishedAt: now,
+      },
+      news,
+      now,
+    );
+    expect(a!.canonicalUrl).toBe(b!.canonicalUrl);
+    expect(a!.fingerprint).not.toBe(b!.fingerprint);
+  });
+
+  it("takes the content type from the source when the adapter does not set one", () => {
+    const a = normalizeItem(
+      { externalId: "a", url: "https://e.com/a", title: "t", publishedAt: now },
+      blog,
+      now,
+    );
+    expect(a!.contentType).toBe("RELEASE");
+  });
+
+  it("lets an adapter override the source default", () => {
+    const a = normalizeItem(
+      {
+        externalId: "a",
+        url: "https://e.com/a",
+        title: "t",
+        publishedAt: now,
+        contentType: "PAPER",
+      },
+      blog,
+      now,
+    );
+    expect(a!.contentType).toBe("PAPER");
+  });
+
+  it("strips html from the excerpt and truncates it to the cap", () => {
+    const long = `<p>${"word ".repeat(400)}</p>`;
+    const a = normalizeItem(
+      { externalId: "a", url: "https://e.com/a", title: "t", excerpt: long, publishedAt: now },
+      blog,
+      now,
+    );
+    expect(a!.excerpt!).not.toContain("<p>");
+    expect(a!.excerpt!.length).toBeLessThanOrEqual(EXCERPT_MAX + 1);
+    expect(a!.excerpt!.endsWith("…")).toBe(true);
   });
 });
