@@ -104,10 +104,22 @@ jobs:
       - name: Check out the branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # The quick start's first command. If .env.example's defaults have drifted
+      # The quick start's first commands. If .env.example's defaults have drifted
       # out of step with the compose file, the stack fails here.
-      - name: cp .env.example .env
-        run: cp .env.example .env
+      #
+      # The generated secret is part of the quick start, not a CI convenience:
+      # since issue #5 the worker refuses to start while INTERNAL_API_SECRET is
+      # the published placeholder, so a smoke that kept the placeholder would
+      # test a path the README no longer tells anyone to take.
+      - name: cp .env.example .env, then generate a real secret
+        run: |
+          cp .env.example .env
+          sed -i "s|^INTERNAL_API_SECRET=.*|INTERNAL_API_SECRET=$(openssl rand -hex 32)|" .env
+          if grep -q '^INTERNAL_API_SECRET=change-me$' .env; then
+            echo "the placeholder secret was not replaced; the worker would refuse to start" >&2
+            exit 1
+          fi
+          echo "INTERNAL_API_SECRET generated for the smoke"
 
       - name: Build the image
         run: docker compose build web
