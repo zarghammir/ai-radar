@@ -114,6 +114,20 @@ withDb("ingestOnce", () => {
     expect(scored.every((s) => s.score > 0)).toBe(true);
   }, 30_000);
 
+  /**
+   * There is deliberately no test here for the ranking WINDOW — that stories
+   * older than the cutoff come out unscored, which is why a real pass reports
+   * fewer scored than created.
+   *
+   * The window belongs to src/pipeline/ranking/rank-all.ts and is asserted by
+   * its own suite ("leaves a story outside the window untouched", "does not
+   * rank when there is nothing in the window"). Asserting it from here would
+   * pin another module's rule from the outside and keep passing on the day that
+   * rule changes, which reads as coverage while covering nothing.
+   *
+   * What these tests own is that the wiring FIRES: a pass ingests and then
+   * scores, in one go, without anything else having to run.
+   */
   it("reports the same number of scored stories as it wrote", async () => {
     const outcome = await ingestOnce(db, sql, {
       now: NOW,
