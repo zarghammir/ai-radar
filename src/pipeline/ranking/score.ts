@@ -37,6 +37,19 @@ export interface RankInput {
  */
 export type ComponentKey = keyof typeof COMPONENT_LABELS;
 
+/**
+ * Enforces the absence documented on COMPONENT_LABELS.
+ *
+ * If the annotation is ever added back, ComponentKey widens to `string`, the
+ * guard silently permits every unlabelled component, and nothing else in the
+ * build says a word — a comment alone has never been enough on this project.
+ * This turns that into a TS2344 pointing here, and the comment above the
+ * declaration explains why to whoever hits it.
+ */
+type AssertTrue<T extends true> = T;
+type ComponentKeyIsNarrow = AssertTrue<string extends ComponentKey ? false : true>;
+export type { ComponentKeyIsNarrow };
+
 export interface RankResult {
   score: number;
   components: ScoreComponents;
