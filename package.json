@@ -16,7 +16,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
     "db:seed": "tsx src/db/seed.ts",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "sources:check": "tsx scripts/sources-check.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.126.0",
