@@ -223,7 +223,8 @@ Everything in `StoryCard`, plus:
   "scoreComponents": [
     { "key": "recency", "label": "Recently active", "value": 13.1 },
     { "key": "primarySource", "label": "Primary source", "value": 20 },
-    { "key": "corroboration", "label": "Corroborating sources", "value": 8 }
+    { "key": "corroboration", "label": "Corroborating sources", "value": 8 },
+    { "key": "emergingPenalty", "label": "Not yet corroborated", "value": -2 }
   ]
 }
 ```
@@ -243,13 +244,26 @@ recorded and zero engagement are not the same thing.
 UI can render it without re-sorting. `label` comes from the pipeline's own
 label map, so the wording in the UI cannot drift from the weights.
 
-**`value` may be negative.** Issue #9 adds two penalty components so the
-why-ranked panel can show what pushed a story _down_ and not only what lifted
-it: `unverifiedPenalty`, labelled "Unverified claim", and `emergingPenalty`,
-labelled "Not yet corroborated". Two keys rather than one because the label map
-is static, and a single key would print "Unverified claim" on a story that is
-merely emerging. No negative value is produced until #9 lands, but a bar chart
-that assumes non-negative values will render wrongly the day it does.
+If a component ever reaches the API without an entry in that map, its `label`
+is the raw key rather than being blank or missing — a new component must not
+blank a bar or throw. That is a safety net and not a state a reader should ever
+see, so #9's suite asserts that every component the ranker can emit has a
+label, deriving the list from the ranking code itself. Render the `label`
+verbatim; the fallback exists so that doing so is always safe.
+
+**`value` may be negative.** Issue #9 adds a penalty so the why-ranked panel
+can show what pushed a story _down_ and not only what lifted it. It takes one
+of two forms: `unverifiedPenalty`, labelled "Unverified claim", or
+`emergingPenalty`, labelled "Not yet corroborated".
+
+**A story carries at most one of them**, because a story has exactly one
+verification level. They are two keys rather than one only because the label
+map is static, and a single key would print "Unverified claim" on a story that
+is merely emerging. Nothing that lays out the negative side of a bar should
+reserve room for two.
+
+No negative value is produced until #9 lands, but a chart that assumes
+non-negative values will render wrongly the day it does.
 
 As everywhere else in this array, read the `label` the server sends rather than
 matching on the key. These two are named here because a reader deserves to know
@@ -561,7 +575,7 @@ contract without filling a row here.
 | `firstSeenAt`, `lastActivityAt`               | `stories` columns                                                                           |
 | `score`                                       | `stories.score`                                                                             |
 | `scoreComponents[].key/value`                 | `stories.score_components`                                                                  |
-| `scoreComponents[].label`                     | `COMPONENT_LABELS` in `src/pipeline/ranking/score.ts`                                       |
+| `scoreComponents[].label`                     | `COMPONENT_LABELS` in `src/pipeline/ranking/score.ts`, falling back to the key if unmapped  |
 | `sources[]`                                   | `raw_items` joined to `sources`, de-duplicated by source key                                |
 | `primarySource`, `url`, `publishedAt`         | the item at `stories.primary_item_id`, joined to its source                                 |
 | `excerpt`                                     | primary item's `raw_items.excerpt`                                                          |
