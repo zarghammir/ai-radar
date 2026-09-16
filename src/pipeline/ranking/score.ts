@@ -1,4 +1,4 @@
-import type { ContentType, ScoreComponents, SourceTier } from "@/db/schema";
+import type { ContentType, ScoreComponents, SourceTier, VerificationLevel } from "@/db/schema";
 
 export interface RankInput {
   /**
@@ -16,6 +16,8 @@ export interface RankInput {
    * so the same array can be passed to both without a mapping step in between.
    */
   sources: { sourceKey: string; tier: SourceTier }[];
+  /** How well the story's provenance is established. Penalised, never rewarded. */
+  verification: VerificationLevel;
   /** Topic keys attached to the story. */
   topicKeys: string[];
   /** Topic keys the user follows. Empty = no personalisation. */
@@ -24,6 +26,29 @@ export interface RankInput {
   engagementPoints?: number;
   engagementComments?: number;
 }
+
+/**
+ * The components the ranker may emit, taken from the label map itself.
+ *
+ * This is what makes an unlabelled component impossible rather than merely
+ * tested for: `c.freshness = 5` and `c["freshness"] = 5` both fail to compile
+ * until "freshness" has a label. A test can only cover the spellings its
+ * author thought of; the compiler covers all of them.
+ */
+export type ComponentKey = keyof typeof COMPONENT_LABELS;
+
+/**
+ * Enforces the absence documented on COMPONENT_LABELS.
+ *
+ * If the annotation is ever added back, ComponentKey widens to `string`, the
+ * guard silently permits every unlabelled component, and nothing else in the
+ * build says a word — a comment alone has never been enough on this project.
+ * This turns that into a TS2344 pointing here, and the comment above the
+ * declaration explains why to whoever hits it.
+ */
+type AssertTrue<T extends true> = T;
+type ComponentKeyIsNarrow = AssertTrue<string extends ComponentKey ? false : true>;
+export type { ComponentKeyIsNarrow };
 
 export interface RankResult {
   score: number;
@@ -49,6 +74,18 @@ export const WEIGHTS = {
   topicExtraMatch: 4,
   topicMax: 22,
   engagementMax: 12,
+  /**
+   * Magnitudes, applied as NEGATIVE components. A weak claim should cost a
+   * story its place rather than merely fail to earn one, and the why-ranked
+   * panel draws these going the other way — so the sign is the point, and a
+   * clamp at zero would quietly remove the only thing that pushes down.
+   *
+   * Two keys rather than one because COMPONENT_LABELS is a static map: a
+   * single key would print "Unverified claim" on a story that is only
+   * emerging, which is a false statement in front of the reader.
+   */
+  unverifiedPenalty: 6,
+  emergingPenalty: 2,
   contentType: {
     RELEASE: 6,
     MODEL: 6,
@@ -64,7 +101,12 @@ export const WEIGHTS = {
 } as const;
 
 export function rankStory(input: RankInput, now: Date = new Date()): RankResult {
-  const c: ScoreComponents = {};
+  // Typed to the label map's own keys, which is what makes an unlabelled
+  // component impossible rather than merely tested for: both `c.freshness = 5`
+  // and `c["freshness"] = 5` fail to compile until "freshness" has a label. A
+  // test can only cover the spellings its author thought of. The cast is
+  // because components are populated conditionally, so it starts out empty.
+  const c = {} as Record<ComponentKey, number>;
 
   // An unparseable date yields NaN here, and one NaN component turns the whole
   // additive score into NaN. Treat an unusable date as "just now" rather than
@@ -112,6 +154,9 @@ export function rankStory(input: RankInput, now: Date = new Date()): RankResult 
     c.engagement = round(Math.min(WEIGHTS.engagementMax, e));
   }
 
+  if (input.verification === "UNVERIFIED") c.unverifiedPenalty = -WEIGHTS.unverifiedPenalty;
+  else if (input.verification === "EMERGING") c.emergingPenalty = -WEIGHTS.emergingPenalty;
+
   const ct = WEIGHTS.contentType[input.contentType];
   if (ct) c.contentType = ct;
 
@@ -132,8 +177,18 @@ function safeCount(n: number | undefined): number {
   return typeof n === "number" && Number.isFinite(n) && n > 0 ? n : 0;
 }
 
-/** Human labels for the developer "why ranked" view. */
-export const COMPONENT_LABELS: Record<string, string> = {
+/**
+ * Human labels for the developer "why ranked" view.
+ *
+ * DO NOT ANNOTATE THIS AS Record<string, string>. The absence of that
+ * annotation is load-bearing: it is what keeps the literal keys, which is what
+ * makes ComponentKey a real union, which is what makes an unlabelled component
+ * fail to compile. With the annotation the keys widen to `string`, ComponentKey
+ * becomes `string`, and the guard silently permits everything while still
+ * looking like protection. `satisfies` below gives the same shape checking
+ * without costing the literals.
+ */
+export const COMPONENT_LABELS = {
   recency: "Recently active",
   primarySource: "Primary source",
   qualityReporting: "Established reporting",
@@ -143,4 +198,18 @@ export const COMPONENT_LABELS: Record<string, string> = {
   topicMatch: "Matches your topics",
   engagement: "Community engagement",
   contentType: "Content type",
-};
+  unverifiedPenalty: "Unverified claim",
+  emergingPenalty: "Not yet corroborated",
+} as const satisfies Record<string, string>;
+
+/**
+ * The label for a stored component, falling back to the key itself.
+ *
+ * The fallback is a safety net: a component reaching a reader with no label
+ * must not blank its bar or throw. It should never be reached, because
+ * ComponentKey makes an unlabelled component fail to compile, and the suite
+ * asserts the two sets match.
+ */
+export function labelFor(key: string): string {
+  return (COMPONENT_LABELS as Record<string, string>)[key] ?? key;
+}

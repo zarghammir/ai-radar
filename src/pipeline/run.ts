@@ -187,6 +187,7 @@ export async function refreshStory(tx: Tx, storyId: number): Promise<void> {
       publishedAt: rawItems.publishedAt,
       contentType: rawItems.contentType,
       tier: sources.tier,
+      sourceConfig: sources.config,
     })
     .from(rawItems)
     .innerJoin(sources, eq(rawItems.sourceId, sources.id))
@@ -222,16 +223,41 @@ export async function refreshStory(tx: Tx, storyId: number): Promise<void> {
     // The slug is the permalink and deliberately does not move with the title.
     .where(eq(stories.id, storyId));
 
-  await tagTopics(tx, storyId, `${primaryItem.title} ${primaryItem.excerpt ?? ""}`);
+  // Topics every story from this source belongs to whatever its headline says.
+  // Taken from the primary item's source, so a forum thread joining the story
+  // cannot bring its own.
+  const configured = primaryItem.sourceConfig?.topicKeys;
+  const defaultTopicKeys = Array.isArray(configured) ? (configured as string[]) : [];
+  await tagTopics(
+    tx,
+    storyId,
+    `${primaryItem.title} ${primaryItem.excerpt ?? ""}`,
+    defaultTopicKeys,
+  );
 }
 
 /**
- * Tag a story from the text of its primary item. Recomputed rather than only
- * added to, so a tag cannot survive the text that justified it.
+ * Tag a story from the text of its primary item, unioned with that source's
+ * default topics. Recomputed rather than only added to, so a tag cannot
+ * survive the text that justified it.
+ *
+ * The union is what covers a first-party post whose headline names nothing —
+ * "Introducing our new model" matches no keyword, and the source is the only
+ * thing that knows whose model it is.
  */
-export async function tagTopics(tx: Tx, storyId: number, text: string): Promise<number[]> {
-  const all = await tx.select({ id: topics.id, keywords: topics.keywords }).from(topics);
-  const wanted = all.filter((t) => matchesAnyKeyword(text, t.keywords)).map((t) => t.id);
+export async function tagTopics(
+  tx: Tx,
+  storyId: number,
+  text: string,
+  defaultTopicKeys: string[] = [],
+): Promise<number[]> {
+  const all = await tx
+    .select({ id: topics.id, key: topics.key, keywords: topics.keywords })
+    .from(topics);
+  const byDefault = new Set(defaultTopicKeys);
+  const wanted = all
+    .filter((t) => byDefault.has(t.key) || matchesAnyKeyword(text, t.keywords))
+    .map((t) => t.id);
 
   const current = (
     await tx

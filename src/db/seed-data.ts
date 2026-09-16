@@ -19,6 +19,16 @@ export interface SourceSeed {
   url: string | null;
   homepage: string;
   defaultContentType: ContentType;
+  /**
+   * Adapter options, plus `topicKeys`: topics every story from this source
+   * belongs to regardless of its headline. Only a source that speaks for one
+   * organisation gets these — an outlet reports on everyone, so a default
+   * there would tag every story it files with whoever the outlet is about.
+   *
+   * This exists because tagging reads the primary item's text only, so a
+   * first-party post titled "Introducing our new model" matches no keyword and
+   * would carry no company topic at all.
+   */
   config?: Record<string, unknown>;
   /** Seeded disabled when false. Defaults to true. */
   enabled?: boolean;
@@ -48,6 +58,7 @@ export const SOURCE_SEEDS: SourceSeed[] = [
     url: "https://openai.com/news/rss.xml",
     homepage: "https://openai.com/news",
     defaultContentType: "NEWS",
+    config: { topicKeys: ["openai"] },
   },
   {
     key: "google-deepmind",
@@ -57,6 +68,7 @@ export const SOURCE_SEEDS: SourceSeed[] = [
     url: "https://deepmind.google/blog/rss.xml",
     homepage: "https://deepmind.google/discover/blog",
     defaultContentType: "RESEARCH",
+    config: { topicKeys: ["google"] },
   },
   {
     key: "google-research",
@@ -66,6 +78,7 @@ export const SOURCE_SEEDS: SourceSeed[] = [
     url: "https://research.google/blog/rss/",
     homepage: "https://research.google/blog",
     defaultContentType: "RESEARCH",
+    config: { topicKeys: ["google"] },
   },
   {
     key: "microsoft-research",
@@ -75,6 +88,7 @@ export const SOURCE_SEEDS: SourceSeed[] = [
     url: "https://www.microsoft.com/en-us/research/feed/",
     homepage: "https://www.microsoft.com/en-us/research",
     defaultContentType: "RESEARCH",
+    config: { topicKeys: ["microsoft"] },
   },
   {
     key: "meta-engineering-ml",
@@ -84,6 +98,7 @@ export const SOURCE_SEEDS: SourceSeed[] = [
     url: "https://engineering.fb.com/category/ml-applications/feed/",
     homepage: "https://engineering.fb.com/category/ml-applications/",
     defaultContentType: "RESEARCH",
+    config: { topicKeys: ["meta"] },
   },
   {
     key: "nvidia-blog",
@@ -93,6 +108,7 @@ export const SOURCE_SEEDS: SourceSeed[] = [
     url: "https://blogs.nvidia.com/feed/",
     homepage: "https://blogs.nvidia.com",
     defaultContentType: "NEWS",
+    config: { topicKeys: ["nvidia"] },
   },
   {
     key: "huggingface-blog",
@@ -102,6 +118,7 @@ export const SOURCE_SEEDS: SourceSeed[] = [
     url: "https://huggingface.co/blog/feed.xml",
     homepage: "https://huggingface.co/blog",
     defaultContentType: "RELEASE",
+    config: { topicKeys: ["hugging-face"] },
   },
   {
     key: "mistral-blog",
@@ -111,6 +128,7 @@ export const SOURCE_SEEDS: SourceSeed[] = [
     url: "https://mistral.ai/rss.xml",
     homepage: "https://mistral.ai/news",
     defaultContentType: "NEWS",
+    config: { topicKeys: ["mistral"] },
   },
 
   // ── PRIMARY: preprints, via the public arXiv API ──
