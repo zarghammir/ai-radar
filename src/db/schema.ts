@@ -16,9 +16,19 @@ import {
 // Verification (credibility of the claim) and content type (what kind of thing
 // it is) are deliberately separate fields. See docs/architecture.md.
 
+/**
+ * Where a claim comes from, strongest first.
+ *
+ * ANALYST sits between a newsroom and the crowd on purpose: a named expert
+ * newsletter is worth more than anonymous chatter for ranking, but it is a
+ * reading of the news rather than independent reporting of it, so two analysts
+ * agreeing must not earn the same badge as two newsrooms agreeing. The rule
+ * that enforces that lives in deriveVerification.
+ */
 export const SOURCE_TIERS = [
   "PRIMARY",
   "HIGH_QUALITY_REPORTING",
+  "ANALYST",
   "COMMUNITY",
   "DISCOVERY",
 ] as const;

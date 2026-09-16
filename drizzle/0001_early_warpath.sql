@@ -1,0 +1,1 @@
+ALTER TYPE "public"."source_tier" ADD VALUE 'ANALYST' BEFORE 'COMMUNITY';
