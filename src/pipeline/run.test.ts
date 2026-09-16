@@ -700,14 +700,12 @@ withDb("pipeline orchestration", () => {
       .insert(topics)
       .values({ key: "openai", name: "OpenAI", group: "company", keywords: ["openai"] })
       .returning();
-    await db
-      .insert(topics)
-      .values({
-        key: "agents",
-        name: "Agents",
-        group: "domain",
-        keywords: ["agentic", "ai agent"],
-      });
+    await db.insert(topics).values({
+      key: "agents",
+      name: "Agents",
+      group: "domain",
+      keywords: ["agentic", "ai agent"],
+    });
     await addSource({
       key: "openai-blog",
       name: "OpenAI",

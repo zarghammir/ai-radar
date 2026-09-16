@@ -1,0 +1,140 @@
+import { eq, gte } from "drizzle-orm";
+import type { Db } from "@/db/client";
+import type { ScoreComponents } from "@/db/schema";
+import { rawItems, stories, storyTopics, topics, userPreferences } from "@/db/schema";
+import { storySources } from "../run";
+import { COMPONENT_LABELS, rankStory } from "./score";
+
+type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
+
+/** How far back a story is still worth scoring. */
+export const RANKING_WINDOW_HOURS = 7 * 24;
+
+export interface RankAllResult {
+  /** Stories inside the window that were scored. */
+  ranked: number;
+}
+
+/** One component of a score, ready to render. */
+export interface LabelledComponent {
+  key: string;
+  label: string;
+  value: number;
+}
+
+/**
+ * The persisted components turned into the shape the API returns.
+ *
+ * The label comes from the pipeline's own map, so the wording a reader sees
+ * cannot drift from the weights that produced the number. A component with no
+ * label falls back to its key rather than being dropped: an unlabelled bar is a
+ * visible gap someone will fix, a missing one silently stops the parts adding
+ * up to the whole.
+ */
+export function scoreComponentList(components: ScoreComponents): LabelledComponent[] {
+  return Object.entries(components).map(([key, value]) => ({
+    key,
+    label: COMPONENT_LABELS[key] ?? key,
+    value,
+  }));
+}
+
+/** The strongest community signal on a story, or nothing if none was recorded. */
+function bestEngagement(
+  rows: { metadata: Record<string, unknown> }[],
+): { points: number; comments: number } | null {
+  let best: { points: number; comments: number } | null = null;
+  for (const row of rows) {
+    const points = Number(row.metadata?.points ?? NaN);
+    if (!Number.isFinite(points)) continue;
+    const comments = Number(row.metadata?.comments ?? 0);
+    // Points and comments are taken from the SAME item: they describe one
+    // conversation, and a maximum of each across different items would
+    // describe a story that never happened.
+    if (!best || points > best.points) {
+      best = { points, comments: Number.isFinite(comments) ? comments : 0 };
+    }
+  }
+  return best;
+}
+
+async function rankOne(tx: Tx, storyId: number, userTopicKeys: string[], now: Date) {
+  const [story] = await tx
+    .select({
+      id: stories.id,
+      contentType: stories.contentType,
+      verification: stories.verification,
+      lastActivityAt: stories.lastActivityAt,
+    })
+    .from(stories)
+    .where(eq(stories.id, storyId));
+  if (!story) return;
+
+  // The same de-duplicated array deriveVerification takes, handed straight to
+  // rankStory. This pass-through is load-bearing, not incidental: building a
+  // second list here is exactly how one module came to count items while the
+  // other counted outlets, and a story the product calls EMERGING outscored one
+  // it calls CORROBORATED.
+  const sources = await storySources(tx, storyId);
+
+  const topicRows = await tx
+    .select({ key: topics.key })
+    .from(storyTopics)
+    .innerJoin(topics, eq(storyTopics.topicId, topics.id))
+    .where(eq(storyTopics.storyId, storyId));
+
+  const itemRows = await tx
+    .select({ metadata: rawItems.metadata })
+    .from(rawItems)
+    .where(eq(rawItems.storyId, storyId));
+  const engagement = bestEngagement(itemRows);
+
+  const { score, components } = rankStory(
+    {
+      lastActivityAt: story.lastActivityAt,
+      contentType: story.contentType,
+      verification: story.verification,
+      sources,
+      topicKeys: topicRows.map((t) => t.key),
+      userTopicKeys,
+      engagementPoints: engagement?.points,
+      engagementComments: engagement?.comments,
+    },
+    now,
+  );
+
+  // updatedAt is deliberately untouched. It records when the story's content
+  // last changed, and re-scoring changes no content; bumping it would make
+  // every ranking run look like an edit, and would make this run
+  // non-deterministic for a fixed `now`.
+  await tx
+    .update(stories)
+    .set({ score, scoreComponents: components })
+    .where(eq(stories.id, storyId));
+}
+
+/**
+ * Score every story still inside the window.
+ *
+ * Deterministic for a fixed `now`: the same database ranked twice produces
+ * byte-identical rows. One transaction per story, so a story is scored against
+ * a consistent view of its own items rather than a moving one.
+ */
+export async function rankAllStories(db: Db, now: Date = new Date()): Promise<RankAllResult> {
+  const [prefs] = await db
+    .select({ topicKeys: userPreferences.topicKeys })
+    .from(userPreferences)
+    .where(eq(userPreferences.id, 1));
+  const userTopicKeys = prefs?.topicKeys ?? [];
+
+  const cutoff = new Date(now.getTime() - RANKING_WINDOW_HOURS * 3_600_000);
+  const due = await db
+    .select({ id: stories.id })
+    .from(stories)
+    .where(gte(stories.lastActivityAt, cutoff));
+
+  for (const { id } of due) {
+    await db.transaction((tx) => rankOne(tx, id, userTopicKeys, now));
+  }
+  return { ranked: due.length };
+}
