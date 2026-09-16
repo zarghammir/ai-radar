@@ -11,5 +11,14 @@ import { withIngestLock, type LockOutcome } from "./lock";
  * how two writers end up colliding on a story slug.
  */
 export async function ingestOnce(db: Db, sql: postgres.Sql): Promise<LockOutcome<IngestResult>> {
-  return withIngestLock(sql, () => runIngest(db));
+  // CONTROL, THROWAWAY BRANCH, NEVER MERGE. Returns "declined" without doing
+  // anything, so the worker starts cleanly, prints the skip line and exits 0
+  // without ever printing a total. That is precisely the state the compose
+  // smoke's assertion must reject. The voids keep every import used so lint
+  // and tsc still pass and the red can only come from the assertion.
+  void db;
+  void sql;
+  void withIngestLock;
+  void runIngest;
+  return { ran: false };
 }
