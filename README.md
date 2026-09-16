@@ -33,8 +33,14 @@ If you skip that, `npm ci` stops with `EBADENGINE` and tells you the same thing.
 git clone https://github.com/zarghammir/ai-radar.git
 cd ai-radar
 cp .env.example .env
+openssl rand -hex 32   # paste the result into INTERNAL_API_SECRET in .env
 docker compose up
 ```
+
+The worker refuses to start while `INTERNAL_API_SECRET` is still the placeholder
+`change-me`: that secret guards the ingest trigger, and a published placeholder
+guards nothing. The app itself will start either way, but nothing new arrives
+until the worker can run.
 
 Then open http://localhost:3000. The first start creates the database schema and
 loads the shipped catalogue of sources, so the app has something to show. Both
