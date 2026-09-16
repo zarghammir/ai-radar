@@ -29,7 +29,7 @@ const ROUTES = ["/", "/radar", "/research", "/releases", "/saved", "/settings"];
  * in the output so it can never be mistaken for a real one.
  */
 const CONTROL = process.env.AUDIT_CONTROL || null;
-const PHONE_WIDTH = CONTROL === "narrow" ? 280 : 390;
+const PHONE_WIDTH = CONTROL === "narrow" ? 200 : 390;
 
 const SIZES = [
   { name: "phone", width: PHONE_WIDTH, height: 780 },
@@ -44,7 +44,14 @@ import { launchBrowser, requireServer } from "./lib/browser.mjs";
 
 await requireServer(base);
 const browser = await launchBrowser();
-const report = { states: 0, serious: [], allViolations: [], overflow: [], nav: {} };
+const report = {
+  states: 0,
+  serious: [],
+  allViolations: [],
+  overflow: [],
+  nav: {},
+  bottomBar: {},
+};
 
 try {
   for (const size of SIZES) {
@@ -179,7 +186,7 @@ const phoneStates = Object.keys(report.bottomBar).filter((k) => k.startsWith("ph
 const laptopStatesWithBar = Object.entries(report.bottomBar).filter(
   ([k, b]) => k.startsWith("laptop/") && b.present !== false,
 );
-const expectedBarStates = SCREENS.length * THEMES.length;
+const expectedBarStates = ROUTES.length * THEMES.length;
 
 const floorFailures = [];
 if (phoneStates.length !== expectedBarStates) {
