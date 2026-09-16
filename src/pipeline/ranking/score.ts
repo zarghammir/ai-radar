@@ -1,8 +1,12 @@
 import type { ContentType, ScoreComponents, SourceTier } from "@/db/schema";
 
 export interface RankInput {
+  /**
+   * Recency is measured from the last activity by design. A story's age since
+   * it was first sighted is deliberately not a ranking input in version 1;
+   * stories.firstSeenAt still exists and feeds the timeline on the story page.
+   */
   lastActivityAt: Date;
-  firstSeenAt: Date;
   contentType: ContentType;
   /** Tier of every distinct source attached to the story. */
   sourceTiers: SourceTier[];

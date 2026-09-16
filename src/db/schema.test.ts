@@ -27,6 +27,15 @@ describe("verification level and content type stay separate", () => {
     expect(CONTENT_TYPES.filter((c) => levels.includes(c))).toEqual([]);
   });
 
+  it("keeps first_seen_at on stories even though ranking no longer reads it", () => {
+    // Ruled 2026-09-16: age since first sighting is not a ranking input in v1,
+    // but the column stays because the story page timeline is built from it.
+    // Dropping RankInput.firstSeenAt is not permission to drop the column.
+    const cols = getTableColumns(stories);
+    expect(Object.keys(cols)).toContain("firstSeenAt");
+    expect(cols.firstSeenAt.name).toBe("first_seen_at");
+  });
+
   it("raw items carry a content type but no verification of their own", () => {
     // Verification is derived for a story from the set of sources behind it,
     // so a single item must never carry a level that could be read as settled.

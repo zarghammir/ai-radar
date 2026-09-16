@@ -3,7 +3,6 @@ import { rankStory, WEIGHTS } from "./score";
 
 const now = new Date("2026-09-16T12:00:00Z");
 const base = {
-  firstSeenAt: new Date("2026-09-16T11:00:00Z"),
   lastActivityAt: new Date("2026-09-16T11:00:00Z"),
   contentType: "NEWS" as const,
   sourceTiers: ["HIGH_QUALITY_REPORTING" as const],
