@@ -28,10 +28,22 @@ const base = process.argv[2] || "http://127.0.0.1:3210";
 const AXE = readFileSync(require.resolve("axe-core/axe.min.js"), "utf8");
 
 const ROUTES = ["/", "/radar", "/research", "/releases", "/saved", "/settings"];
+/**
+ * AUDIT_CONTROL=narrow squeezes the phone viewport until the six-tab bar MUST
+ * clip. It exists so the bar gate can be seen going red: a gate that has only
+ * ever passed is not yet known to be able to fail. A control run labels itself
+ * in the output so it can never be mistaken for a real one.
+ */
+const CONTROL = process.env.AUDIT_CONTROL || null;
+const PHONE_WIDTH = CONTROL === "narrow" ? 280 : 390;
+
 const SIZES = [
-  { name: "phone", width: 390, height: 780 },
+  { name: "phone", width: PHONE_WIDTH, height: 780 },
   { name: "laptop", width: 1440, height: 900 },
 ];
+
+/** The bar is lg:hidden, so it belongs in exactly the phone states. */
+const EXPECTED_TABS = 6;
 const THEMES = ["light", "dark"];
 
 const { chromium } = await import("playwright-core");
@@ -84,6 +96,47 @@ try {
           report.overflow.push({ route, size: size.name, theme, ...overflow });
         }
 
+        /**
+         * The bottom bar carries all six surfaces below lg. At 390px that is
+         * ~65px per tab, so it has to be measured rather than eyeballed.
+         *
+         * Measured on the box that actually clips — the <nav> itself and each
+         * label — not a wrapper, and against documentElement.clientWidth,
+         * which excludes the scrollbar (innerWidth does not). Margins are
+         * reported in px so a 1px pass cannot be mistaken for proof.
+         */
+        const bar = await page.evaluate(() => {
+          const nav = document.querySelector("nav[aria-label='Main'].fixed");
+          if (!nav) return null;
+          const style = getComputedStyle(nav);
+          if (style.display === "none") return null;
+          const rect = nav.getBoundingClientRect();
+          const viewport = document.documentElement.clientWidth;
+          const labels = [...nav.querySelectorAll("a > span:last-child")].map((el) => ({
+            text: el.textContent,
+            clipped: el.scrollWidth - el.clientWidth,
+            width: Math.round(el.getBoundingClientRect().width * 10) / 10,
+          }));
+          const links = [...nav.querySelectorAll("a")].map((a) => {
+            const r = a.getBoundingClientRect();
+            return { width: Math.round(r.width * 10) / 10, height: Math.round(r.height * 10) / 10 };
+          });
+          return {
+            tabs: links.length,
+            viewport,
+            navOverflow: nav.scrollWidth - nav.clientWidth,
+            rightMargin: Math.round((viewport - rect.right) * 10) / 10,
+            leftMargin: Math.round(rect.left * 10) / 10,
+            narrowestTab: links.length ? Math.min(...links.map((l) => l.width)) : null,
+            shortestTapTarget: links.length ? Math.min(...links.map((l) => l.height)) : null,
+            labelsClipped: labels.filter((l) => l.clipped > 0),
+            labels,
+          };
+        });
+        // Record the ABSENCE too: a state that contributes nothing silently is
+        // how a gate ends up measuring an empty set and passing.
+        report.bottomBar[`${size.name}/${theme}${route}`] = bar ?? { present: false };
+
         const nav = await page.evaluate(() => {
           const visible = (el) => {
             if (!el) return false;
@@ -135,6 +188,45 @@ try {
   await browser.close();
 }
 
+/**
+ * THE FLOOR. Without it the gate passes hardest when it is most broken: if the
+ * selector misses, a route fails to paint, or the bar is hidden at the width
+ * under test, there are no bars, therefore no clipped labels, therefore exit 0.
+ * Assert the instrument had something to measure, and print the counts on
+ * success so a future reader can see that it did.
+ */
+const measuredBars = Object.values(report.bottomBar).filter((b) => b.present !== false);
+const phoneStates = Object.keys(report.bottomBar).filter((k) => k.startsWith("phone/"));
+const laptopStatesWithBar = Object.entries(report.bottomBar).filter(
+  ([k, b]) => k.startsWith("laptop/") && b.present !== false,
+);
+const expectedBarStates = SCREENS.length * THEMES.length;
+
+const floorFailures = [];
+if (phoneStates.length !== expectedBarStates) {
+  floorFailures.push(`visited ${phoneStates.length} phone states, expected ${expectedBarStates}`);
+}
+if (measuredBars.length !== expectedBarStates) {
+  floorFailures.push(
+    `bar found in ${measuredBars.length} of ${expectedBarStates} phone states — that is the selector or the render, not the layout`,
+  );
+}
+if (laptopStatesWithBar.length > 0) {
+  floorFailures.push(
+    `bar visible in ${laptopStatesWithBar.length} laptop states, where it must be lg:hidden`,
+  );
+}
+for (const bar of measuredBars) {
+  if (bar.tabs !== EXPECTED_TABS) {
+    floorFailures.push(`measured ${bar.tabs} tabs, expected ${EXPECTED_TABS}`);
+    break;
+  }
+  if (bar.labels.length !== bar.tabs) {
+    floorFailures.push(`measured ${bar.labels.length} labels for ${bar.tabs} tabs`);
+    break;
+  }
+}
+
 console.log(
   JSON.stringify(
     {
@@ -144,6 +236,29 @@ console.log(
       horizontalOverflow: report.overflow.length,
       serious: report.serious,
       violations: report.allViolations,
+      bottomBar: {
+        control: CONTROL,
+        phoneViewport: PHONE_WIDTH,
+        floorPassed: floorFailures.length === 0,
+        floorFailures,
+        expectedBarStates,
+        barsMeasured: measuredBars.length,
+        tabsPerBar: [...new Set(measuredBars.map((b) => b.tabs))],
+        labelsPerBar: [...new Set(measuredBars.map((b) => b.labels.length))],
+        anyNavOverflow: measuredBars.filter((b) => b.navOverflow > 0).length,
+        anyLabelClipped: measuredBars.filter((b) => b.labelsClipped.length > 0).length,
+        clippedLabelSamples: measuredBars.flatMap((b) => b.labelsClipped).slice(0, 6),
+        worstRightMargin: measuredBars.length
+          ? Math.min(...measuredBars.map((b) => b.rightMargin))
+          : null,
+        narrowestTabPx: measuredBars.length
+          ? Math.min(...measuredBars.map((b) => b.narrowestTab))
+          : null,
+        shortestTapTargetPx: measuredBars.length
+          ? Math.min(...measuredBars.map((b) => b.shortestTapTarget))
+          : null,
+        sample: report.bottomBar["phone/dark/"] ?? null,
+      },
       navSpotCheck: {
         "phone/light/": report.nav["phone/light/"],
         "laptop/light/": report.nav["laptop/light/"],
@@ -156,4 +271,14 @@ console.log(
   ),
 );
 
-if (report.serious.length > 0 || report.overflow.length > 0) process.exit(1);
+const barBroken = measuredBars.filter(
+  (b) => b.navOverflow > 0 || b.labelsClipped.length > 0,
+).length;
+if (
+  report.serious.length > 0 ||
+  report.overflow.length > 0 ||
+  barBroken > 0 ||
+  floorFailures.length > 0
+) {
+  process.exit(1);
+}
