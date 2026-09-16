@@ -1,4 +1,5 @@
 import type { SourceAdapter, FetchedItem } from "../types";
+import { matchesAnyKeyword } from "@/pipeline/normalize/keywords";
 import { fetchJson } from "../http";
 
 /**
@@ -66,13 +67,9 @@ export const DEFAULT_AI_KEYWORDS = [
   "humanoid",
 ];
 
+/** Kept as the adapter's own name for the shared matcher; see keywords.ts. */
 export function matchesKeywords(title: string, keywords: string[]): boolean {
-  const t = ` ${title.toLowerCase().replace(/[^a-z0-9.+\- ]/g, " ")} `;
-  return keywords.some((k) => {
-    const kw = k.toLowerCase();
-    // whole-word match for short tokens, substring for phrases
-    return kw.length <= 4 ? t.includes(` ${kw} `) || t.includes(` ${kw}s `) : t.includes(kw);
-  });
+  return matchesAnyKeyword(title, keywords);
 }
 
 export const hackerNewsAdapter: SourceAdapter = {
