@@ -22,7 +22,9 @@
     "db:migrate": "tsx src/db/migrate.ts",
     "db:seed": "tsx src/db/seed.ts",
     "db:studio": "drizzle-kit studio",
-    "sources:check": "tsx scripts/sources-check.ts"
+    "sources:check": "tsx scripts/sources-check.ts",
+    "worker": "tsx src/worker/main.ts",
+    "worker:once": "tsx src/worker/main.ts --once"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.126.0",
