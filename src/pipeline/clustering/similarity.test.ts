@@ -3,7 +3,11 @@ import { tokenize, entities, titleSimilarity, isSameStory } from "./similarity";
 
 describe("tokenize / entities", () => {
   it("removes stopwords and keeps model names", () => {
-    expect(tokenize("OpenAI announces the GPT-6 model today")).toEqual(["openai", "gpt-6", "model"]);
+    expect(tokenize("OpenAI announces the GPT-6 model today")).toEqual([
+      "openai",
+      "gpt-6",
+      "model",
+    ]);
   });
   it("extracts entities", () => {
     const e = entities("Anthropic releases Claude Opus 5 with 1M context");
@@ -33,7 +37,10 @@ describe("isSameStory", () => {
   it("does not merge different stories about the same company", () => {
     expect(isSameStory("OpenAI hires a new CFO", "OpenAI launches GPT-6")).toBe(false);
     expect(
-      isSameStory("Nvidia reports record quarterly revenue", "Nvidia unveils Rubin GPU architecture"),
+      isSameStory(
+        "Nvidia reports record quarterly revenue",
+        "Nvidia unveils Rubin GPU architecture",
+      ),
     ).toBe(false);
   });
   it("does not merge unrelated titles", () => {

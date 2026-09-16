@@ -9,10 +9,19 @@ const STOPWORDS = new Set(
     .filter(Boolean),
 );
 
+/**
+ * Drop a possessive ending so "OpenAI's" and "OpenAI" are the same name.
+ * Deleting the apostrophe alone would leave "openais", which matches nothing.
+ */
+function stripPossessive(s: string): string {
+  return s.replace(/[’']s$/i, "").replace(/[’']$/, "");
+}
+
 /** Lower-case content tokens with stopwords removed. Keeps hyphenated model names. */
 export function tokenize(title: string): string[] {
   return title
     .toLowerCase()
+    .replace(/[’']s\b/g, "")
     .replace(/[’']/g, "")
     .replace(/[^a-z0-9.+\-\s]/g, " ")
     .split(/\s+/)
@@ -21,19 +30,27 @@ export function tokenize(title: string): string[] {
 }
 
 /**
- * Crude entity extraction: capitalised words (not sentence-initial-only),
+ * Crude entity extraction: capitalised words (a plain sentence-initial one is
+ * ignored, a distinctively cased one like OpenAI is not),
  * tokens with digits (GPT-5, o3, 2.5) and ALLCAPS acronyms.
  */
 export function entities(title: string): Set<string> {
   const out = new Set<string>();
-  const words = title.replace(/[“”"()[\]:,]/g, " ").split(/\s+/).filter(Boolean);
+  const words = title
+    .replace(/[“”"()[\]:,]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
   words.forEach((w, i) => {
-    const clean = w.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, "");
+    const clean = stripPossessive(w.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, ""));
     if (!clean) return;
     const lower = clean.toLowerCase();
     if (STOPWORDS.has(lower)) return;
     const hasDigit = /\d/.test(clean);
-    const capital = /^[A-Z]/.test(clean) && i > 0;
+    // Internal capitals (OpenAI, DeepMind, GitHub) name a thing even in first
+    // position; a plain Capitalised first word is only sentence case. Without
+    // this the same name counts in one headline and not in the other.
+    const internalCaps = /[a-z][A-Z]/.test(clean) || /^[A-Z][a-z]*[A-Z]/.test(clean);
+    const capital = /^[A-Z]/.test(clean) && (i > 0 || internalCaps);
     const acronym = /^[A-Z][A-Z0-9.\-]{1,}$/.test(clean);
     if (hasDigit || capital || acronym) out.add(lower);
   });
