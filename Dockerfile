@@ -30,9 +30,16 @@ RUN npx next build
 # dependency tree into the runtime image. Bundling them to self-contained CommonJS
 # costs ~300 KB each and lets the runtime image carry no node_modules of its own
 # beyond what Next traced.
+# --out-extension pins the .cjs suffix. esbuild names outdir files .js by
+# default whatever the --format, and a bare .js would be read as ESM if any
+# package.json above it ever declares "type": "module" — including the one Next
+# writes into the standalone bundle. The entrypoints name .cjs; this makes that
+# true rather than hopeful.
 RUN npx esbuild src/db/migrate.ts src/db/seed.ts \
   --bundle --platform=node --format=cjs --target=node22 --outdir=ops \
-  --log-level=warning
+  --out-extension:.js=.cjs \
+  --log-level=warning \
+  && ls -la ops
 
 # The worker entry does not exist yet; issue #5 adds it. Bundle it when it is
 # there, and leave the image honestly without it when it is not. The worker
@@ -43,6 +50,14 @@ RUN if [ -f src/worker/main.ts ]; then \
   --log-level=warning; \
   echo "worker entry bundled"; \
   else echo "no worker entry in this build (issue #5)"; fi
+
+# The entrypoints name these three paths. Assert them at build time so a rename
+# or a changed output extension fails the build, where the message is obvious,
+# rather than the first container start, where it is a stack trace.
+RUN test -f ops/migrate.cjs \
+  && test -f ops/seed.cjs \
+  && test -f .next/standalone/server.js \
+  && echo "build artefacts present at the paths the entrypoints use"
 
 # ---- runner ─────────────────────────────────────────────────────────────────
 FROM node:22-alpine AS runner
@@ -61,6 +76,14 @@ COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/drizzle ./drizzle
 COPY --from=builder /app/ops ./ops
 COPY docker/web-entrypoint.sh docker/worker-entrypoint.sh ./docker/
+
+# Same assertion on the far side of the COPYs: what the builder produced is not
+# automatically what landed here.
+RUN test -f /app/ops/migrate.cjs \
+  && test -f /app/ops/seed.cjs \
+  && test -f /app/server.js \
+  && test -f /app/docker/web-entrypoint.sh \
+  && echo "runtime image has every path its entrypoints reference"
 
 RUN chmod +x ./docker/*.sh \
   && addgroup -S app \
