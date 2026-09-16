@@ -39,6 +39,9 @@ export const WEIGHTS = {
   recencyHalfLifeHours: 10,
   primarySource: 20,
   highQualityReporting: 12,
+  // Between a newsroom and the crowd: a named expert's read is worth more than
+  // anonymous chatter, and less than independent reporting.
+  analyst: 9,
   communityOnly: 4,
   corroborationPerSource: 4,
   corroborationMax: 16,
@@ -79,6 +82,7 @@ export function rankStory(input: RankInput, now: Date = new Date()): RankResult 
   const tiers = new Set([...distinct.values()].map((s) => s.tier));
   if (tiers.has("PRIMARY")) c.primarySource = WEIGHTS.primarySource;
   else if (tiers.has("HIGH_QUALITY_REPORTING")) c.qualityReporting = WEIGHTS.highQualityReporting;
+  else if (tiers.has("ANALYST")) c.analyst = WEIGHTS.analyst;
   else if (tiers.has("COMMUNITY")) c.communitySignal = WEIGHTS.communityOnly;
 
   const distinctSources = distinct.size;
@@ -133,6 +137,7 @@ export const COMPONENT_LABELS: Record<string, string> = {
   recency: "Recently active",
   primarySource: "Primary source",
   qualityReporting: "Established reporting",
+  analyst: "Expert analysis",
   communitySignal: "Community signal",
   corroboration: "Corroborating sources",
   topicMatch: "Matches your topics",

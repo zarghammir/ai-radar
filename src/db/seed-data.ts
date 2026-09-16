@@ -174,11 +174,15 @@ export const SOURCE_SEEDS: SourceSeed[] = [
     homepage: "https://www.wired.com/tag/artificial-intelligence/",
     defaultContentType: "NEWS",
   },
+
+  // ── ANALYST: named experts reading the news rather than reporting it ──
+  // Valuable for ranking, but two of them agreeing is two readings of one
+  // story, not two witnesses. deriveVerification enforces that.
   {
     key: "simon-willison",
     name: "Simon Willison",
     kind: "rss",
-    tier: "HIGH_QUALITY_REPORTING",
+    tier: "ANALYST",
     url: "https://simonwillison.net/atom/everything/",
     homepage: "https://simonwillison.net",
     defaultContentType: "NEWS",
@@ -187,7 +191,7 @@ export const SOURCE_SEEDS: SourceSeed[] = [
     key: "import-ai",
     name: "Import AI",
     kind: "rss",
-    tier: "HIGH_QUALITY_REPORTING",
+    tier: "ANALYST",
     url: "https://importai.substack.com/feed",
     homepage: "https://importai.substack.com",
     defaultContentType: "NEWS",
@@ -196,7 +200,7 @@ export const SOURCE_SEEDS: SourceSeed[] = [
     key: "interconnects",
     name: "Interconnects",
     kind: "rss",
-    tier: "HIGH_QUALITY_REPORTING",
+    tier: "ANALYST",
     url: "https://www.interconnects.ai/feed",
     homepage: "https://www.interconnects.ai",
     defaultContentType: "NEWS",

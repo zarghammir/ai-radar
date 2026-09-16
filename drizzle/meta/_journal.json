@@ -8,6 +8,13 @@
       "when": 1789583347101,
       "tag": "0000_careless_apocalypse",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1789589594536,
+      "tag": "0001_early_warpath",
+      "breakpoints": true
     }
   ]
 }

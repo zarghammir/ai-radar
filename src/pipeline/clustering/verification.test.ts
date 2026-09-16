@@ -69,3 +69,63 @@ describe("deriveVerification invariants", () => {
     expect(r.note.toLowerCase()).toContain("no source");
   });
 });
+
+const willison = {
+  sourceKey: "simon-willison",
+  sourceName: "Simon Willison",
+  tier: "ANALYST" as const,
+};
+const importAi = { sourceKey: "import-ai", sourceName: "Import AI", tier: "ANALYST" as const };
+const interconnects = {
+  sourceKey: "interconnects",
+  sourceName: "Interconnects",
+  tier: "ANALYST" as const,
+};
+
+describe("deriveVerification with the analyst tier", () => {
+  it("does not let two analysts corroborate each other", () => {
+    // The whole reason the tier exists: an analyst reads the news, they do not
+    // independently report it, so two of them agreeing is not confirmation.
+    const r = deriveVerification([willison, importAi]);
+    expect(r.level).toBe("EMERGING");
+    expect(r.note).toContain("Simon Willison");
+    expect(r.note).toContain("Import AI");
+  });
+
+  it("does not let a crowd of analysts corroborate either", () => {
+    expect(deriveVerification([willison, importAi, interconnects]).level).toBe("EMERGING");
+  });
+
+  it("corroborates when an analyst agrees with an established outlet", () => {
+    // The positive control: the tier must not make corroboration unreachable.
+    const r = deriveVerification([reuters, interconnects]);
+    expect(r.level).toBe("CORROBORATED");
+    expect(r.note).toContain("Reuters");
+    expect(r.note).toContain("Interconnects");
+  });
+
+  it("still corroborates two established outlets", () => {
+    expect(deriveVerification([reuters, verge]).level).toBe("CORROBORATED");
+  });
+
+  it("treats an analyst beside a primary source as primary", () => {
+    expect(deriveVerification([willison, openai]).level).toBe("PRIMARY_SOURCE");
+  });
+
+  it("treats a lone analyst as emerging and names them", () => {
+    // Not stated in the ticket. A named expert is stronger than anonymous
+    // chatter, which is UNVERIFIED, and weaker than a newsroom, so it lands
+    // where a single newsroom lands.
+    const r = deriveVerification([willison]);
+    expect(r.level).toBe("EMERGING");
+    expect(r.note).toContain("Simon Willison");
+  });
+
+  it("does not let an analyst plus community chatter corroborate", () => {
+    expect(deriveVerification([willison, hn, x]).level).toBe("EMERGING");
+  });
+
+  it("counts one analyst once however many times they post", () => {
+    expect(deriveVerification([willison, willison, willison]).level).toBe("EMERGING");
+  });
+});

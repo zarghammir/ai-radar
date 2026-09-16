@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { rankStory, WEIGHTS } from "./score";
+import { COMPONENT_LABELS, rankStory, WEIGHTS } from "./score";
 import { deriveVerification } from "../clustering/verification";
 
 const now = new Date("2026-09-16T12:00:00Z");
@@ -150,5 +150,61 @@ describe("rankStory date safety", () => {
     expect(Number.isFinite(r.score)).toBe(true);
     expect(Number.isFinite(r.components.recency)).toBe(true);
     expect(r.components.recency).toBe(WEIGHTS.recencyMax);
+  });
+});
+
+describe("rankStory and the analyst tier", () => {
+  const src = (sourceKey: string, tier: "HIGH_QUALITY_REPORTING" | "ANALYST" | "COMMUNITY") => ({
+    sourceKey,
+    tier,
+  });
+
+  it("ranks an analyst-only story between a newsroom and the crowd", () => {
+    const newsroom = rankStory(
+      { ...base, sources: [src("reuters", "HIGH_QUALITY_REPORTING")] },
+      now,
+    ).score;
+    const analyst = rankStory({ ...base, sources: [src("interconnects", "ANALYST")] }, now).score;
+    const crowd = rankStory({ ...base, sources: [src("hn", "COMMUNITY")] }, now).score;
+    expect(analyst).toBeLessThan(newsroom);
+    expect(analyst).toBeGreaterThan(crowd);
+  });
+
+  it("stores the analyst signal under its own component", () => {
+    // Assert the weight exists first: without this, comparing an absent
+    // component to an absent weight is undefined === undefined and passes
+    // while nothing has been implemented.
+    expect(typeof WEIGHTS.analyst).toBe("number");
+    const c = rankStory({ ...base, sources: [src("interconnects", "ANALYST")] }, now).components;
+    expect(c.analyst).toBe(WEIGHTS.analyst);
+    expect(c.qualityReporting).toBeUndefined();
+    expect(c.communitySignal).toBeUndefined();
+  });
+
+  it("pays the newsroom weight, not the analyst one, when both are present", () => {
+    const c = rankStory(
+      {
+        ...base,
+        sources: [src("reuters", "HIGH_QUALITY_REPORTING"), src("interconnects", "ANALYST")],
+      },
+      now,
+    ).components;
+    expect(c.qualityReporting).toBe(WEIGHTS.highQualityReporting);
+    expect(c.analyst).toBeUndefined();
+  });
+
+  it("still counts an analyst as a distinct source for corroboration", () => {
+    const c = rankStory(
+      {
+        ...base,
+        sources: [src("reuters", "HIGH_QUALITY_REPORTING"), src("interconnects", "ANALYST")],
+      },
+      now,
+    ).components;
+    expect(c.corroboration).toBe(WEIGHTS.corroborationPerSource);
+  });
+
+  it("names the analyst component for the why-ranked view", () => {
+    expect(COMPONENT_LABELS.analyst).toBeTruthy();
   });
 });
