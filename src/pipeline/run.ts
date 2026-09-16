@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, isNotNull, ne } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, ne } from "drizzle-orm";
 import type { Db } from "@/db/client";
 import type { ContentType, ItemRole, Source, SourceTier } from "@/db/schema";
 import { ingestRuns, rawItems, sources, stories, storyTopics, topics } from "@/db/schema";
@@ -48,6 +48,26 @@ export interface IngestResult {
 export interface RunIngestOptions extends FetchContextOptions {
   /** Injected so tests can pin the clustering window and story timestamps. */
   now?: Date;
+}
+
+/**
+ * The stored reason for a failure, cause chain included.
+ *
+ * A driver wraps a database error in one whose message is the SQL it was
+ * running, and puts the database's own words on `cause`. Reading `.message`
+ * alone leaves an operator with the statement that failed and no idea why:
+ * a constraint, a bad cast and a full disk all look identical.
+ */
+export function describeError(error: unknown): string {
+  const seen: string[] = [];
+  let current: unknown = error;
+  for (let depth = 0; depth < 5 && current != null; depth++) {
+    const text = current instanceof Error ? current.message : String(current);
+    if (text && !seen.includes(text)) seen.push(text);
+    if (!(current instanceof Error)) break;
+    current = current.cause;
+  }
+  return seen.join("\n") || String(error);
 }
 
 /** Papers cluster only with papers unless the canonical URL already tied them. */
@@ -128,6 +148,10 @@ export async function assignStory(
     .select({ id: stories.id, title: stories.title, contentType: stories.contentType })
     .from(stories)
     .where(gte(stories.lastActivityAt, cutoff))
+    // Without this the cap takes an arbitrary rows-as-found slice, and a story
+    // that is open, in the window and a perfect match is simply missed once the
+    // open-story count passes the cap.
+    .orderBy(desc(stories.lastActivityAt))
     .limit(CANDIDATE_LIMIT);
 
   let best: { id: number; score: number } | null = null;
@@ -161,6 +185,7 @@ export async function refreshStory(tx: Tx, storyId: number): Promise<void> {
       title: rawItems.title,
       excerpt: rawItems.excerpt,
       publishedAt: rawItems.publishedAt,
+      contentType: rawItems.contentType,
       tier: sources.tier,
     })
     .from(rawItems)
@@ -180,12 +205,21 @@ export async function refreshStory(tx: Tx, storyId: number): Promise<void> {
     .update(stories)
     .set({
       primaryItemId: primaryItem.id,
+      // Everything that describes the story is derived from its primary item,
+      // so all of it has to move when the primary item does. A thread that
+      // beat the announcement to the feed must not leave the story wearing a
+      // forum headline, carrying the forum item's content type — which the
+      // family check then reads — or dated from when the forum saw it.
+      title: primaryItem.title,
+      contentType: primaryItem.contentType,
+      firstSeenAt: byAge[0].publishedAt,
       sourceCount: attached.length,
       lastActivityAt,
       verification: verification.level,
       verificationNote: verification.note,
       updatedAt: new Date(),
     })
+    // The slug is the permalink and deliberately does not move with the title.
     .where(eq(stories.id, storyId));
 
   await tagTopics(tx, storyId, `${primaryItem.title} ${primaryItem.excerpt ?? ""}`);
@@ -282,7 +316,7 @@ export async function runIngest(
         if (created) result.storiesCreated++;
       }
     } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
+      error = describeError(e);
     }
 
     // Lines are diagnostic context for a failure, so they are stored with it.

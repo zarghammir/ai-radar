@@ -9,7 +9,7 @@ import * as schema from "@/db/schema";
 import { rawItems, sources, stories, storyTopics, topics, ingestRuns } from "@/db/schema";
 import { deriveVerification } from "./clustering/verification";
 import { rankStory } from "./ranking/score";
-import { assignStory, runIngest, storySources } from "./run";
+import { CANDIDATE_LIMIT, assignStory, runIngest, storySources } from "./run";
 
 /**
  * These run against a real Postgres, on a database of their own.
@@ -496,6 +496,162 @@ withDb("pipeline orchestration", () => {
     expect(tags.map((t) => t.topicId)).toEqual([openaiTopic.id]);
   });
 
+  // ── A late primary item takes over the story ──────────────────────────────
+
+  it("lets a blog post arriving after the forum thread take over the story", async () => {
+    // Review scenario A. Sources run in table order, so a thread that beats the
+    // post to the feed creates the story, and everything derived from the
+    // primary item has to follow when the post lands.
+    await hackerNews();
+    const hn = {
+      ...hnRoutes([
+        {
+          id: 1,
+          title: "Everyone is talking about the new model",
+          url: GPT6_URL,
+          time: NOW.getTime() - 1 * 3_600_000,
+        },
+      ]),
+    };
+    await runIngest(db, undefined, { now: NOW, fetchImpl: fakeNetwork(hn), sink: () => {} });
+
+    const afterRunOne = (await db.select().from(stories))[0];
+    expect(afterRunOne.title).toBe("Everyone is talking about the new model");
+
+    await addSource({
+      key: "openai-blog",
+      name: "OpenAI",
+      tier: "PRIMARY",
+      defaultContentType: "RELEASE",
+    });
+    const both = {
+      ...hn,
+      "openai-blog.test/feed": rssFeed([
+        { title: "Introducing GPT-6", link: GPT6_URL, date: hoursAgo(3) },
+      ]),
+    };
+    await runIngest(db, undefined, { now: NOW, fetchImpl: fakeNetwork(both), sink: () => {} });
+
+    const rows = await db.select().from(stories);
+    expect(rows).toHaveLength(1);
+    const story = rows[0];
+    expect(story.sourceCount).toBe(2);
+    expect(story.verification).toBe("PRIMARY_SOURCE");
+    // The story's face, its type and when it began must all follow the item
+    // that is now primary, not the one that happened to arrive first.
+    expect(story.title).toBe("Introducing GPT-6");
+    expect(story.contentType).toBe("RELEASE");
+    expect(story.firstSeenAt.getTime()).toBe(NOW.getTime() - 3 * 3_600_000);
+    // The slug is the permalink and deliberately does not move.
+    expect(story.slug).toBe("everyone-is-talking-about-the-new-model");
+  });
+
+  it("makes a paper first seen through a forum link a paper story", async () => {
+    // The family check reads the story's content type, so if that stays frozen
+    // at the forum item's type a paper absorbs news reports forever after.
+    const ARXIV_URL = "https://arxiv.org/abs/2509.33333";
+    await hackerNews();
+    const hn = hnRoutes([
+      {
+        id: 9,
+        title: "A neural approach to retrieval agents",
+        url: ARXIV_URL,
+        time: NOW.getTime() - 3_600_000,
+      },
+    ]);
+    await runIngest(db, undefined, { now: NOW, fetchImpl: fakeNetwork(hn), sink: () => {} });
+    expect((await db.select().from(stories))[0].contentType).toBe("NEWS");
+
+    await addSource({
+      key: "arxiv-ai",
+      name: "arXiv",
+      kind: "arxiv",
+      tier: "PRIMARY",
+      url: null,
+      defaultContentType: "PAPER",
+    });
+    const withPaper = {
+      ...hn,
+      "export.arxiv.org": atomFeed([
+        {
+          id: `http://arxiv.org/abs/2509.33333v1`,
+          title: "A Neural Approach To Retrieval Agents",
+          summary: "We study retrieval.",
+          published: new Date(NOW.getTime() - 4 * 3_600_000).toISOString(),
+        },
+      ]),
+    };
+    await runIngest(db, undefined, { now: NOW, fetchImpl: fakeNetwork(withPaper), sink: () => {} });
+
+    const afterPaper = await db.select().from(stories);
+    expect(afterPaper).toHaveLength(1);
+    expect(afterPaper[0].contentType).toBe("PAPER");
+
+    // Now a news report with the same headline must not join it.
+    await addSource({ key: "verge-ai", name: "The Verge", tier: "HIGH_QUALITY_REPORTING" });
+    const withNews = {
+      ...withPaper,
+      "verge-ai.test/feed": rssFeed([
+        {
+          title: "A Neural Approach To Retrieval Agents",
+          link: "https://verge.test/neural",
+          date: hoursAgo(1),
+        },
+      ]),
+    };
+    await runIngest(db, undefined, { now: NOW, fetchImpl: fakeNetwork(withNews), sink: () => {} });
+
+    const finalRows = await db.select().from(stories);
+    expect(finalRows).toHaveLength(2);
+    expect(finalRows.map((r) => r.contentType).sort()).toEqual(["NEWS", "PAPER"]);
+  });
+
+  it("compares against the most recently active stories when there are more than the cap", async () => {
+    // Review scenario E. This test is the control for removing the orderBy on
+    // the candidate query: without it the cap takes an arbitrary 300 rows and
+    // the matching story is missed even though it is open and in the window.
+    const blog = await openAiBlog();
+    const filler = Array.from({ length: CANDIDATE_LIMIT + 20 }, (_, i) => ({
+      slug: `unrelated-${i}`,
+      title: `Unrelated filler subject number ${i}`,
+      contentType: "NEWS" as const,
+      firstSeenAt: new Date(NOW.getTime() - 10 * 3_600_000),
+      lastActivityAt: new Date(NOW.getTime() - (10 * 3_600_000 - i * 1000)),
+    }));
+    await db.insert(stories).values(filler);
+    // The match is the most recently active, so ordering finds it first and an
+    // arbitrary 300 rows does not reach it.
+    const [match] = await db
+      .insert(stories)
+      .values({
+        slug: "introducing-gpt-6",
+        title: "Introducing GPT-6",
+        contentType: "NEWS",
+        firstSeenAt: new Date(NOW.getTime() - 2 * 3_600_000),
+        lastActivityAt: new Date(NOW.getTime() - 60_000),
+      })
+      .returning();
+
+    const [item] = await db
+      .insert(rawItems)
+      .values({
+        sourceId: blog.id,
+        externalId: "late-match",
+        url: "https://example.com/late-match",
+        canonicalUrl: "https://example.com/late-match",
+        title: "Introducing GPT-6",
+        publishedAt: NOW,
+        fetchedAt: NOW,
+        contentType: "NEWS",
+        fingerprint: "late-match-fingerprint",
+      })
+      .returning();
+
+    const assigned = await db.transaction((tx) => assignStory(tx, item, NOW));
+    expect(assigned.created).toBe(false);
+    expect(assigned.storyId).toBe(match.id);
+  });
+
   // ── Failure reporting ─────────────────────────────────────────────────────
 
   it("reports a Hacker News item it could not fetch through the log", async () => {
@@ -548,6 +704,61 @@ withDb("pipeline orchestration", () => {
     const brokenSource = (await db.select().from(sources).where(eq(sources.key, "broken")))[0];
     expect(brokenSource.lastError).toContain("404");
     expect(brokenSource.lastFetchedAt).not.toBeNull();
+  });
+
+  it("stores the database's own reason when a write fails, not just the statement", async () => {
+    // A fake 404 never reaches the database. This makes the failure happen
+    // inside Postgres, which is where drizzle wraps the real cause in a
+    // message that is only the SQL.
+    await openAiBlog();
+    await db
+      .insert(topics)
+      .values({ key: "openai", name: "OpenAI", group: "company", keywords: ["openai", "gpt-6"] });
+    await sql.unsafe(`
+      CREATE OR REPLACE FUNCTION cr30_boom() RETURNS trigger AS $$
+      BEGIN RAISE EXCEPTION 'cr30 boom'; END;
+      $$ LANGUAGE plpgsql;
+      CREATE TRIGGER cr30_boom_trigger BEFORE INSERT ON story_topics
+      FOR EACH ROW EXECUTE FUNCTION cr30_boom();
+    `);
+
+    try {
+      const routes = {
+        "openai-blog.test/feed": rssFeed([
+          {
+            title: "Introducing GPT-6",
+            link: GPT6_URL,
+            date: hoursAgo(2),
+            description: "OpenAI ships a model.",
+          },
+        ]),
+      };
+      const result = await runIngest(db, undefined, {
+        now: NOW,
+        fetchImpl: fakeNetwork(routes),
+        sink: () => {},
+      });
+
+      // The item's transaction rolled back, so nothing is half-written.
+      expect(await db.select().from(stories)).toHaveLength(0);
+      expect(await db.select().from(rawItems)).toHaveLength(0);
+
+      // And the stored reason says what the database objected to, not only
+      // which statement was running when it did.
+      const reason = result.bySource[0].error ?? "";
+      expect(reason).toContain("cr30 boom");
+
+      const [run] = await db.select().from(ingestRuns);
+      expect(run.error).toContain("cr30 boom");
+      expect(run.itemsFetched).toBe(1);
+      expect(run.itemsNew).toBe(0);
+
+      const [source] = await db.select().from(sources).where(eq(sources.key, "openai-blog"));
+      expect(source.lastError).toContain("cr30 boom");
+    } finally {
+      await sql.unsafe(`DROP TRIGGER IF EXISTS cr30_boom_trigger ON story_topics`);
+      await sql.unsafe(`DROP FUNCTION IF EXISTS cr30_boom()`);
+    }
   });
 
   it("only runs the sources it was asked for", async () => {
