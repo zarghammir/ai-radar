@@ -4,7 +4,7 @@ The seam between the data and anything that displays it: the web app today, a
 native client later. This document is the agreement. Route handlers are
 implemented against it in the second half of issue #10.
 
-Status: **proposed**, awaiting sign-off from the PM and the UI lane.
+Status: **final, signed off by PM and UI lane on 2026-09-16.**
 
 ---
 
@@ -16,8 +16,12 @@ API is fetched, nothing is summarised on demand. Ingestion happens only in the
 worker (issue #5). This is what keeps a page load cheap, predictable and free,
 and it is why a slow upstream feed can never make the app slow.
 
-The only tables any route writes are `saved_items`, `read_state` and
-`user_preferences`. No route writes `raw_items` or `stories`.
+The only tables any route writes are `saved_items`, `read_state`,
+`user_preferences`, and `sources` — the last for its `enabled` column only, so
+a reader can switch a source off. No route writes `raw_items` or `stories`.
+
+This is the product's cost-protection promise, not a style preference. An
+implementation that breaks it is a review finding.
 
 **Single user.** Version 1 is self-hosted with no login. Preferences are one row
 (`user_preferences.id = 1`). The shapes below are deliberately free of a user
@@ -239,6 +243,12 @@ recorded and zero engagement are not the same thing.
 UI can render it without re-sorting. `label` comes from the pipeline's own
 label map, so the wording in the UI cannot drift from the weights.
 
+**`value` may be negative.** Issue #9 adds a `verificationPenalty` component,
+negative for `UNVERIFIED` and slightly negative for `EMERGING`, so the
+why-ranked panel can show what pushed a story _down_ and not only what lifted
+it. No negative value is produced until #9 lands, but a bar chart that assumes
+non-negative values will render wrongly the day it does.
+
 ---
 
 ## Routes
@@ -280,8 +290,14 @@ its own length rule.
 
 **There is no record of when a brief was last read.** The window is derived from
 `briefTime` and `timezone` on every request. Two requests an hour apart return
-the same window, and reloading does not "use up" the brief. Remembering a
-delivery would need a new column and is not in this contract.
+the same window, and reloading does not "use up" the brief.
+
+**Per-story `read` is what "already seen" means today.** A client wanting to
+show what is new should count unread stories in the current window rather than
+compare against a previous delivery, because no previous delivery is recorded.
+Phase 2's scheduled Morning Brief adds `digests` and `digest_items` with a
+delivery timestamp; until then, the derived window and `read_state` are the
+whole picture.
 
 ### `GET /api/radar`
 
@@ -306,8 +322,10 @@ Sorts:
   column exists and the UI should build against it now.
 - **`trending`** — how many distinct sources attached to the story in the last
   24 hours, descending, using each item's `fetchedAt`, with `score` as the
-  tie-break. This is computed per request from stored rows; no rate of change is
-  stored anywhere.
+  tie-break. Computed per request from stored rows; no rate of change is stored
+  anywhere. **This definition is dated.** Engagement velocity is a Phase 3
+  signal with its own stored column; when it lands `trending` may switch to it,
+  and this contract will say so rather than changing meaning silently.
 
 ```json
 {
@@ -327,6 +345,41 @@ Sorts:
 
 `appliedFilters` echoes what the server actually used after validation and
 defaulting, so a client can render "showing X" without re-deriving it.
+
+### `GET /api/radar/histogram`
+
+Arrivals by hour, for the chart above the radar list. A paginated list cannot
+produce this: with `limit` at 30 a client can only ever draw the page it
+fetched, and a histogram of one page is not approximately right, it is wrong.
+
+Takes the **same filters** as `/api/radar` — `type`, `topic`, `source`,
+`verification`, `since` — so the chart and the list below it always describe the
+same set. No `sort`, no `cursor`, no `limit`: it is one grouped count.
+
+| param   | default                  |
+| ------- | ------------------------ |
+| `since` | `24h`, giving 24 buckets |
+| others  | as `/api/radar`          |
+
+```json
+{
+  "from": "2026-09-15T12:00:00.000Z",
+  "to": "2026-09-16T12:00:00.000Z",
+  "buckets": [
+    { "hour": "2026-09-15T12:00:00.000Z", "count": 3 },
+    { "hour": "2026-09-15T13:00:00.000Z", "count": 0 }
+  ]
+}
+```
+
+Grouped on `lastActivityAt`, the same key `sort=newest` orders by, so a bar and
+a row agree about when a story arrived.
+
+Buckets are hourly and **every hour in the window is present, including empty
+ones with `count: 0`**. Omitting empty hours would leave the chart with silent
+gaps exactly where it should show a quiet period. A longer `since` returns more
+hourly buckets, capped at 168 (seven days); beyond that the request is a
+`VALIDATION_ERROR` rather than a silently truncated chart.
 
 ### `GET /api/stories/:slug`
 
@@ -419,8 +472,14 @@ Accepts any subset of the writable fields; omitted fields are left alone.
 Rejecting an unknown topic key is deliberate: a silently dropped key is a
 preference the user believes they set.
 
-**Two of those value sets are this contract's, not the database's.** Worth
-knowing before signing it off:
+**`theme` has two sources of truth, deliberately.** `preferences.theme` is the
+cross-device default; the browser's `localStorage` copy is the device override
+that the no-flash script reads before first paint. A server round trip cannot
+happen before paint, so the local copy is authoritative for rendering, and
+Settings writes both. **The local copy must not be removed as duplication** —
+doing so reintroduces the white flash on every cold load.
+
+**Two of those value sets are this contract's, not the database's:**
 
 | field                                                 | enforced where                                                                                                                                                                       |
 | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -465,6 +524,22 @@ list is a few dozen rows.
 show which sources are failing. `config` and the feed `url` are not exposed:
 they are operational settings, not display data. Not paginated.
 
+### `PUT /api/sources/:key`
+
+Switches one source on or off. The only write any route makes to `sources`, and
+only to this column.
+
+```json
+{ "enabled": false }
+```
+
+Returns the updated source in the shape above. `NOT_FOUND` for an unknown key.
+
+This is a preference about a catalogue row, not a write to `stories` or
+`raw_items`, and it does not trigger a fetch: a disabled source is simply
+skipped by the next worker run. The seed deliberately never overwrites
+`enabled`, so re-seeding cannot switch a source back on behind the reader.
+
 ---
 
 ## Field provenance
@@ -493,7 +568,9 @@ contract without filling a row here.
 | `read`, `readAt`                              | `read_state.read_at`                                                                        |
 | `hidden`                                      | `read_state.hidden`                                                                         |
 | preferences fields                            | `user_preferences` row 1                                                                    |
-| `topics[].storyCount`, `sources[].storyCount` | counted per request from `story_topics` / `raw_items`                                       |
+| `topics[].storyCount`, `sources[].storyCount` | counted per request from `story_topics` / `raw_items`, over 7 days                          |
+| `buckets[].hour`, `buckets[].count`           | `stories.last_activity_at` grouped by hour, empty hours filled in                           |
+| `sources[].enabled` (write)                   | `sources.enabled`, the only column any route writes on that table                           |
 
 ## Not filled yet
 
@@ -515,14 +592,17 @@ mislead, so it is stated twice.
 
 ## Deliberately absent
 
-| not here                              | why                                                                    |
-| ------------------------------------- | ---------------------------------------------------------------------- |
-| A search endpoint                     | Nothing indexes text yet; filtering by topic and source covers Phase 1 |
-| Any write to `stories` or `raw_items` | Only the worker writes those                                           |
-| A refresh or ingest trigger           | No route may cause an external call; the worker owns that              |
-| `sources[].config`, `sources[].url`   | Operational settings, not display data                                 |
-| `topics[].keywords`                   | Internal tagging configuration                                         |
-| A user id anywhere                    | Version 1 is single user; adding accounts stays additive               |
+| not here                              | why                                                                                                                                                             |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A search endpoint                     | Nothing indexes text yet; filtering by topic and source covers Phase 1                                                                                          |
+| Any write to `stories` or `raw_items` | Only the worker writes those                                                                                                                                    |
+| A refresh or ingest trigger           | No route may cause an external call; the worker owns that                                                                                                       |
+| `sources[].config`, `sources[].url`   | Operational settings, not display data                                                                                                                          |
+| `topics[].keywords`                   | Internal tagging configuration                                                                                                                                  |
+| A total item count on the radar       | It would cost a second count query on every page; the returned array plus `appliedFilters` supports "showing N"                                                 |
+| A notification trigger rule           | The prototype's "plus anything major" is a different axis from `notificationChannel`, which is where a notification goes; nothing stores what would trigger one |
+| A numeric grade on a story            | The four-bar meter is a rendering of the `verification` enum, owned by the client; a number here would let the picture and the word drift apart                 |
+| A user id anywhere                    | Version 1 is single user; adding accounts stays additive                                                                                                        |
 
 ---
 
@@ -552,6 +632,14 @@ curl -s -X POST 'http://localhost:3000/api/saved/412' \
 curl -s -X POST 'http://localhost:3000/api/read/412'
 curl -s -X POST 'http://localhost:3000/api/hide/412'
 
+# Arrivals by hour, same filters as the list above it
+curl -s 'http://localhost:3000/api/radar/histogram?topic=openai&since=24h'
+
+# Switch a source off
+curl -s -X PUT 'http://localhost:3000/api/sources/venturebeat-ai' \
+  -H 'content-type: application/json' \
+  -d '{"enabled":false}'
+
 # Preferences
 curl -s 'http://localhost:3000/api/preferences'
 curl -s -X PUT 'http://localhost:3000/api/preferences' \
@@ -563,17 +651,41 @@ curl -s 'http://localhost:3000/api/brief?length=7'
 # {"error":{"code":"VALIDATION_ERROR","message":"length must be one of 5, 10, all"}}
 ```
 
-## Open questions for sign-off
+## Decisions taken at sign-off
 
-1. **`length` is reading minutes, not story count.** The brief says five-minute
-   and ten-minute modes, so a five-minute brief is however many stories fit in
-   five minutes. Confirm, because "top 5 stories" is the other reading and the
-   two diverge quickly.
-2. **`trending` is sources-added-in-24h.** Nothing stores a rate of change, so
-   this is computed from `fetchedAt` per request. If trending should mean
-   engagement velocity instead, that needs a stored signal and a ticket.
-3. **No brief delivery is recorded.** The window is derived from `briefTime`
-   every request, so a brief cannot be "already read". Remembering one needs a
-   new column.
-4. **`storyCount` on topics and sources uses a fixed 7-day window.** Cheap and
-   good enough for chips; say so if it should follow the user's filters instead.
+Settled on 2026-09-16 by the PM, with the UI lane reading the contract as its
+consumer. Recorded because each could reasonably have gone the other way, and a
+later reader deserves the reason rather than the result.
+
+1. **`length` is reading minutes, not a story count.** A five-minute brief is
+   however many stories fit in five minutes, at least one. "Top 5 stories" is
+   not the product, and the header would contradict itself the moment two long
+   stories crowded out three short ones.
+2. **`trending` is distinct sources attached in 24 hours.** The only definition
+   honest about what is stored. Dated to Phase 1; engagement velocity is a
+   Phase 3 signal with its own column, and this contract will note the change
+   rather than let the word shift meaning quietly.
+3. **No brief delivery is recorded.** Per-story `read` is what "already seen"
+   means today. This costs one prototype element, which is better than a column
+   whose only job is to make a decoration true. Phase 2's scheduled Morning
+   Brief adds `digests` and `digest_items`.
+4. **`storyCount` uses a fixed 7-day window.** It orders chips by what is
+   active. It is a hint, not a statistic, and nothing presents it as one.
+5. **The arrivals histogram is a route, not a derivation.** A client can only
+   ever draw the page it fetched, so a histogram derived from a paginated list
+   would be wrong rather than approximate. Added as
+   `GET /api/radar/histogram`.
+6. **`sources.enabled` is writable.** A toggle with no endpoint behind it is a
+   dead control, which is worse than not offering one. It is a preference about
+   a catalogue row, so `sources` joins the writable list for that column alone.
+7. **`scoreComponents[].value` may be negative**, so the why-ranked panel can
+   show what pushed a story down. #9 adds `verificationPenalty`.
+8. **`theme` keeps two sources of truth.** The duplication is the fix for the
+   white flash, not a defect to be tidied away.
+
+## What is still not filled, and by whom
+
+`summary`, `whyItMatters` and `keyPoints` wait on the AI summariser; `score` and
+`scoreComponents` on issue #9. Every section built on them is **hidden when
+empty**, never rendered as a labelled empty block, and `summary` always falls
+back to `excerpt`. Without that fallback every card in Phase 1 is blank.
