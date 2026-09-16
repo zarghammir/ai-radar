@@ -2,6 +2,11 @@
   "name": "ai-radar",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=22.13.0",
+    "npm": ">=11.0.0"
+  },
+  "packageManager": "npm@11.19.1",
   "scripts": {
     "postinstall": "next typegen",
     "dev": "next dev",
