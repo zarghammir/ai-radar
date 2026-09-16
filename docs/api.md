@@ -243,11 +243,17 @@ recorded and zero engagement are not the same thing.
 UI can render it without re-sorting. `label` comes from the pipeline's own
 label map, so the wording in the UI cannot drift from the weights.
 
-**`value` may be negative.** Issue #9 adds a `verificationPenalty` component,
-negative for `UNVERIFIED` and slightly negative for `EMERGING`, so the
+**`value` may be negative.** Issue #9 adds two penalty components so the
 why-ranked panel can show what pushed a story _down_ and not only what lifted
-it. No negative value is produced until #9 lands, but a bar chart that assumes
-non-negative values will render wrongly the day it does.
+it: `unverifiedPenalty`, labelled "Unverified claim", and `emergingPenalty`,
+labelled "Not yet corroborated". Two keys rather than one because the label map
+is static, and a single key would print "Unverified claim" on a story that is
+merely emerging. No negative value is produced until #9 lands, but a bar chart
+that assumes non-negative values will render wrongly the day it does.
+
+As everywhere else in this array, read the `label` the server sends rather than
+matching on the key. These two are named here because a reader deserves to know
+what the negative values are, not so a client can branch on them.
 
 ---
 
@@ -679,7 +685,9 @@ later reader deserves the reason rather than the result.
    dead control, which is worse than not offering one. It is a preference about
    a catalogue row, so `sources` joins the writable list for that column alone.
 7. **`scoreComponents[].value` may be negative**, so the why-ranked panel can
-   show what pushed a story down. #9 adds `verificationPenalty`.
+   show what pushed a story down. #9 adds `unverifiedPenalty` and
+   `emergingPenalty`, each with its own label, because one key cannot carry two
+   wordings and the wrong one would be a false statement on the panel.
 8. **`theme` keeps two sources of truth.** The duplication is the fix for the
    white flash, not a defect to be tidied away.
 
