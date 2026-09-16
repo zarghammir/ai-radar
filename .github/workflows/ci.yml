@@ -89,3 +89,90 @@ jobs:
       # failure goes unseen.
       - name: Format check
         run: npm run format:check
+
+  # Proves the self-host path the README promises. The owner's Mac has no
+  # Docker, so this job is the only place the image and the stack are ever
+  # actually run.
+  compose-smoke:
+    name: compose-smoke
+    runs-on: ubuntu-latest
+    # A stack that never becomes healthy would otherwise sit here burning
+    # minutes on a free-tier budget.
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out the branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The quick start's first command. If .env.example's defaults have drifted
+      # out of step with the compose file, the stack fails here.
+      - name: cp .env.example .env
+        run: cp .env.example .env
+
+      - name: Build the image
+        run: docker compose build web
+
+      - name: Report the image size
+        run: |
+          BYTES="$(docker image inspect ai-radar:local --format '{{.Size}}')"
+          echo "image ai-radar:local = $((BYTES / 1024 / 1024)) MB ($BYTES bytes)"
+          echo "IMAGE_MB=$((BYTES / 1024 / 1024))" >> "$GITHUB_ENV"
+
+      - name: Boot postgres and web
+        run: docker compose up -d --wait --wait-timeout 180 postgres web
+
+      - name: Wait for web to answer 200
+        run: |
+          set -eu
+          for i in $(seq 1 60); do
+            CODE="$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/ || true)"
+            if [ "$CODE" = "200" ]; then
+              echo "web answered HTTP $CODE after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "web never answered 200; last code was '${CODE:-none}'" >&2
+          exit 1
+
+      - name: Confirm the catalogue was seeded on start
+        run: |
+          set -eu
+          COUNT="$(docker compose exec -T postgres psql -U ai_radar -d ai_radar -tAc 'select count(*) from sources')"
+          echo "sources rows after web start: $COUNT"
+          # A seed step that seeded nothing would otherwise look identical to one
+          # that ran: floor the count rather than trust the exit status.
+          [ "$COUNT" -gt 0 ] || { echo "the sources table is empty; the seed did not run" >&2; exit 1; }
+
+      # Accepts exactly two outcomes and nothing else: a real pass once issue #5
+      # lands, or today's explicit refusal. Silence, a crash or an empty exit 0
+      # all fail. Written this way so #5 does not have to remember to edit it.
+      - name: Run one worker pass
+        run: |
+          set -eu
+          set +e
+          OUT="$(docker compose run --rm worker 2>&1)"
+          CODE=$?
+          set -e
+          echo "$OUT"
+          echo "worker exit code: $CODE"
+          if [ "$CODE" -eq 0 ]; then
+            echo "$OUT" | grep -q "\[worker\] running one ingestion pass" \
+              || { echo "worker exited 0 without running a pass" >&2; exit 1; }
+            echo "RESULT: the worker ran a pass."
+          elif [ "$CODE" -eq 78 ]; then
+            echo "$OUT" | grep -q "NOT IMPLEMENTED: this image contains no worker entry" \
+              || { echo "worker exited 78 without saying why" >&2; exit 1; }
+            echo "RESULT: no worker entry in this image yet (issue #5). Reported, not hidden."
+          else
+            echo "worker failed in an unexpected way (exit $CODE)" >&2
+            exit 1
+          fi
+
+      - name: Show the logs if anything above failed
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Tear the stack down
+        if: always()
+        run: docker compose down -v --remove-orphans

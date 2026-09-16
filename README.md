@@ -36,7 +36,18 @@ cp .env.example .env
 docker compose up
 ```
 
-Then open http://localhost:3000. Docker Compose is being added in Phase 1; until then:
+Then open http://localhost:3000. The first start creates the database schema and
+loads the shipped catalogue of sources, so the app has something to show. Both
+steps are safe to repeat, so an ordinary restart does not disturb existing data.
+
+Compose runs three services: `web` (the app), `worker` (ingestion) and
+`postgres:17`. Postgres keeps its data in a named volume — `docker compose down`
+leaves it alone, `docker compose down -v` deletes it. Its port is deliberately
+not published, since 5432 is usually taken by a local Postgres already; reach it
+with `docker compose exec postgres psql -U ai_radar ai_radar`.
+
+The Node toolchain above is not needed to self-host — Docker builds it all. It is
+needed to work on the code:
 
 ```bash
 npm ci

@@ -1,0 +1,21 @@
+# Anything the image does not need. Keeping this tight is most of what makes
+# the build fast: everything here would otherwise be sent to the daemon.
+.git
+.github
+node_modules
+.next
+out
+coverage
+design
+docs
+fixtures
+*.md
+!README.md
+.env
+.env.*
+!.env.example
+Dockerfile
+.dockerignore
+docker-compose.yml
+tsconfig.tsbuildinfo
+.DS_Store

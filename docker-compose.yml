@@ -1,0 +1,73 @@
+# Self-host with three commands:
+#
+#   cp .env.example .env
+#   docker compose up
+#   open http://localhost:3000
+#
+# Postgres keeps its data in a named volume, so `docker compose down` leaves it
+# alone and `docker compose down -v` deletes it.
+name: ai-radar
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ai_radar
+      POSTGRES_PASSWORD: ai_radar
+      POSTGRES_DB: ai_radar
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    # Deliberately not published to the host: port 5432 is usually already
+    # taken by a local Postgres. Reach it with `docker compose exec postgres psql`.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ai_radar -d ai_radar"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  web:
+    build:
+      context: .
+      target: runner
+    image: ai-radar:local
+    env_file:
+      - .env
+    environment:
+      # Overrides the .env value on purpose: inside the network the database is
+      # the `postgres` service, not localhost. .env.example says as much.
+      DATABASE_URL: postgres://ai_radar:ai_radar@postgres:5432/ai_radar
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    entrypoint: ["/app/docker/web-entrypoint.sh"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/ || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 15s
+
+  worker:
+    # Same image as web; only the entrypoint differs.
+    image: ai-radar:local
+    build:
+      context: .
+      target: runner
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgres://ai_radar:ai_radar@postgres:5432/ai_radar
+    depends_on:
+      # Waits for web because web owns the migrations.
+      web:
+        condition: service_healthy
+    entrypoint: ["/app/docker/worker-entrypoint.sh"]
+    # One pass, then stop. Nothing here should loop until issue #5 decides the
+    # schedule; a restarting container that cannot work is just a noisy one.
+    restart: "no"
+
+volumes:
+  postgres-data:
