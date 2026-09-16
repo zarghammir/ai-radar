@@ -39,7 +39,7 @@ export async function handleIngestTrigger(request: Request, deps: TriggerDeps): 
   }
 
   const outcome = await ingestOnce(deps.db, deps.sql);
-  if (!outcome.ran || !outcome.result) {
+  if (!outcome.ran) {
     return Response.json(
       { ran: false, reason: "another ingest is already running" },
       { status: 409 },

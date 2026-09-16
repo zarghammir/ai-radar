@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import postgres from "postgres";
 import { spawn } from "node:child_process";
 import { INGEST_LOCK_KEY, withIngestLock } from "./lock";
@@ -64,11 +64,71 @@ afterAll(async () => {
   await Promise.all(clients.map((c) => c.end({ timeout: 5 })));
 });
 
+/**
+ * A reserved connection whose unlock fails. Needs no database: what is under
+ * test is which error survives, and forcing a real `pg_advisory_unlock` to
+ * fail against live Postgres is not something a test can arrange reliably.
+ */
+function sqlWhoseUnlockFails(): postgres.Sql {
+  const reserved = ((strings: TemplateStringsArray) => {
+    const text = strings.join("");
+    if (text.includes("pg_try_advisory_lock")) return Promise.resolve([{ locked: true }]);
+    if (text.includes("pg_advisory_unlock")) {
+      return Promise.reject(new Error("connection reset while unlocking"));
+    }
+    return Promise.resolve([]);
+  }) as unknown as postgres.ReservedSql;
+  (reserved as unknown as { release: () => void }).release = () => {};
+  return { reserve: async () => reserved } as unknown as postgres.Sql;
+}
+
+describe("withIngestLock when releasing the lock fails", () => {
+  it("propagates the failure from the work, not the one from the unlock", async () => {
+    // The unlock runs in a finally. A throw there replaces whatever brought us
+    // out of the run — losing the real cause exactly when someone is reading
+    // the log to find it.
+    const errors: string[] = [];
+    const spy = vi
+      .spyOn(console, "error")
+      .mockImplementation((...a) => void errors.push(a.join(" ")));
+    try {
+      await expect(
+        withIngestLock(sqlWhoseUnlockFails(), async () => {
+          throw new Error("the ingest itself failed");
+        }),
+      ).rejects.toThrow("the ingest itself failed");
+
+      // And the unlock failure is still reported rather than swallowed: a lock
+      // that would not release is worth an operator's attention.
+      expect(errors.join("\n")).toContain("connection reset while unlocking");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("still reports a completed run whose unlock failed, rather than calling it a failure", async () => {
+    // The work happened. Reporting it as failed because cleanup went wrong
+    // would be a false negative, and the connection closing releases the lock.
+    const errors: string[] = [];
+    const spy = vi
+      .spyOn(console, "error")
+      .mockImplementation((...a) => void errors.push(a.join(" ")));
+    try {
+      const outcome = await withIngestLock(sqlWhoseUnlockFails(), async () => "finished");
+      expect(outcome).toEqual({ ran: true, result: "finished" });
+      expect(errors.join("\n")).toContain("connection reset while unlocking");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
+
 withDb("withIngestLock", () => {
   it("runs the work and reports that it ran", async () => {
     const outcome = await withIngestLock(worker(), async () => "done");
-    expect(outcome.ran).toBe(true);
-    expect(outcome.result).toBe("done");
+    // Asserted structurally: with LockOutcome a union, "ran with a result" is
+    // one shape rather than two fields that could disagree.
+    expect(outcome).toEqual({ ran: true, result: "done" });
   });
 
   it("declines a second worker while the first is still running, without running its work", async () => {
@@ -96,9 +156,9 @@ withDb("withIngestLock", () => {
 
     // The decline is the point: not merely a different return value, but work
     // that never happened.
-    expect(secondRun.ran).toBe(false);
+    // A declined outcome carries no result at all now — not an undefined one.
+    expect(secondRun).toEqual({ ran: false });
     expect(secondWorked).toBe(false);
-    expect(secondRun.result).toBeUndefined();
 
     release();
     expect((await firstRun).ran).toBe(true);

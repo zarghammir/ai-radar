@@ -1,4 +1,5 @@
 import type postgres from "postgres";
+import { describeError } from "@/pipeline/run";
 
 /**
  * The advisory-lock key every AI Radar ingest competes for.
@@ -9,11 +10,13 @@ import type postgres from "postgres";
  */
 export const INGEST_LOCK_KEY = 0x41524449;
 
-export interface LockOutcome<T> {
-  /** False means another ingest already held the lock; the work did not run. */
-  ran: boolean;
-  result?: T;
-}
+/**
+ * A discriminated union rather than an optional result, so "declined" and
+ * "ran but produced nothing" cannot be confused by a caller. Narrowing on
+ * `ran` is enough; there is no second condition to get wrong, and no way to
+ * report "another ingest is already running" for any other reason.
+ */
+export type LockOutcome<T> = { ran: true; result: T } | { ran: false };
 
 /**
  * Runs `work` only if no other ingest is running, anywhere.
@@ -45,9 +48,26 @@ export async function withIngestLock<T>(
     } finally {
       // finally, not after the return: a run that throws must not leave the
       // lock held, or the failure wedges every tick that follows it.
-      await reserved`select pg_advisory_unlock(${INGEST_LOCK_KEY})`;
+      await releaseLock(reserved);
     }
   } finally {
     reserved.release();
+  }
+}
+
+/**
+ * Releases the lock, and never throws.
+ *
+ * This runs in a `finally`. A throw here would replace whatever brought us out
+ * of the run — including the failure an operator is reading the log to find —
+ * so the unlock's own failure is reported and the original is left to
+ * propagate. The lock is released regardless once the session ends, so a
+ * completed run is still a completed run.
+ */
+async function releaseLock(reserved: postgres.ReservedSql): Promise<void> {
+  try {
+    await reserved`select pg_advisory_unlock(${INGEST_LOCK_KEY})`;
+  } catch (error) {
+    console.error(`[lock] releasing the ingest lock failed: ${describeError(error)}`);
   }
 }

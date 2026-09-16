@@ -1,7 +1,13 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { IngestResult, SourceRunResult } from "@/pipeline/run";
-import { exitCodeFor, formatSourceLine, formatTotalLine, readIntervalMinutes } from "./report";
+import {
+  exitCodeFor,
+  formatSourceLine,
+  formatTotalLine,
+  MINIMUM_INTERVAL_MINUTES,
+  readIntervalMinutes,
+} from "./report";
 
 const ok = (over: Partial<SourceRunResult> = {}): SourceRunResult => ({
   sourceKey: "arxiv",
@@ -97,6 +103,32 @@ describe("readIntervalMinutes", () => {
   it("refuses a negative interval", () => {
     expect(() => readIntervalMinutes({ INGEST_INTERVAL_MINUTES: "-5" })).toThrow(
       /INGEST_INTERVAL_MINUTES/,
+    );
+  });
+
+  it("refuses an interval below the floor, which would hammer other people's feeds", () => {
+    // 0.01 is a pass every 0.6 seconds across every configured source. The
+    // function already refuses a value it cannot parse because a schedule
+    // nobody chose is a bug; a schedule nobody could have wanted is worse.
+    expect(() => readIntervalMinutes({ INGEST_INTERVAL_MINUTES: "0.01" })).toThrow(
+      /INGEST_INTERVAL_MINUTES/,
+    );
+    expect(() => readIntervalMinutes({ INGEST_INTERVAL_MINUTES: "0.5" })).toThrow(
+      /INGEST_INTERVAL_MINUTES/,
+    );
+  });
+
+  it("names the floor in the message, so the fix is obvious", () => {
+    expect(() => readIntervalMinutes({ INGEST_INTERVAL_MINUTES: "0.01" })).toThrow(
+      new RegExp(String(MINIMUM_INTERVAL_MINUTES)),
+    );
+  });
+
+  it("accepts the floor itself", () => {
+    // The boundary belongs in the test: a floor written with the wrong
+    // comparison refuses the value it is meant to allow.
+    expect(readIntervalMinutes({ INGEST_INTERVAL_MINUTES: String(MINIMUM_INTERVAL_MINUTES) })).toBe(
+      MINIMUM_INTERVAL_MINUTES,
     );
   });
 

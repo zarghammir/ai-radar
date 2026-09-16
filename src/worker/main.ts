@@ -47,7 +47,7 @@ async function runPass(): Promise<number> {
   const started = Date.now();
   const outcome = await ingestOnce(db, sql);
 
-  if (!outcome.ran || !outcome.result) {
+  if (!outcome.ran) {
     // Skipped, not failed: another worker or the HTTP trigger holds the lock.
     console.log("[worker] another ingest is already running; skipping this pass.");
     return 0;

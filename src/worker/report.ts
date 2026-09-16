@@ -4,6 +4,16 @@ import type { SecretEnv } from "./secret";
 /** Matches INGEST_INTERVAL_MINUTES in .env.example; report.test.ts pins the two together. */
 export const DEFAULT_INTERVAL_MINUTES = 30;
 
+/**
+ * The fastest schedule this worker will accept.
+ *
+ * Every pass fetches every enabled source, so the interval is a request rate
+ * against other people's servers, not just a local loop. A fat-fingered 0.01
+ * is a pass every 0.6 seconds across the whole catalogue — the sort of thing
+ * that gets a self-hoster blocked rather than rate-limited.
+ */
+export const MINIMUM_INTERVAL_MINUTES = 1;
+
 /** The first line of a stored error: the rest is the source's log tail. */
 function firstLine(error: string): string {
   return error.split("\n")[0].trim();
@@ -73,6 +83,12 @@ export function readIntervalMinutes(env: SecretEnv = process.env): number {
   const minutes = Number(raw);
   if (!Number.isFinite(minutes) || minutes <= 0) {
     throw new Error(`INGEST_INTERVAL_MINUTES must be a positive number of minutes, got "${raw}".`);
+  }
+  if (minutes < MINIMUM_INTERVAL_MINUTES) {
+    throw new Error(
+      `INGEST_INTERVAL_MINUTES must be at least ${MINIMUM_INTERVAL_MINUTES} minute(s), got "${raw}". ` +
+        `Every pass fetches every source, so a shorter interval is a request rate against other people's servers.`,
+    );
   }
   return minutes;
 }
