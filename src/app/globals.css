@@ -1,26 +1,182 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Self-hosted by next/font at build time. No request ever reaches Google. */
+  --font-sans: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+  --font-label: var(--font-archivo-narrow), var(--font-archivo), ui-sans-serif, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-heading: var(--font-sans);
+
+  /* The Select Rail. Values are docs/DESIGN.md sections 2 and 4. */
+  --color-bench: var(--bench);
+  --color-bench-2: var(--bench-2);
+  --color-paper: var(--paper);
+  --color-ink: var(--ink);
+  --color-soft: var(--soft);
+  --color-meta: var(--meta);
+  --color-faint: var(--faint);
+  --color-faint-2: var(--faint-2);
+  --color-edge: var(--edge);
+  --color-ash: var(--ash);
+  --color-ash-hi: var(--ash-hi);
+  --color-org: var(--org);
+  --color-org-on: var(--org-on);
+  --color-org-text: var(--org-text);
+
+  --text-label: 0.656rem;
+  --tracking-label: 0.18em;
+  --spacing-rail: 26px;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* ===========================================================================
+   AI RADAR TOKENS — the world is "The Select Rail" (docs/DESIGN.md).
+   Light is the bench in daylight. Dark is its native ground.
+
+   PALETTE LAW ONE:  --org is reserved. It marks only what is LIVE or WHERE
+   YOU ARE: the active reading mode, the current tab or nav item, the flag
+   where you stopped, the current hour on a chart, and the focus ring.
+   Never a link colour, never a badge, never severity, never decoration.
+
+   PALETTE LAW TWO:  orange as text NEVER goes on paper. --org-text is safe
+   on the bench in both themes and on --paper in LIGHT ONLY. On paper in dark
+   it is 3.17:1 and fails AA. Anything on paper takes --ink, --soft or --meta.
+
+   shadcn's semantic tokens below are given these same values, so a component
+   added later inherits this world instead of introducing a second palette.
+   =========================================================================== */
+
+:root {
+  /* the bench */
+  --bench: #e4e3de;
+  --bench-2: #dad8d2;
+  --edge: #cbc9c2;
+  --ash: #5a564e;
+  --ash-hi: #3d3a34;
+
+  /* the print you read on — LIGHT IN BOTH THEMES, on purpose */
+  --paper: #ffffff;
+  --ink: #17181b;
+  --soft: #585c62;
+  --meta: #6e6a61;
+  --faint: #e2e0d9;
+  --faint-2: #c9c7c0;
+
+  /* the reserved colour */
+  --org: #f0531c;
+  --org-on: #0b0c0e;
+  --org-text: #b3380b;
+
+  --radius: 2px; /* film has corners, not pills */
+
+  /* shadcn semantics, mapped onto the world above */
+  --background: var(--bench);
+  --foreground: var(--ash-hi);
+  --card: var(--paper);
+  --card-foreground: var(--ink);
+  --popover: var(--paper);
+  --popover-foreground: var(--ink);
+  --primary: var(--ink);
+  --primary-foreground: var(--paper);
+  --secondary: var(--bench-2);
+  --secondary-foreground: var(--ash-hi);
+  --muted: var(--bench-2);
+  --muted-foreground: var(--ash);
+  --accent: var(--bench-2);
+  --accent-foreground: var(--ash-hi);
+  --destructive: #8b2a3c;
+  --border: var(--edge);
+  --input: var(--edge);
+  --ring: var(--org);
+
+  --sidebar: var(--bench-2);
+  --sidebar-foreground: var(--ash);
+  --sidebar-primary: var(--org);
+  --sidebar-primary-foreground: var(--org-on);
+  --sidebar-accent: var(--bench);
+  --sidebar-accent-foreground: var(--ash-hi);
+  --sidebar-border: var(--edge);
+  --sidebar-ring: var(--org);
+
+  /* charts are one ink plus the reserved orange for "now" */
+  --chart-1: var(--ink);
+  --chart-2: var(--org);
+  --chart-3: var(--soft);
+  --chart-4: var(--meta);
+  --chart-5: var(--faint-2);
+}
+
+.dark {
+  --bench: #0b0c0e;
+  --bench-2: #141518;
+  --edge: #2a2b2e;
+  --ash: #9a958a;
+  --ash-hi: #d6d1c6;
+
+  /* paper stays light: you read on the print, the bench is what it sits on */
+  --paper: #f3f3f1;
+  --ink: #17181b;
+  --soft: #585c62;
+  --meta: #6e6a61;
+  --faint: #e2e0d9;
+  --faint-2: #c9c7c0;
+
+  --org: #f0531c;
+  --org-on: #0b0c0e;
+  --org-text: #f0531c; /* bench only — see palette law two */
+
+  --destructive: #e2808f;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
   }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
 }
