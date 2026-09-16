@@ -192,7 +192,13 @@ withDb("rankAllStories", () => {
   });
 
   it("gives a single outlet filing twice no corroboration", async () => {
-    // NAMED CONTROL for removing the storySources pass-through.
+    // An END-TO-END guard that de-duplication happens SOMEWHERE, not a control
+    // for either layer: both storySources and rankStory de-duplicate by key,
+    // so removing one alone leaves this green and only removing both reddens
+    // it. Each layer is controlled where it lives — storySources by
+    // run.test.ts "counts one source once when it files two items on the same
+    // story", rankStory by score.test.ts "pays no corroboration for one outlet
+    // repeating itself".
     const outlet = await addSource({ key: "verge-ai", tier: "HIGH_QUALITY_REPORTING" });
     const twice = await addStory({
       slug: "one-outlet-twice",
@@ -284,6 +290,72 @@ withDb("rankAllStories", () => {
     expect(engagement).toBeLessThan(maxOfEach - 1);
   });
 
+  it("breaks an engagement tie the same way whatever order the rows arrive in", async () => {
+    // Equal points, different comments — two submissions of one link. A strict
+    // comparison lets the first row win, and "first" is physical row order
+    // unless something pins it, so the same data could score differently after
+    // a dump and restore or on a replica.
+    const forum = await addSource({ key: "hackernews-ai", tier: "COMMUNITY" });
+    const tied = await addStory({
+      slug: "tied",
+      items: [
+        { sourceId: forum.id, points: 100, comments: 0 },
+        { sourceId: forum.id, points: 100, comments: 500 },
+      ],
+    });
+    // Physically move the LOWER id behind the higher one, keeping its id, so a
+    // scan returns them in the opposite order to their ids — which is what a
+    // dump and restore does. An UPDATE is not enough: Postgres can rewrite the
+    // tuple in place on the same page and the scan order does not change.
+    const [low] = await sql.unsafe(
+      `select id from raw_items where story_id = ${tied.id} order by id asc limit 1`,
+    );
+    await sql.unsafe(`create temp table moved as select * from raw_items where id = ${low.id}`);
+    await sql.unsafe(`delete from raw_items where id = ${low.id}`);
+    await sql.unsafe(`insert into raw_items select * from moved`);
+    await sql.unsafe(`drop table moved`);
+    const order = await sql.unsafe(`select id from raw_items where story_id = ${tied.id}`);
+    // If the heap did not reorder, this test cannot tell the defect from the
+    // fix and must not be trusted to.
+    expect(Number(order[0].id)).not.toBe(Number(low.id));
+
+    await rankAllStories(db, NOW);
+    // The lowest id wins the tie, so the comments come from the quiet item and
+    // not from the louder row that now happens to be scanned first.
+    const lowestIdWins = 4 * Math.log10(101);
+    expect((await reload(tied.id)).scoreComponents.engagement).toBeCloseTo(
+      Math.round(lowestIdWins * 10) / 10,
+      1,
+    );
+  });
+
+  it("counts stories it scored, not stories it considered", async () => {
+    // A story can disappear between the window query and its own transaction.
+    // Forced deterministically with a trigger rather than waited for: scoring
+    // the first story deletes the second, so the second is due, gone by the
+    // time its turn comes, and must not be counted.
+    const outlet = await addSource({ key: "verge-ai" });
+    await addStory({ slug: "first", items: [{ sourceId: outlet.id }] });
+    await addStory({ slug: "second", items: [{ sourceId: outlet.id }] });
+    await sql.unsafe(`
+      CREATE OR REPLACE FUNCTION vanish() RETURNS trigger AS $$
+      BEGIN DELETE FROM stories WHERE slug = 'second'; RETURN NULL; END;
+      $$ LANGUAGE plpgsql;
+      CREATE TRIGGER vanish_trigger AFTER UPDATE ON stories
+      FOR EACH ROW WHEN (NEW.slug = 'first') EXECUTE FUNCTION vanish();
+    `);
+
+    try {
+      const result = await rankAllStories(db, NOW);
+      const left = await db.select().from(stories);
+      expect(left).toHaveLength(1);
+      expect(result.ranked).toBe(1);
+    } finally {
+      await sql.unsafe(`DROP TRIGGER IF EXISTS vanish_trigger ON stories`);
+      await sql.unsafe(`DROP FUNCTION IF EXISTS vanish()`);
+    }
+  });
+
   it("leaves a story outside the window untouched", async () => {
     const outlet = await addSource({ key: "verge-ai" });
     const recent = await addStory({ slug: "recent", items: [{ sourceId: outlet.id }] });
@@ -295,6 +367,13 @@ withDb("rankAllStories", () => {
 
     const result = await rankAllStories(db, NOW);
     expect(result.ranked).toBe(1);
+    // `ranked` is a report of work done, so it must equal the number of
+    // stories that actually came out with components, not the number
+    // considered.
+    const scored = (await db.select().from(stories)).filter(
+      (s) => Object.keys(s.scoreComponents).length > 0,
+    );
+    expect(scored).toHaveLength(result.ranked);
     expect((await reload(recent.id)).score).toBeGreaterThan(0);
     // Untouched, not zeroed: the default is what it keeps.
     expect((await reload(ancient.id)).score).toBe(0);

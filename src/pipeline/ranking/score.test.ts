@@ -1,7 +1,5 @@
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { COMPONENT_LABELS, rankStory, WEIGHTS } from "./score";
+import { COMPONENT_LABELS, labelFor, rankStory, WEIGHTS } from "./score";
 import { deriveVerification } from "../clustering/verification";
 
 const now = new Date("2026-09-16T12:00:00Z");
@@ -284,32 +282,47 @@ describe("rankStory and the verification penalty", () => {
 
 describe("every component the ranker can emit has a label", () => {
   /**
-   * Derived from the emitting code, not from a list written here.
+   * Collected by RUNNING the ranker, not by reading it.
    *
-   * A hand-written array rots the moment someone adds a component: it would
-   * still pass while the new component printed a developer identifier in front
-   * of a reader. Reading the assignments out of the source cannot drift from
-   * the source.
+   * The previous version parsed the source for `c.x =` assignments, and
+   * `c["x"] = 5` walked straight past it — a test that parses source is only
+   * as complete as its grammar. Two things replace it: ComponentKey makes an
+   * unlabelled component fail to compile in any spelling, and this exercises
+   * every branch and compares the two sets outright.
    */
-  const emittedKeys = (): string[] => {
-    const source = readFileSync(fileURLToPath(new URL("./score.ts", import.meta.url)), "utf8");
-    const body = source.slice(source.indexOf("export function rankStory"));
-    return [...new Set([...body.matchAll(/\bc\.([A-Za-z][A-Za-z0-9]*)\s*=/g)].map((m) => m[1]))];
+  const emitted = (): Set<string> => {
+    const at = new Date("2026-09-16T11:00:00Z");
+    const runs: Parameters<typeof rankStory>[0][] = [
+      { ...base, sources: [{ sourceKey: "openai", tier: "PRIMARY" }] },
+      { ...base, sources: [reuters] },
+      { ...base, sources: [{ sourceKey: "interconnects", tier: "ANALYST" }] },
+      { ...base, sources: [{ sourceKey: "hn", tier: "COMMUNITY" }] },
+      { ...base, sources: [reuters, verge] },
+      { ...base, topicKeys: ["openai"], userTopicKeys: ["openai"] },
+      { ...base, engagementPoints: 100, engagementComments: 20 },
+      { ...base, verification: "UNVERIFIED" },
+      { ...base, verification: "EMERGING" },
+      { ...base, contentType: "RELEASE", lastActivityAt: at },
+    ];
+    const keys = new Set<string>();
+    for (const input of runs) {
+      for (const key of Object.keys(rankStory(input, now).components)) keys.add(key);
+    }
+    return keys;
   };
 
-  it("finds the components by reading the ranker itself", () => {
-    const keys = emittedKeys();
-    // Floor: a regex that matched nothing would satisfy every check below.
-    expect(keys.length).toBeGreaterThanOrEqual(10);
-    expect(keys).toContain("recency");
-    expect(keys).toContain("unverifiedPenalty");
+  it("emits exactly the components the label map names", () => {
+    const keys = emitted();
+    const labelled = Object.keys(COMPONENT_LABELS);
+    // Tied to the map rather than a hard-coded number, so a branch this matrix
+    // stops reaching becomes a red instead of a shrug.
+    expect(keys.size).toBe(labelled.length);
+    expect([...keys].sort()).toEqual([...labelled].sort());
   });
 
-  it("labels all of them", () => {
-    // The API falls back to the raw key when a label is missing, so that a
-    // new component cannot blank a bar or throw. That fallback is a safety
-    // net, and this is what stops it ever being reached in front of a reader.
-    const unlabelled = emittedKeys().filter((key) => !COMPONENT_LABELS[key]);
-    expect(unlabelled, `no label in COMPONENT_LABELS for: ${unlabelled.join(", ")}`).toEqual([]);
+  it("labels every one of them, and falls back visibly rather than blankly", () => {
+    for (const key of emitted()) expect(labelFor(key)).toBe(COMPONENT_LABELS[key as never]);
+    // The net under the compiler: never reached in production, never blank.
+    expect(labelFor("somethingNobodyLabelled")).toBe("somethingNobodyLabelled");
   });
 });
