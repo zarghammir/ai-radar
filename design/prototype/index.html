@@ -1,0 +1,312 @@
+<!--
+THESIS: AI Radar is a bounded morning brief whose every claim wears a visible grade;
+it refuses the endless card feed this category always ships.
+OWN-WORLD: a film cutting bench — true-black bench, paper-white print cards on a
+sprocket rail, one reserved flag orange, Archivo with condensed labels and a mono
+for times and codes. PALETTE LAW: orange marks only what is live or where you are.
+STORY: the reader scans eight graded stories in five minutes, sees how well-sourced
+the day is before reading a word, opens one, and leaves knowing where it came from.
+FIRST VIEWPORT: date, greeting, count and minutes; the 5/10/Everything switch as the
+loudest control; entry 01 as a large paper card carrying its grade chip and pickup
+curve; the orange flag where reading stopped.
+FORM: intelligence source-grading brief, candidate 3 of 7, re-rolled bolder to the
+film cutting bench; seed key 65e856a6.
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish
+review, the verdict, and DESIGN.md
+-->
+<meta charset="utf-8" />
+<title>AI Radar Screens</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  href="https://fonts.googleapis.com/css2?family=Archivo:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Archivo+Narrow:wght@600;700&family=JetBrains+Mono:wght@400;500;700&display=swap"
+  rel="stylesheet"
+/>
+<link rel="stylesheet" href="styles/tokens.css" />
+<link rel="stylesheet" href="styles/app.css" />
+<style>
+  /* ---- the showcase around the app (not part of the product) ---------- */
+  :root {
+    --pg: #e9e9e6;
+    --pg-ink: #15171a;
+    --pg-mute: #5d6167;
+    --pg-line: #cfcfca;
+    --pg-card: #fff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --pg: #141519;
+      --pg-ink: #ecedf0;
+      --pg-mute: #9096a0;
+      --pg-line: #2c2f36;
+      --pg-card: #1c1e24;
+    }
+  }
+  :root[data-theme="dark"] {
+    --pg: #141519;
+    --pg-ink: #ecedf0;
+    --pg-mute: #9096a0;
+    --pg-line: #2c2f36;
+    --pg-card: #1c1e24;
+  }
+
+  body {
+    background: var(--pg);
+    color: var(--pg-ink);
+    margin: 0;
+    font-family: "Archivo", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 28px 20px 70px;
+  }
+  .intro {
+    border-bottom: 2px solid var(--pg-ink);
+    padding-bottom: 18px;
+  }
+  .kicker {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--pg-mute);
+  }
+  .intro h1 {
+    font-size: clamp(27px, 4.6vw, 40px);
+    line-height: 1.04;
+    margin: 9px 0 0;
+    font-weight: 700;
+    letter-spacing: -0.022em;
+    text-wrap: balance;
+  }
+  .intro p {
+    font-size: 16px;
+    line-height: 1.55;
+    color: var(--pg-mute);
+    max-width: 64ch;
+    margin: 12px 0 0;
+  }
+  .intro p b {
+    color: var(--pg-ink);
+    font-weight: 600;
+  }
+
+  .controls {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--pg);
+    border-bottom: 1px solid var(--pg-line);
+    padding: 12px 0 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px 22px;
+    align-items: center;
+    margin-top: 22px;
+  }
+  .set {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .set > span {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--pg-mute);
+  }
+  .set button {
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--pg-line);
+    background: var(--pg-card);
+    color: var(--pg-mute);
+    padding: 7px 12px;
+    border-radius: 2px;
+  }
+  .set button[aria-pressed="true"] {
+    background: var(--pg-ink);
+    color: var(--pg);
+    border-color: var(--pg-ink);
+  }
+  .set button:focus-visible {
+    outline: 2px solid #f0531c;
+    outline-offset: 2px;
+  }
+
+  .stage {
+    margin-top: 26px;
+    display: flex;
+    justify-content: center;
+  }
+  .device {
+    position: relative;
+    overflow: hidden;
+    border-radius: 16px;
+    flex: 0 0 auto;
+    box-shadow:
+      0 1px 3px rgba(0, 0, 0, 0.2),
+      0 18px 46px rgba(0, 0, 0, 0.2);
+    transform-origin: top center;
+  }
+  .device.desktop {
+    border-radius: 10px;
+  }
+  #app {
+    width: 100%;
+    height: 100%;
+  }
+
+  .notes {
+    margin-top: 34px;
+    border-top: 1px solid var(--pg-line);
+    padding-top: 22px;
+    display: grid;
+    gap: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  }
+  .notes section {
+    background: var(--pg-card);
+    border: 1px solid var(--pg-line);
+    padding: 15px 16px;
+  }
+  .notes h2 {
+    font-size: 14.5px;
+    margin: 0;
+    font-weight: 700;
+  }
+  .notes p {
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--pg-mute);
+    margin: 7px 0 0;
+  }
+</style>
+
+<div class="page">
+  <div class="intro">
+    <div class="kicker">AI Radar &middot; issue #11 &middot; screen designs for sign-off</div>
+    <h1>All five screens, both sizes, both themes.</h1>
+    <p>
+      This is the real thing, not pictures of it.
+      <b>Tap a story to open it. Change the reading length. Switch tabs. Toggle a source.</b> Every
+      headline, outlet and link is a genuine AI story from 9&ndash;16 September 2026, and every
+      &ldquo;Read at&rdquo; link opens the actual article.
+    </p>
+  </div>
+
+  <div class="controls">
+    <div class="set" role="group" aria-label="Screen">
+      <span>Screen</span>
+      <button data-screen="today" aria-pressed="true">Today</button>
+      <button data-screen="radar" aria-pressed="false">Radar</button>
+      <button data-screen="story" aria-pressed="false">Story</button>
+      <button data-screen="saved" aria-pressed="false">Saved</button>
+      <button data-screen="settings" aria-pressed="false">Settings</button>
+      <button data-screen="onboarding" aria-pressed="false">First run</button>
+    </div>
+    <div class="set" role="group" aria-label="Size">
+      <span>Size</span>
+      <button data-device="mobile" aria-pressed="true">Phone 390</button>
+      <button data-device="desktop" aria-pressed="false">Laptop 1440</button>
+    </div>
+    <div class="set" role="group" aria-label="Theme">
+      <span>Theme</span>
+      <button data-theme="dark" aria-pressed="true">Dark</button>
+      <button data-theme="light" aria-pressed="false">Light</button>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="device" id="device"><div id="app" class="app"></div></div>
+  </div>
+
+  <div class="notes">
+    <section>
+      <h2>Two labels, never one</h2>
+      <p>
+        What kind of thing it is sits on the left in plain small capitals. How well-sourced it is
+        sits on the right in a bordered chip with a four-bar meter and the word. Different shape,
+        different place, different job. Neither is ever carried by colour alone.
+      </p>
+    </section>
+    <section>
+      <h2>Orange means live</h2>
+      <p>
+        The reading length you are on, the flag where you stopped, the tab you are on, and the
+        current hour on the Radar chart. Nothing else in the product is allowed to be orange.
+      </p>
+    </section>
+    <section>
+      <h2>The charts are measurements</h2>
+      <p>
+        Pickup shows how many outlets carried a story and how fast. The ranking bars show why it
+        placed where it did, including the penalty pushing it down. Arrivals is the real ingest,
+        hour by hour.
+      </p>
+    </section>
+    <section>
+      <h2>Bounded on purpose</h2>
+      <p>
+        Five minutes gives four stories, ten gives eight, Everything gives the lot. The count and
+        the minutes are stated up front. There is no infinite scroll anywhere.
+      </p>
+    </section>
+  </div>
+</div>
+
+<script src="data/stories.js"></script>
+<script src="js/app.js"></script>
+<script>
+  (function () {
+    var device = "mobile",
+      root = document.documentElement,
+      dev = document.getElementById("device");
+    var SIZES = { mobile: [390, 780], desktop: [1440, 900] };
+
+    function fit() {
+      var s = SIZES[device],
+        stage = dev.parentElement;
+      dev.style.width = s[0] + "px";
+      dev.style.height = s[1] + "px";
+      dev.classList.toggle("desktop", device === "desktop");
+      var avail = stage.clientWidth - 4;
+      var k = Math.min(1, avail / s[0]);
+      dev.style.transform = "scale(" + k + ")";
+      stage.style.height = s[1] * k + "px";
+    }
+
+    function press(group, val, attr) {
+      group.querySelectorAll("button").forEach(function (b) {
+        b.setAttribute("aria-pressed", String(b.getAttribute(attr) === val));
+      });
+    }
+
+    document.querySelector(".controls").addEventListener("click", function (e) {
+      var b = e.target.closest("button");
+      if (!b) return;
+      if (b.dataset.screen) {
+        press(b.parentElement, b.dataset.screen, "data-screen");
+        window.RadarApp.gotoScreen(b.dataset.screen);
+      } else if (b.dataset.device) {
+        device = b.dataset.device;
+        press(b.parentElement, device, "data-device");
+        document.body.classList.toggle("dev-desktop", device === "desktop");
+        fit();
+        window.RadarApp.render();
+      } else if (b.dataset.theme) {
+        press(b.parentElement, b.dataset.theme, "data-theme");
+        root.setAttribute("data-theme", b.dataset.theme);
+      }
+    });
+
+    root.setAttribute("data-theme", "dark");
+    window.addEventListener("resize", fit);
+    fit();
+  })();
+</script>

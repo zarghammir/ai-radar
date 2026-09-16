@@ -1,0 +1,1480 @@
+<title>AI Radar Directions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  href="https://fonts.googleapis.com/css2?family=Archivo:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Archivo+Narrow:wght@500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap"
+  rel="stylesheet"
+/>
+<style>
+  :root {
+    --page-bg: #e9e9e6;
+    --page-ink: #15171a;
+    --page-mute: #5d6167;
+    --page-line: #cfcfca;
+    --page-card: #ffffff;
+    --page-org: #c6430f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page-bg: #15161a;
+      --page-ink: #eceef1;
+      --page-mute: #9096a0;
+      --page-line: #2d3037;
+      --page-card: #1d1f25;
+      --page-org: #f0531c;
+    }
+  }
+  :root[data-theme="dark"] {
+    --page-bg: #15161a;
+    --page-ink: #eceef1;
+    --page-mute: #9096a0;
+    --page-line: #2d3037;
+    --page-card: #1d1f25;
+    --page-org: #f0531c;
+  }
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    background: var(--page-bg);
+    color: var(--page-ink);
+    font-family:
+      "Archivo",
+      system-ui,
+      -apple-system,
+      sans-serif;
+    -webkit-font-smoothing: antialiased;
+    margin: 0;
+  }
+  .wrap {
+    max-width: 1150px;
+    margin: 0 auto;
+    padding: 34px 20px 90px;
+  }
+  .masthead {
+    border-bottom: 2px solid var(--page-ink);
+    padding-bottom: 20px;
+  }
+  .eyebrow {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--page-mute);
+  }
+  h1 {
+    font-size: clamp(30px, 5vw, 44px);
+    line-height: 1.02;
+    margin: 10px 0 0;
+    font-weight: 700;
+    letter-spacing: -0.022em;
+    text-wrap: balance;
+  }
+  .lede {
+    font-size: 17px;
+    line-height: 1.55;
+    color: var(--page-mute);
+    max-width: 64ch;
+    margin: 14px 0 0;
+  }
+  .note {
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--page-mute);
+    max-width: 64ch;
+    margin: 12px 0 0;
+  }
+  .note b {
+    color: var(--page-ink);
+    font-weight: 600;
+  }
+  h2 {
+    font-size: clamp(21px, 3.2vw, 27px);
+    margin: 0;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+  }
+  section {
+    margin-top: 52px;
+  }
+  .rule {
+    border-top: 1px solid var(--page-line);
+    padding-top: 24px;
+  }
+
+  .fixes {
+    list-style: none;
+    padding: 0;
+    margin: 20px 0 0;
+    display: grid;
+    gap: 14px;
+    grid-template-columns: repeat(auto-fit, minmax(255px, 1fr));
+  }
+  .fixes li {
+    background: var(--page-card);
+    border: 1px solid var(--page-line);
+    padding: 14px 15px;
+  }
+  .fixes h3 {
+    font-size: 14px;
+    margin: 0;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+  }
+  .fixes p {
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--page-mute);
+    margin: 6px 0 0;
+  }
+  .was {
+    display: block;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--page-org);
+    margin-bottom: 6px;
+  }
+
+  .frames {
+    display: flex;
+    gap: 22px;
+    margin: 26px 0 0;
+    overflow-x: auto;
+    padding-bottom: 14px;
+  }
+  .framebox {
+    flex: 0 0 auto;
+  }
+  .flabel {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--page-mute);
+    margin: 0 0 9px 2px;
+  }
+  .phone {
+    width: 340px;
+    height: 700px;
+    overflow: hidden;
+    border-radius: 16px;
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.2),
+      0 12px 32px rgba(0, 0, 0, 0.18);
+  }
+  .scaler {
+    width: 390px;
+    height: 803px;
+    transform: scale(0.8718);
+    transform-origin: top left;
+  }
+  .phone.tall {
+    height: 1010px;
+  }
+  .scaler.tall {
+    height: 1159px;
+  }
+
+  /* ================= SELECT RAIL v2 ================= */
+  .sr {
+    --bg: #0b0c0e;
+    --paper: #f3f3f1;
+    --ink: #17181b;
+    --soft: #585c62;
+    --ash: #9a958a;
+    --edge: #2a2b2e;
+    --org: #f0531c;
+    background: var(--bg);
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+    font-family: "Archivo", system-ui, sans-serif;
+  }
+  .sr.light {
+    --bg: #e4e3de;
+    --paper: #ffffff;
+    --ash: #6f6a61;
+    --edge: #cbc9c2;
+  }
+
+  .sr-head {
+    padding: 20px 18px 16px 18px;
+  }
+  .sr-day {
+    font-size: 13px;
+    letter-spacing: 0.01em;
+    color: var(--ash);
+  }
+  .sr-greet {
+    font-size: 27px;
+    line-height: 1.1;
+    font-weight: 700;
+    letter-spacing: -0.022em;
+    color: var(--paper);
+    margin: 5px 0 0;
+  }
+  .sr.light .sr-greet {
+    color: var(--ink);
+  }
+  .sr-sub {
+    font-size: 13.5px;
+    color: var(--ash);
+    margin: 7px 0 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .sr-modes {
+    display: flex;
+    gap: 7px;
+    margin: 15px 0 0;
+  }
+  .sr-modes button {
+    flex: 1;
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    padding: 8px 0;
+    background: transparent;
+    color: var(--ash);
+    border: 1px solid var(--edge);
+    border-radius: 2px;
+    cursor: pointer;
+  }
+  .sr-modes button.on {
+    background: var(--org);
+    border-color: var(--org);
+    color: #0b0c0e;
+  }
+
+  .sr-list {
+    padding: 0 0 0 0;
+  }
+  .sr-row {
+    display: flex;
+    align-items: stretch;
+  }
+  .perf {
+    width: 26px;
+    flex: 0 0 auto;
+    position: relative;
+    background: repeating-linear-gradient(180deg, transparent 0 9px, var(--edge) 9px 18px);
+    background-position: center;
+    background-size: 10px auto;
+    background-repeat: repeat-y;
+  }
+  .perf span {
+    position: absolute;
+    top: 10px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--ash);
+    background: var(--bg);
+    padding: 4px 0;
+  }
+  .card {
+    flex: 1;
+    min-width: 0;
+    background: var(--paper);
+    color: var(--ink);
+    margin: 0 18px 12px 0;
+    padding: 15px 16px 14px;
+  }
+
+  .c-top {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 9px;
+  }
+  .c-type {
+    font-family: "Archivo Narrow", sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--soft);
+  }
+  .c-ver {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid #c9c7c0;
+    padding: 3px 7px;
+    border-radius: 2px;
+  }
+  .c-bar {
+    display: flex;
+    gap: 2px;
+  }
+  .c-bar i {
+    width: 5px;
+    height: 9px;
+    background: #c9c7c0;
+    display: block;
+  }
+  .c-bar i.f {
+    background: var(--ink);
+  }
+  .c-vw {
+    font-family: "Archivo Narrow", sans-serif;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink);
+  }
+
+  .c-ttl {
+    font-size: 20px;
+    line-height: 1.22;
+    font-weight: 600;
+    letter-spacing: -0.014em;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .c-ttl.lead {
+    font-size: 25px;
+    line-height: 1.16;
+    font-weight: 700;
+  }
+  .c-sum {
+    font-size: 15px;
+    line-height: 1.5;
+    color: var(--soft);
+    margin: 9px 0 0;
+  }
+  .c-why {
+    margin: 12px 0 0;
+    border-top: 1px solid #e2e0d9;
+    padding-top: 10px;
+  }
+  .c-why b {
+    display: block;
+    font-family: "Archivo Narrow", sans-serif;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--soft);
+    margin-bottom: 5px;
+  }
+  .c-why p {
+    font-size: 14.5px;
+    line-height: 1.48;
+    margin: 0;
+    color: var(--ink);
+  }
+  .c-src {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin: 12px 0 0;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.03em;
+    color: #6e6a61;
+    font-variant-numeric: tabular-nums;
+  }
+  .c-src b {
+    font-weight: 700;
+    color: var(--ink);
+    letter-spacing: 0.02em;
+  }
+
+  .sr-flag {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin: 4px 18px 14px 26px;
+    padding: 6px 10px;
+    background: var(--org);
+    color: #0b0c0e;
+    font-family: "Archivo Narrow", sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+
+  .sr-nav {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    background: var(--bg);
+    border-top: 1px solid var(--edge);
+  }
+  .sr-nav span {
+    flex: 1;
+    text-align: center;
+    padding: 12px 0 18px;
+    font-family: "Archivo Narrow", sans-serif;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.09em;
+    color: var(--ash);
+  }
+  .sr-nav span.on {
+    color: var(--org);
+  }
+
+  /* ---------- data marks: one ink, orange means NOW ---------- */
+  .spark {
+    margin: 12px 0 0;
+    border-top: 1px solid #e2e0d9;
+    padding-top: 10px;
+  }
+  .spark-hd {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 5px;
+  }
+  .spark-hd b {
+    font-family: "Archivo Narrow", sans-serif;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--soft);
+  }
+  .spark-hd span {
+    margin-left: auto;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10.5px;
+    color: #6e6a61;
+    font-variant-numeric: tabular-nums;
+  }
+  .spark svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .c-read {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin: 12px 0 0;
+    padding-top: 11px;
+    border-top: 1px solid #e2e0d9;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--ink);
+    text-decoration: none;
+  }
+  .c-read u {
+    text-decoration: none;
+    border-bottom: 2px solid var(--org);
+    padding-bottom: 1px;
+  }
+  .c-read em {
+    font-style: normal;
+    margin-left: auto;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10.5px;
+    color: #6e6a61;
+  }
+
+  .bars {
+    display: grid;
+    gap: 7px;
+    margin: 0;
+  }
+  .bar {
+    display: grid;
+    grid-template-columns: 96px 1fr 34px;
+    align-items: center;
+    gap: 9px;
+  }
+  .bar dt {
+    font-size: 12.5px;
+    color: var(--soft);
+    margin: 0;
+  }
+  .bar .track {
+    height: 9px;
+    background: #e2e0d9;
+    position: relative;
+  }
+  .bar .track i {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    background: var(--ink);
+    display: block;
+  }
+  .bar .track i.neg {
+    background: repeating-linear-gradient(45deg, #b9b6ad 0 3px, #e2e0d9 3px 6px);
+  }
+  .bar dd {
+    margin: 0;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    text-align: right;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .srcs {
+    display: grid;
+    gap: 0;
+    margin: 0;
+  }
+  .srcs a {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 0;
+    border-bottom: 1px solid #e2e0d9;
+    font-size: 13.5px;
+    color: var(--ink);
+    text-decoration: none;
+  }
+  .srcs a:last-child {
+    border-bottom: 0;
+  }
+  .srcs a b {
+    font-weight: 600;
+  }
+  .srcs a span {
+    margin-left: auto;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10.5px;
+    color: #6e6a61;
+  }
+  .srcs a u {
+    text-decoration: none;
+    color: var(--org);
+    font-weight: 700;
+  }
+
+  /* radar screen */
+  .rd-head {
+    padding: 18px 18px 12px;
+  }
+  .rd-t {
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--paper);
+  }
+  .sr.light .rd-t {
+    color: var(--ink);
+  }
+  .rd-s {
+    font-size: 13px;
+    color: var(--ash);
+    margin-top: 5px;
+  }
+  .rd-chart {
+    margin: 14px 18px 0 26px;
+    background: var(--paper);
+    color: var(--ink);
+    padding: 13px 14px;
+  }
+  .rd-chart svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .rd-filters {
+    display: flex;
+    gap: 6px;
+    margin: 12px 18px 0 26px;
+    flex-wrap: wrap;
+  }
+  .rd-filters span {
+    font-family: "Archivo Narrow", sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 5px 9px;
+    border: 1px solid var(--edge);
+    color: var(--ash);
+  }
+  .rd-filters span.on {
+    background: var(--org);
+    border-color: var(--org);
+    color: #0b0c0e;
+  }
+  .rd-item {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin: 0 18px 0 26px;
+    padding: 11px 0;
+    border-bottom: 1px solid var(--edge);
+  }
+  .rd-item time {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    color: var(--ash);
+    flex: 0 0 38px;
+    font-variant-numeric: tabular-nums;
+  }
+  .rd-item p {
+    margin: 0;
+    font-size: 14.5px;
+    line-height: 1.35;
+    color: var(--paper);
+    flex: 1;
+  }
+  .sr.light .rd-item p {
+    color: var(--ink);
+  }
+  .rd-item i {
+    font-style: normal;
+    font-family: "Archivo Narrow", sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ash);
+    flex: 0 0 auto;
+  }
+  .chart-note {
+    font-family: "Archivo Narrow", sans-serif;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--soft);
+    margin: 0 0 7px;
+  }
+
+  /* story detail extras */
+  .d-back {
+    padding: 16px 18px 0;
+    font-family: "Archivo Narrow", sans-serif;
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ash);
+  }
+  .d-card {
+    background: var(--paper);
+    color: var(--ink);
+    margin: 12px 18px 0 26px;
+    padding: 17px 16px;
+  }
+  .d-h {
+    font-size: 26px;
+    line-height: 1.14;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin: 9px 0 0;
+  }
+  .d-kp {
+    margin: 13px 0 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 7px;
+  }
+  .d-kp li {
+    font-size: 14.5px;
+    line-height: 1.42;
+    padding-left: 15px;
+    position: relative;
+    color: var(--ink);
+  }
+  .d-kp li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 7px;
+    width: 6px;
+    height: 6px;
+    background: var(--ink);
+  }
+  .d-lab {
+    font-family: "Archivo Narrow", sans-serif;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--soft);
+    margin: 15px 0 6px;
+    border-top: 1px solid #e2e0d9;
+    padding-top: 11px;
+  }
+  .d-tl {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .d-tl li {
+    display: flex;
+    gap: 10px;
+    font-size: 13.5px;
+    line-height: 1.4;
+  }
+  .d-tl time {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    color: #6e6a61;
+    flex: 0 0 46px;
+    padding-top: 2px;
+    font-variant-numeric: tabular-nums;
+  }
+  .d-why {
+    background: #edebe4;
+    padding: 11px 12px;
+    margin: 12px 0 0;
+  }
+  .d-why p {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.48;
+  }
+
+  .caption {
+    font-size: 14px;
+    line-height: 1.55;
+    color: var(--page-mute);
+    margin: 12px 0 0;
+    max-width: 46ch;
+  }
+  .verdictbox {
+    margin-top: 52px;
+    border: 2px solid var(--page-ink);
+    padding: 20px 20px 22px;
+  }
+  .verdictbox h3 {
+    margin: 0;
+    font-size: 19px;
+  }
+  @media (max-width: 640px) {
+    .wrap {
+      padding: 22px 14px 60px;
+    }
+    .frames {
+      gap: 14px;
+    }
+  }
+</style>
+
+<div class="wrap">
+  <div class="masthead">
+    <div class="eyebrow">AI Radar &middot; issue #11 &middot; the Select Rail, calmed</div>
+    <h1>Same world. Out of the way of the reading.</h1>
+    <p class="lede">
+      You picked the Select Rail and said it was too busy to read. You were right. The world is
+      unchanged &mdash; film bench, orange and black, your place held with a flag. What changed is
+      that the news is now the biggest thing on the screen, the machinery went quiet, and the
+      pictures that are left are <b>real measurements</b> rather than decoration.
+    </p>
+    <p class="note">
+      Two things you asked for are in now. Every story has a small <b>pickup curve</b> showing how
+      many outlets carried it and how fast, the story page shows <b>why it ranked</b> as a bar
+      breakdown, and Live Radar charts <b>arrivals by hour</b>. And yes &mdash; every card and every
+      source in the list is a <b>real link</b> straight to the original article.
+    </p>
+  </div>
+
+  <section>
+    <h2>What I took out</h2>
+    <ul class="fixes">
+      <li>
+        <span class="was">was</span>
+        <h3>A rail between every story</h3>
+        <p>
+          Now one continuous strip of sprocket holes runs down the left edge, the way film actually
+          works. Nothing cuts across your reading any more.
+        </p>
+      </li>
+      <li>
+        <span class="was">was</span>
+        <h3>A row of orange dots</h3>
+        <p>
+          Gone. They encoded importance and you could not read them. Importance is now simply that
+          the lead story is bigger.
+        </p>
+      </li>
+      <li>
+        <span class="was">was</span>
+        <h3>Cryptic marks for trust</h3>
+        <p>
+          Now a small four-bar meter plus the words. Four bars means the company said it itself. One
+          bar means it is a rumour. Readable without learning anything.
+        </p>
+      </li>
+      <li>
+        <span class="was">was</span>
+        <h3>Orange in seven places</h3>
+        <p>
+          Now orange appears only where something is live: the reading mode you are in, the flag
+          where you stopped, and the tab you are on. Nowhere else.
+        </p>
+      </li>
+      <li>
+        <span class="was">was</span>
+        <h3>Small windows on a big black field</h3>
+        <p>
+          Flipped. The paper card is now the main surface and the black is just the bench it sits
+          on. You read on paper, not in a slot.
+        </p>
+      </li>
+      <li>
+        <span class="was">was</span>
+        <h3>Squeezed capitals everywhere</h3>
+        <p>
+          Condensed type is now only used for tiny labels. Headlines and body text are set in a
+          normal, roomy face at a larger size.
+        </p>
+      </li>
+    </ul>
+  </section>
+
+  <section class="rule">
+    <h2>Today's Brief</h2>
+    <p class="note">
+      Real stories from this week. The lead story is bigger and carries <b>why it matters</b>; the
+      ones below it stay short until you open them or switch to 10 minutes.
+    </p>
+    <div class="frames">
+      <div class="framebox">
+        <div class="flabel">Phone 390 &mdash; dark</div>
+        <div class="phone">
+          <div class="scaler">
+            <div class="sr">
+              <div class="sr-head">
+                <div class="sr-day">Wednesday 16 September</div>
+                <h2 class="sr-greet">Good morning</h2>
+                <div class="sr-sub">
+                  8 stories &middot; 9 minutes &middot; 2 unread from yesterday
+                </div>
+                <div class="sr-modes">
+                  <button class="on">5 min</button><button>10 min</button
+                  ><button>Everything</button>
+                </div>
+              </div>
+              <div class="sr-list">
+                <div class="sr-row">
+                  <div class="perf"><span>01</span></div>
+                  <div class="card">
+                    <div class="c-top">
+                      <span class="c-type">News</span>
+                      <span class="c-ver"
+                        ><span class="c-bar"><i class="f"></i><i></i><i></i><i></i></span>
+                        <span class="c-vw">Unverified</span></span
+                      >
+                    </div>
+                    <p class="c-ttl lead">OpenAI weighs funding at a $1.2T&ndash;$1.5T valuation</p>
+                    <p class="c-sum">
+                      Reports say OpenAI is considering a new private round, with outlets
+                      disagreeing on whether the mark is $1.2 trillion or $1.5 trillion.
+                    </p>
+                    <div class="c-why">
+                      <b>Why it matters</b>
+                      <p>
+                        A private mega-round instead of an IPO keeps disclosure minimal while it
+                        absorbs capital its competitors need.
+                      </p>
+                    </div>
+                    <div class="c-src">
+                      <b>Bloomberg</b><span>&middot;</span><span>+3 others</span>
+                      <span>&middot;</span><span>07:25</span>
+                    </div>
+                    <div class="spark">
+                      <div class="spark-hd">
+                        <b>Pickup</b><span>4 outlets &middot; 6 hours</span>
+                      </div>
+                      <svg
+                        viewBox="0 0 290 40"
+                        role="img"
+                        aria-label="Cumulative outlets reporting this story: 1 at 07:25 rising to 4 by 13:00."
+                      >
+                        <title>1 outlet at 07:25, 2 by 09:02, 3 by 10:10, 4 by 13:00</title>
+                        <path
+                          d="M6,27.5 L74,27.5 L74,21 L108,21 L108,14.5 L210,14.5 L210,8 L278,8 L278,34 L6,34 Z"
+                          fill="currentColor"
+                          opacity=".09"
+                        />
+                        <path
+                          d="M6,27.5 L74,27.5 L74,21 L108,21 L108,14.5 L210,14.5 L210,8 L278,8"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2"
+                          stroke-linejoin="round"
+                          stroke-linecap="round"
+                        />
+                        <line
+                          x1="6"
+                          y1="34"
+                          x2="284"
+                          y2="34"
+                          stroke="currentColor"
+                          stroke-width="1"
+                          opacity=".22"
+                        />
+                        <circle cx="278" cy="8" r="3.5" fill="currentColor" />
+                      </svg>
+                    </div>
+                    <a
+                      class="c-read"
+                      href="https://www.bloomberg.com/news/articles/2026-09-15/openai-weighing-funding-round-at-over-1-2-trillion-valuation"
+                      ><u>Read at Bloomberg</u><em>&#8599; bloomberg.com</em></a
+                    >
+                  </div>
+                </div>
+                <div class="sr-row">
+                  <div class="perf"><span>02</span></div>
+                  <div class="card">
+                    <div class="c-top">
+                      <span class="c-type">Discussion</span>
+                      <span class="c-ver"
+                        ><span class="c-bar"
+                          ><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i
+                        ></span>
+                        <span class="c-vw">Primary source</span></span
+                      >
+                    </div>
+                    <p class="c-ttl">
+                      Anthropic reports a 25x CI jump as Claude authors most of its code
+                    </p>
+                    <p class="c-sum">Engineers ship roughly eight times more code per quarter.</p>
+                    <div class="c-src"><b>Anthropic</b><span>&middot;</span><span>08:20</span></div>
+                    <a
+                      class="c-read"
+                      href="https://claude.com/blog/agentic-coding-is-straining-ci-heres-how-we-scaled-test-impact-analysis-at-anthropic"
+                      ><u>Read at Anthropic</u><em>&#8599; claude.com</em></a
+                    >
+                  </div>
+                </div>
+                <div class="sr-flag">&#9654; You stopped here &middot; 6 left</div>
+                <div class="sr-row">
+                  <div class="perf"><span>03</span></div>
+                  <div class="card">
+                    <div class="c-top">
+                      <span class="c-type">Signal</span>
+                      <span class="c-ver"
+                        ><span class="c-bar"><i class="f"></i><i class="f"></i><i></i><i></i></span>
+                        <span class="c-vw">Emerging</span></span
+                      >
+                    </div>
+                    <p class="c-ttl">Atria Dawn weights landed days before the report</p>
+                    <p class="c-sum">
+                      A preview repo and an API appeared quietly, before the technical report was
+                      posted.
+                    </p>
+                    <div class="c-src">
+                      <b>Hugging Face</b><span>&middot;</span><span>22:30</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="sr-nav">
+                <span class="on">Today</span><span>Radar</span><span>Saved</span
+                ><span>Settings</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="caption">
+          Orange appears three times and every one means something is live: the mode you are in,
+          where you stopped, the tab you are on.
+        </p>
+      </div>
+
+      <div class="framebox">
+        <div class="flabel">Phone 390 &mdash; light</div>
+        <div class="phone">
+          <div class="scaler">
+            <div class="sr light">
+              <div class="sr-head">
+                <div class="sr-day">Wednesday 16 September</div>
+                <h2 class="sr-greet">Good morning</h2>
+                <div class="sr-sub">
+                  8 stories &middot; 9 minutes &middot; 2 unread from yesterday
+                </div>
+                <div class="sr-modes">
+                  <button>5 min</button><button class="on">10 min</button
+                  ><button>Everything</button>
+                </div>
+              </div>
+              <div class="sr-list">
+                <div class="sr-row">
+                  <div class="perf"><span>01</span></div>
+                  <div class="card">
+                    <div class="c-top">
+                      <span class="c-type">Release</span>
+                      <span class="c-ver"
+                        ><span class="c-bar"
+                          ><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i
+                        ></span>
+                        <span class="c-vw">Primary source</span></span
+                      >
+                    </div>
+                    <p class="c-ttl lead">
+                      OpenAI opens the Codex agent harness as a public-beta API
+                    </p>
+                    <p class="c-sum">
+                      The managed harness that runs Codex is now available to all developers, with
+                      durable sessions and your own tools.
+                    </p>
+                    <div class="c-why">
+                      <b>Why it matters</b>
+                      <p>
+                        Session orchestration and recovery become vendor infrastructure, which
+                        erases a large chunk of in-house agent scaffolding.
+                      </p>
+                    </div>
+                    <div class="c-src">
+                      <b>OpenAI</b><span>&middot;</span><span>+3 others</span> <span>&middot;</span
+                      ><span>14:20</span>
+                    </div>
+                    <a class="c-read" href="https://openai.com/index/introducing-the-agents-api/"
+                      ><u>Read at OpenAI</u><em>&#8599; openai.com</em></a
+                    >
+                  </div>
+                </div>
+                <div class="sr-row">
+                  <div class="perf"><span>02</span></div>
+                  <div class="card">
+                    <div class="c-top">
+                      <span class="c-type">Model</span>
+                      <span class="c-ver"
+                        ><span class="c-bar"
+                          ><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i
+                        ></span>
+                        <span class="c-vw">Primary source</span></span
+                      >
+                    </div>
+                    <p class="c-ttl">Cohere releases a 218B open-weight translation model</p>
+                    <p class="c-sum">
+                      Fifty languages, twenty-five billion active parameters, and a non-commercial
+                      licence on the weights.
+                    </p>
+                    <div class="c-why">
+                      <b>Why it matters</b>
+                      <p>
+                        A self-hostable translator changes the build-or-buy call for any
+                        localisation pipeline.
+                      </p>
+                    </div>
+                    <div class="c-src">
+                      <b>Cohere</b><span>&middot;</span><span>+2 others</span> <span>&middot;</span
+                      ><span>11:30</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="sr-nav">
+                <span class="on">Today</span><span>Radar</span><span>Saved</span
+                ><span>Settings</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="caption">
+          Same world in daylight. The bench goes pale, the paper goes white, the orange stays
+          exactly as reserved.
+        </p>
+      </div>
+
+      <div class="framebox">
+        <div class="flabel">Story detail &mdash; dark</div>
+        <div class="phone tall">
+          <div class="scaler tall">
+            <div class="sr">
+              <div class="d-back">&#8592; Today's brief</div>
+              <div class="d-card">
+                <div class="c-top">
+                  <span class="c-type">News</span>
+                  <span class="c-ver"
+                    ><span class="c-bar"><i class="f"></i><i></i><i></i><i></i></span>
+                    <span class="c-vw">Unverified</span></span
+                  >
+                </div>
+                <p class="d-h">OpenAI weighs funding at a $1.2T&ndash;$1.5T valuation</p>
+                <div class="c-src" style="margin-top: 11px">
+                  <b>Bloomberg</b><span>&middot;</span> <span>16 Sep 07:25</span
+                  ><span>&middot;</span><span>3 min</span>
+                </div>
+                <div class="d-why">
+                  <p>
+                    Reports say OpenAI is considering a new private round. Outlets disagree by $300
+                    billion on the number and the sourcing is anonymous, which is why this is marked
+                    unverified.
+                  </p>
+                </div>
+                <ul class="d-kp">
+                  <li>
+                    Bloomberg and the FT report $1.2 trillion; the New York Times reports $1.5
+                    trillion.
+                  </li>
+                  <li>Altman has said a listing before 2027 is unlikely.</li>
+                  <li>OpenAI passed $40 billion annualised revenue last month.</li>
+                </ul>
+                <div class="d-lab">How this was graded</div>
+                <p style="margin: 0; font-size: 14px; line-height: 1.5; color: #585c62">
+                  One bar. No named source and no company statement. Three outlets carry it and they
+                  do not agree on the figure.
+                </p>
+                <div class="d-lab">Timeline</div>
+                <ul class="d-tl">
+                  <li>
+                    <time>07:25</time><span>Bloomberg publishes, citing people familiar.</span>
+                  </li>
+                  <li>
+                    <time>08:10</time><span>Fortune and Forbes follow with the same figure.</span>
+                  </li>
+                  <li>
+                    <time>09:02</time><span>New York Times reports $1.5 trillion instead.</span>
+                  </li>
+                </ul>
+                <div class="d-lab">Pickup over the day</div>
+                <svg
+                  viewBox="0 0 300 62"
+                  role="img"
+                  style="display: block; width: 100%; height: auto"
+                  aria-label="Outlets reporting: 1 at 07:25, 2 by 09:02, 3 by 10:10, 4 by 13:00."
+                >
+                  <title>Cumulative outlets reporting this story</title>
+                  <path
+                    d="M8,44 L78,44 L78,33 L120,33 L120,22 L214,22 L214,11 L288,11 L288,50 L8,50 Z"
+                    fill="currentColor"
+                    opacity=".09"
+                  />
+                  <path
+                    d="M8,44 L78,44 L78,33 L120,33 L120,22 L214,22 L214,11 L288,11"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linejoin="round"
+                    stroke-linecap="round"
+                  />
+                  <line
+                    x1="8"
+                    y1="50"
+                    x2="292"
+                    y2="50"
+                    stroke="currentColor"
+                    stroke-width="1"
+                    opacity=".22"
+                  />
+                  <circle cx="288" cy="11" r="4" fill="currentColor" />
+                  <text
+                    x="8"
+                    y="60"
+                    font-family="JetBrains Mono, monospace"
+                    font-size="8"
+                    fill="#6E6A61"
+                  >
+                    07:25
+                  </text>
+                  <text
+                    x="152"
+                    y="60"
+                    font-family="JetBrains Mono, monospace"
+                    font-size="8"
+                    fill="#6E6A61"
+                  >
+                    10:00
+                  </text>
+                  <text
+                    x="270"
+                    y="60"
+                    font-family="JetBrains Mono, monospace"
+                    font-size="8"
+                    fill="#6E6A61"
+                  >
+                    13:00
+                  </text>
+                  <text
+                    x="292"
+                    y="14"
+                    font-family="JetBrains Mono, monospace"
+                    font-size="8"
+                    fill="#6E6A61"
+                    text-anchor="end"
+                    dy="-6"
+                  >
+                    4 outlets
+                  </text>
+                </svg>
+
+                <div class="d-lab">Why this ranked first</div>
+                <dl class="bars">
+                  <div class="bar">
+                    <dt>Independent outlets</dt>
+                    <div class="track"><i style="width: 80%"></i></div>
+                    <dd>4 of 5</dd>
+                  </div>
+                  <div class="bar">
+                    <dt>Matches your topics</dt>
+                    <div class="track"><i style="width: 92%"></i></div>
+                    <dd>high</dd>
+                  </div>
+                  <div class="bar">
+                    <dt>Freshness</dt>
+                    <div class="track"><i style="width: 88%"></i></div>
+                    <dd>6h</dd>
+                  </div>
+                  <div class="bar">
+                    <dt>Source weight</dt>
+                    <div class="track"><i style="width: 70%"></i></div>
+                    <dd>good</dd>
+                  </div>
+                  <div class="bar">
+                    <dt>Unverified penalty</dt>
+                    <div class="track"><i class="neg" style="width: 34%"></i></div>
+                    <dd>&minus;34</dd>
+                  </div>
+                </dl>
+
+                <div class="d-lab">Where to read it</div>
+                <div class="srcs">
+                  <a
+                    href="https://www.bloomberg.com/news/articles/2026-09-15/openai-weighing-funding-round-at-over-1-2-trillion-valuation"
+                    ><b>Bloomberg</b><span>07:25 &middot; first</span><u>&#8599;</u></a
+                  >
+                  <a href="https://fortune.com/"><b>Fortune</b><span>08:10</span><u>&#8599;</u></a>
+                  <a href="https://www.forbes.com/"
+                    ><b>Forbes</b><span>08:44</span><u>&#8599;</u></a
+                  >
+                  <a href="https://247wallst.com/"
+                    ><b>24/7 Wall St.</b><span>09:02 &middot; differs</span><u>&#8599;</u></a
+                  >
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="caption">
+          Opening a story is where the grade gets explained, so the chip on the card never has to.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="rule">
+    <h2>Live Radar</h2>
+    <p class="note">
+      Everything arriving, not just the ranked brief. The chart is the real ingest: how many items
+      landed each hour today. The orange column is the hour you are in.
+    </p>
+    <div class="frames">
+      <div class="framebox">
+        <div class="flabel">Live Radar &mdash; dark</div>
+        <div class="phone">
+          <div class="scaler">
+            <div class="sr">
+              <div class="rd-head">
+                <div class="rd-t">Live Radar</div>
+                <div class="rd-s">61 items today &middot; last checked 3 minutes ago</div>
+              </div>
+              <div class="rd-chart">
+                <p class="chart-note">Arrivals by hour</p>
+                <svg
+                  viewBox="0 0 292 60"
+                  role="img"
+                  style="display: block; width: 100%; height: auto"
+                  aria-label="Items ingested per hour today, peaking at 7 items in the 13:00 hour."
+                >
+                  <title>Items per hour, 00:00 to 23:00</title>
+                  <rect x="2" y="44.5" width="9" height="1.5" fill="currentColor" opacity=".16">
+                    <title>00:00 — 0 items</title>
+                  </rect>
+                  <rect x="14" y="44.5" width="9" height="1.5" fill="currentColor" opacity=".16">
+                    <title>01:00 — 0 items</title>
+                  </rect>
+                  <rect x="26" y="40.6" width="9" height="5.4" fill="currentColor" opacity=".82">
+                    <title>02:00 — 1 items</title>
+                  </rect>
+                  <rect x="38" y="44.5" width="9" height="1.5" fill="currentColor" opacity=".16">
+                    <title>03:00 — 0 items</title>
+                  </rect>
+                  <rect x="50" y="44.5" width="9" height="1.5" fill="currentColor" opacity=".16">
+                    <title>04:00 — 0 items</title>
+                  </rect>
+                  <rect x="62" y="44.5" width="9" height="1.5" fill="currentColor" opacity=".16">
+                    <title>05:00 — 0 items</title>
+                  </rect>
+                  <rect x="74" y="35.1" width="9" height="10.9" fill="currentColor" opacity=".82">
+                    <title>06:00 — 2 items</title>
+                  </rect>
+                  <rect x="86" y="29.7" width="9" height="16.3" fill="currentColor" opacity=".82">
+                    <title>07:00 — 3 items</title>
+                  </rect>
+                  <rect x="98" y="18.9" width="9" height="27.1" fill="currentColor" opacity=".82">
+                    <title>08:00 — 5 items</title>
+                  </rect>
+                  <rect x="110" y="24.3" width="9" height="21.7" fill="currentColor" opacity=".82">
+                    <title>09:00 — 4 items</title>
+                  </rect>
+                  <rect x="122" y="13.4" width="9" height="32.6" fill="currentColor" opacity=".82">
+                    <title>10:00 — 6 items</title>
+                  </rect>
+                  <rect x="134" y="29.7" width="9" height="16.3" fill="currentColor" opacity=".82">
+                    <title>11:00 — 3 items</title>
+                  </rect>
+                  <rect x="146" y="24.3" width="9" height="21.7" fill="currentColor" opacity=".82">
+                    <title>12:00 — 4 items</title>
+                  </rect>
+                  <rect x="158" y="8.0" width="9" height="38.0" fill="var(--org)" opacity="1">
+                    <title>13:00 — 7 items</title>
+                  </rect>
+                  <rect x="170" y="18.9" width="9" height="27.1" fill="currentColor" opacity=".82">
+                    <title>14:00 — 5 items</title>
+                  </rect>
+                  <rect x="182" y="24.3" width="9" height="21.7" fill="currentColor" opacity=".82">
+                    <title>15:00 — 4 items</title>
+                  </rect>
+                  <rect x="194" y="35.1" width="9" height="10.9" fill="currentColor" opacity=".82">
+                    <title>16:00 — 2 items</title>
+                  </rect>
+                  <rect x="206" y="29.7" width="9" height="16.3" fill="currentColor" opacity=".82">
+                    <title>17:00 — 3 items</title>
+                  </rect>
+                  <rect x="218" y="40.6" width="9" height="5.4" fill="currentColor" opacity=".82">
+                    <title>18:00 — 1 items</title>
+                  </rect>
+                  <rect x="230" y="35.1" width="9" height="10.9" fill="currentColor" opacity=".82">
+                    <title>19:00 — 2 items</title>
+                  </rect>
+                  <rect x="242" y="40.6" width="9" height="5.4" fill="currentColor" opacity=".82">
+                    <title>20:00 — 1 items</title>
+                  </rect>
+                  <rect x="254" y="44.5" width="9" height="1.5" fill="currentColor" opacity=".16">
+                    <title>21:00 — 0 items</title>
+                  </rect>
+                  <rect x="266" y="40.6" width="9" height="5.4" fill="currentColor" opacity=".82">
+                    <title>22:00 — 1 items</title>
+                  </rect>
+                  <rect x="278" y="44.5" width="9" height="1.5" fill="currentColor" opacity=".16">
+                    <title>23:00 — 0 items</title>
+                  </rect>
+                  <line
+                    x1="2"
+                    y1="46"
+                    x2="290"
+                    y2="46"
+                    stroke="currentColor"
+                    stroke-width="1"
+                    opacity=".25"
+                  />
+                  <text
+                    x="2"
+                    y="57"
+                    font-family="JetBrains Mono, monospace"
+                    font-size="8"
+                    fill="#6E6A61"
+                  >
+                    00
+                  </text>
+                  <text
+                    x="74"
+                    y="57"
+                    font-family="JetBrains Mono, monospace"
+                    font-size="8"
+                    fill="#6E6A61"
+                  >
+                    06
+                  </text>
+                  <text
+                    x="146"
+                    y="57"
+                    font-family="JetBrains Mono, monospace"
+                    font-size="8"
+                    fill="#6E6A61"
+                  >
+                    12
+                  </text>
+                  <text
+                    x="218"
+                    y="57"
+                    font-family="JetBrains Mono, monospace"
+                    font-size="8"
+                    fill="#6E6A61"
+                  >
+                    18
+                  </text>
+                  <text
+                    x="290"
+                    y="57"
+                    font-family="JetBrains Mono, monospace"
+                    font-size="8"
+                    fill="#6E6A61"
+                    text-anchor="end"
+                  >
+                    23
+                  </text>
+                </svg>
+              </div>
+              <div class="rd-filters">
+                <span class="on">All</span><span>Release</span><span>Paper</span> <span>Model</span
+                ><span>Signal</span><span>Primary only</span>
+              </div>
+              <div class="rd-item">
+                <time>13:02</time>
+                <p>Apple ships rebuilt Siri in beta on Gemini-based models</p>
+                <i>Release</i>
+              </div>
+              <div class="rd-item">
+                <time>12:40</time>
+                <p>China's Foreign Ministry rejects Amodei's call to curb its AI</p>
+                <i>News</i>
+              </div>
+              <div class="rd-item">
+                <time>11:30</time>
+                <p>Cohere releases a 218B open-weight translation model</p>
+                <i>Model</i>
+              </div>
+              <div class="rd-item">
+                <time>09:15</time>
+                <p>Sakana ships Fugu Max, a router over open models</p>
+                <i>Release</i>
+              </div>
+              <div class="rd-item">
+                <time>08:20</time>
+                <p>Anthropic reports a 25x CI jump</p>
+                <i>Discussion</i>
+              </div>
+              <div class="rd-item">
+                <time>07:25</time>
+                <p>OpenAI weighs funding at a $1.2T&ndash;$1.5T valuation</p>
+                <i>News</i>
+              </div>
+              <div class="sr-nav">
+                <span>Today</span><span class="on">Radar</span><span>Saved</span
+                ><span>Settings</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="caption">
+          The orange column is the hour you are in. Everything else is ink, so the chart never
+          competes with the headlines.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <div class="verdictbox">
+    <h3>Is this the one?</h3>
+    <p class="note">
+      If yes, say <b>go</b> and I build all five screens in it: Today, Radar, Story, Saved, and
+      Settings with the first-run setup, at phone and laptop size, light and dark, then open the
+      pull request.
+    </p>
+    <p class="note">
+      If something still nags, tell me in your own words and I will fix it before building five
+      screens on top of it. Cheaper now than later.
+    </p>
+  </div>
+</div>
