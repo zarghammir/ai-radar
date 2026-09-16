@@ -20,7 +20,12 @@ export const CONTENT_TYPE_LABELS: Record<ContentType, string> = {
   MODEL: "Model",
   PAPER: "Paper",
   BUSINESS: "Business",
-  REGULATION: "Regulation",
+  // The enum is REGULATION; the word a reader sees is "Policy". Deliberate,
+  // not drift. The category carries government action beyond written rules —
+  // statements, hearings, export controls — and a badge reading "Regulation"
+  // over a foreign ministry statement tells the reader something false.
+  // "Policy" is right whether the category stays broad or narrows later.
+  REGULATION: "Policy",
 };
 
 /**
