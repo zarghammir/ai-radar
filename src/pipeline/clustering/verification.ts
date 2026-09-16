@@ -54,8 +54,15 @@ export function deriveVerification(items: ItemForVerification[]): VerificationRe
       note: `Circulating on ${distinct.map((d) => d.sourceName).join(", ")}; not yet confirmed by an established outlet.`,
     };
   }
+  const only = distinct[0];
+  if (!only) {
+    // No provenance at all is a different state from one weak source. Saying
+    // "single unverified source: unknown" would describe a source that does
+    // not exist, which is exactly the claim this field is meant to prevent.
+    return { level: "UNVERIFIED", note: "No source recorded for this story yet." };
+  }
   return {
     level: "UNVERIFIED",
-    note: `Single ${distinct[0]?.tier === "COMMUNITY" ? "community" : "unverified"} source: ${distinct[0]?.sourceName ?? "unknown"}.`,
+    note: `Single ${only.tier === "COMMUNITY" ? "community" : "unverified"} source: ${only.sourceName}.`,
   };
 }
