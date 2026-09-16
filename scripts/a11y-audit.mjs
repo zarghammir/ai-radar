@@ -1,19 +1,26 @@
 /**
  * Accessibility and layout audit for the app shell (issue #12).
  *
- * Drives the running production build with the browser the reader uses, at the
- * two breakpoints docs/DESIGN.md names, in both themes, over every route, and
+ * Drives the running production build with a real browser, at the two
+ * breakpoints docs/DESIGN.md names, in both themes, over every route, and
  * reports axe violations, horizontal overflow and which navigation is present.
  *
  *   npx next build && npx next start -p 3210
  *   node scripts/a11y-audit.mjs http://127.0.0.1:3210
  *
- * Requires a Chromium available to Playwright. It is a verification tool, not
- * part of the app bundle.
+ * MAINTAINER TOOLING, not part of `npm ci`. It needs a Chromium to drive, and
+ * this project deliberately does NOT depend on the full `playwright` package,
+ * whose install step downloads browsers on every install including CI. It
+ * depends on `playwright-core` (no download) and finds a browser like this:
+ *
+ *   1. $PW_EXECUTABLE, if you set it to a Chromium binary; otherwise
+ *   2. your installed Google Chrome, via Playwright's "chrome" channel.
+ *
+ * If neither is available it says so and exits 2 rather than failing obscurely.
+ * An earlier version hard-coded a Homebrew prefix and a macOS cache path and
+ * could only ever run on one machine.
  */
-import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
@@ -27,37 +34,25 @@ const SIZES = [
 ];
 const THEMES = ["light", "dark"];
 
-// playwright-core is CommonJS: require it, do not dynamic-import it, or the
-// namespace nests everything under .default and chromium reads as undefined.
-const pwRequire = createRequire(
-  (process.env.PW_PATH || "/opt/homebrew/lib/node_modules/@playwright/cli") + "/package.json",
-);
-const { chromium } = pwRequire("playwright-core");
+const { chromium } = await import("playwright-core");
 
-/* The bundled Playwright pins a browser build that may not be the one this
-   machine downloaded, so fall back to the newest installed headless shell
-   instead of failing with "Executable doesn't exist". */
-function findChromium() {
-  if (process.env.PW_EXECUTABLE) return process.env.PW_EXECUTABLE;
-  const root = join(homedir(), "Library/Caches/ms-playwright");
-  if (!existsSync(root)) return undefined;
-  const builds = readdirSync(root)
-    .filter((d) => d.startsWith("chromium_headless_shell-") || d.startsWith("chromium-"))
-    .sort((a, b) => Number(b.split("-").pop()) - Number(a.split("-").pop()));
-  for (const build of builds) {
-    for (const rel of [
-      "chrome-headless-shell-mac-arm64/chrome-headless-shell",
-      "chrome-mac/Chromium.app/Contents/MacOS/Chromium",
-    ]) {
-      const candidate = join(root, build, rel);
-      if (existsSync(candidate)) return candidate;
-    }
+async function launchBrowser() {
+  const executablePath = process.env.PW_EXECUTABLE;
+  if (executablePath) return chromium.launch({ executablePath });
+  try {
+    // The browser most machines already have, and no download.
+    return await chromium.launch({ channel: "chrome" });
+  } catch (error) {
+    console.error(
+      "No browser to drive. Set PW_EXECUTABLE to a Chromium binary, or install\n" +
+        "Google Chrome so the 'chrome' channel resolves.\n" +
+        String(error.message || error),
+    );
+    process.exit(2);
   }
-  return undefined;
 }
 
-const executablePath = findChromium();
-const browser = await chromium.launch(executablePath ? { executablePath } : {});
+const browser = await launchBrowser();
 const report = { states: 0, serious: [], allViolations: [], overflow: [], nav: {} };
 
 try {

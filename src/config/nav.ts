@@ -46,7 +46,11 @@ export const navItems = [
 
 export type NavItem = (typeof navItems)[number];
 
-/** The tabs that fit a 390px bottom bar. Research and Releases live in "More". */
-export const primaryNav = navItems.filter((i) =>
-  ["/", "/radar", "/saved", "/settings"].includes(i.href),
-);
+/**
+ * Every surface is reachable at every width. An earlier version filtered this
+ * list down to four tabs and left Research and Releases in the sidebar, which
+ * is `display:none` below lg — so on a phone they were URL-only, unclickable
+ * and outside the tab order. There is no "More" menu; do not reintroduce one
+ * without building it.
+ */
+export const bottomNavItems = navItems;

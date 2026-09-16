@@ -82,7 +82,14 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         </a>
         <div className="flex min-h-full flex-1">
           <Sidebar />
-          <main id="main" className="min-w-0 flex-1 pb-20 lg:pb-0">
+          {/* The bottom bar is fixed and adds env(safe-area-inset-bottom) to its
+              own height, so flat padding leaves content under it on a
+              home-indicator phone. Headless Chromium reports the inset as 0,
+              so no test here can see the difference. UNVERIFIED ON HARDWARE. */}
+          <main
+            id="main"
+            className="min-w-0 flex-1 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-0"
+          >
             {children}
           </main>
         </div>

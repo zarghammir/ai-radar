@@ -54,8 +54,17 @@ self.addEventListener("fetch", (event) => {
       (async () => {
         try {
           const fresh = await fetch(request);
-          const cache = await caches.open(CACHE_VERSION);
-          cache.put(request, fresh.clone());
+          // Only cache a response worth serving later. Without this an error
+          // page becomes the permanent offline copy of that URL: a 404 or a
+          // 500 served during a deploy would be handed back offline until
+          // CACHE_VERSION changes. The static branch below has always
+          // checked; this one did not.
+          if (fresh.ok) {
+            const cache = await caches.open(CACHE_VERSION);
+            // waitUntil, so the write is not abandoned when the worker is
+            // terminated the moment respondWith settles.
+            event.waitUntil(cache.put(request, fresh.clone()));
+          }
           return fresh;
         } catch {
           const cached = await caches.match(request);
@@ -80,7 +89,9 @@ self.addEventListener("fetch", (event) => {
         const cached = await cache.match(request);
         const network = fetch(request)
           .then((response) => {
-            if (response && response.status === 200) cache.put(request, response.clone());
+            if (response && response.ok) {
+              event.waitUntil(cache.put(request, response.clone()));
+            }
             return response;
           })
           .catch(() => undefined);

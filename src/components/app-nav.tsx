@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { navItems } from "@/config/nav";
+import { bottomNavItems, navItems } from "@/config/nav";
 import { brand } from "@/config/brand";
 import { cn } from "@/lib/utils";
 
@@ -69,18 +69,19 @@ export function Sidebar() {
 }
 
 /**
- * Mobile navigation. Shown only below lg, again by media query. Four tabs is
- * what fits 390px honestly; Research and Releases are reachable from Radar.
+ * Mobile navigation. Shown only below lg, by media query. It carries ALL SIX
+ * surfaces: the sidebar that holds the rest is display:none here, so anything
+ * left out of this bar is unreachable on a phone — not merely harder to find,
+ * but absent from the tab order and unclickable.
  */
 export function BottomNav() {
   const isCurrent = useIsCurrent();
-  const tabs = navItems.filter((i) => ["/", "/radar", "/saved", "/settings"].includes(i.href));
   return (
     <nav
       aria-label="Main"
       className="bg-sidebar border-edge fixed inset-x-0 bottom-0 z-40 flex border-t pb-[env(safe-area-inset-bottom)] lg:hidden"
     >
-      {tabs.map((item) => {
+      {bottomNavItems.map((item) => {
         const current = isCurrent(item.href);
         const Icon = item.icon;
         return (
@@ -89,7 +90,7 @@ export function BottomNav() {
             href={item.href}
             aria-current={current ? "page" : undefined}
             className={cn(
-              "focus-visible:ring-org relative flex flex-1 flex-col items-center gap-1 py-2.5 focus-visible:ring-2 focus-visible:outline-none",
+              "focus-visible:ring-org relative flex min-w-0 flex-1 flex-col items-center gap-1 px-0.5 py-2.5 focus-visible:ring-2 focus-visible:outline-none",
               current ? "text-ash-hi" : "text-ash",
             )}
           >
@@ -97,10 +98,10 @@ export function BottomNav() {
               aria-hidden
               className={cn("absolute top-0 h-[3px] w-7", current ? "bg-org" : "bg-transparent")}
             />
-            <Icon aria-hidden className="size-5" />
+            <Icon aria-hidden className="size-5 shrink-0" />
             <span
               className={cn(
-                "font-label text-[11.5px] tracking-[0.09em]",
+                "font-label w-full truncate text-center text-[10.5px] tracking-[0.04em]",
                 current ? "font-bold" : "font-semibold",
               )}
             >

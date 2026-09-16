@@ -15,7 +15,7 @@ export default function Loading() {
         <Skeleton className="h-24 w-full" />
         <Skeleton className="h-24 w-full" />
       </div>
-      <span className="sr-only">Loading Live Radar</span>
+      <span className="sr-only">Loading settings</span>
     </div>
   );
 }

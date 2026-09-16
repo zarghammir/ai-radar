@@ -1,9 +1,10 @@
 import { EmptyState, PageShell } from "@/components/page-shell";
+import { LocalDate } from "@/components/local-date";
 
 export default function TodayPage() {
   return (
     <PageShell
-      eyebrow="Wednesday morning"
+      eyebrow={<LocalDate />}
       title="Good morning"
       summary="Your brief will appear here once the worker has run."
     >

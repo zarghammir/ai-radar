@@ -19,8 +19,12 @@ export function ThemeScript() {
     var dark = stored === "dark" || ((stored === "system" || !stored) && system);
     document.documentElement.classList.toggle("dark", dark);
     document.documentElement.dataset.theme = stored || "system";
-    var meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute("content", dark ? ${JSON.stringify(brand.themeColor.dark)} : ${JSON.stringify(brand.themeColor.light)});
+    // ALL of them: the layout declares two media-scoped theme-color metas, so
+    // querySelector would always return the light one and write to a meta the
+    // browser is ignoring. Setting every one keeps whichever is in force right.
+    var metas = document.querySelectorAll('meta[name="theme-color"]');
+    var colour = dark ? ${JSON.stringify(brand.themeColor.dark)} : ${JSON.stringify(brand.themeColor.light)};
+    for (var i = 0; i < metas.length; i++) metas[i].setAttribute("content", colour);
   } catch (e) {
     /* localStorage can throw in private mode; the light default is fine. */
   }

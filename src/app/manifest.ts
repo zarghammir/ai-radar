@@ -14,8 +14,14 @@ export default function manifest(): MetadataRoute.Manifest {
     scope: "/",
     display: "standalone",
     orientation: "portrait",
-    background_color: brand.themeColor.light,
-    theme_color: brand.themeColor.light,
+    // The manifest spec has no media-scoped colour, so the splash is one
+    // value for both themes and this is a forced choice, not an oversight.
+    // Dark is chosen because docs/DESIGN.md calls it this world's native
+    // ground and the app is opened early in the morning; a light splash was
+    // the brighter flash of the two. Flip both to themeColor.light if the
+    // owner would rather the splash match a light device.
+    background_color: brand.themeColor.dark,
+    theme_color: brand.themeColor.dark,
     categories: ["news", "productivity"],
     icons: [
       { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
