@@ -8,17 +8,11 @@
  *   npx next build && npx next start -p 3210
  *   node scripts/a11y-audit.mjs http://127.0.0.1:3210
  *
- * MAINTAINER TOOLING, not part of `npm ci`. It needs a Chromium to drive, and
- * this project deliberately does NOT depend on the full `playwright` package,
- * whose install step downloads browsers on every install including CI. It
- * depends on `playwright-core` (no download) and finds a browser like this:
- *
- *   1. $PW_EXECUTABLE, if you set it to a Chromium binary; otherwise
- *   2. your installed Google Chrome, via Playwright's "chrome" channel.
- *
- * If neither is available it says so and exits 2 rather than failing obscurely.
- * An earlier version hard-coded a Homebrew prefix and a macOS cache path and
- * could only ever run on one machine.
+ * MAINTAINER TOOLING, not part of `npm ci`. Browser resolution and the
+ * "is a server actually running" check both live in ./lib/browser.mjs, so the
+ * logic exists once for this script and verify-shell.mjs. An earlier version
+ * hard-coded a Homebrew prefix and a macOS cache path and could only ever run
+ * on the machine it was written on.
  */
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -46,24 +40,9 @@ const SIZES = [
 const EXPECTED_TABS = 6;
 const THEMES = ["light", "dark"];
 
-const { chromium } = await import("playwright-core");
+import { launchBrowser, requireServer } from "./lib/browser.mjs";
 
-async function launchBrowser() {
-  const executablePath = process.env.PW_EXECUTABLE;
-  if (executablePath) return chromium.launch({ executablePath });
-  try {
-    // The browser most machines already have, and no download.
-    return await chromium.launch({ channel: "chrome" });
-  } catch (error) {
-    console.error(
-      "No browser to drive. Set PW_EXECUTABLE to a Chromium binary, or install\n" +
-        "Google Chrome so the 'chrome' channel resolves.\n" +
-        String(error.message || error),
-    );
-    process.exit(2);
-  }
-}
-
+await requireServer(base);
 const browser = await launchBrowser();
 const report = { states: 0, serious: [], allViolations: [], overflow: [], nav: {} };
 

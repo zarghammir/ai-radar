@@ -23,7 +23,8 @@
     "db:seed": "tsx src/db/seed.ts",
     "db:studio": "drizzle-kit studio",
     "sources:check": "tsx scripts/sources-check.ts",
-    "a11y": "node scripts/a11y-audit.mjs"
+    "a11y": "node scripts/a11y-audit.mjs",
+    "verify:shell": "node scripts/verify-shell.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.126.0",
