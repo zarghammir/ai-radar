@@ -10,6 +10,7 @@ import { rawItems, sources, stories, storyTopics, topics, ingestRuns } from "@/d
 import { deriveVerification } from "./clustering/verification";
 import { rankStory } from "./ranking/score";
 import { CANDIDATE_LIMIT, assignStory, runIngest, storySources } from "./run";
+import { matchesAnyKeyword } from "./normalize/keywords";
 
 /**
  * These run against a real Postgres, on a database of their own.
@@ -428,6 +429,9 @@ withDb("pipeline orchestration", () => {
         lastActivityAt: story.lastActivityAt,
         contentType: story.contentType,
         sources: attached,
+        // The stored level, so this really is the story's own data going into
+        // both functions rather than a constant standing in for it.
+        verification: story.verification,
         topicKeys: [],
         userTopicKeys: [],
       },
@@ -650,6 +654,88 @@ withDb("pipeline orchestration", () => {
     const assigned = await db.transaction((tx) => assignStory(tx, item, NOW));
     expect(assigned.created).toBe(false);
     expect(assigned.storyId).toBe(match.id);
+  });
+
+  it("tags a vaguely titled first-party post from its source's default topic", async () => {
+    // Tagging reads the primary item's text only, so a post titled
+    // "Introducing our new model" matches no keyword and would otherwise carry
+    // no company topic at all — the gap found during the pipeline ticket.
+    const [openaiTopic] = await db
+      .insert(topics)
+      .values({ key: "openai", name: "OpenAI", group: "company", keywords: ["openai", "chatgpt"] })
+      .returning();
+    await db
+      .insert(topics)
+      .values({ key: "robotics", name: "Robotics", group: "domain", keywords: ["humanoid"] });
+    await addSource({
+      key: "openai-blog",
+      name: "OpenAI",
+      tier: "PRIMARY",
+      config: { topicKeys: ["openai"] },
+    });
+
+    const routes = {
+      "openai-blog.test/feed": rssFeed([
+        {
+          title: "Introducing our new model",
+          link: GPT6_URL,
+          date: hoursAgo(2),
+          description: "Available today.",
+        },
+      ]),
+    };
+    await runIngest(db, undefined, { now: NOW, fetchImpl: fakeNetwork(routes), sink: () => {} });
+
+    const [story] = await db.select().from(stories);
+    // The control that this is the default and not a lucky keyword hit.
+    expect(story.title).toBe("Introducing our new model");
+    expect(matchesAnyKeyword(story.title, ["openai", "chatgpt"])).toBe(false);
+
+    const tags = await db.select().from(storyTopics).where(eq(storyTopics.storyId, story.id));
+    expect(tags.map((t) => t.topicId)).toEqual([openaiTopic.id]);
+  });
+
+  it("does not let a forum thread add its own topics to a story", async () => {
+    const [openaiTopic] = await db
+      .insert(topics)
+      .values({ key: "openai", name: "OpenAI", group: "company", keywords: ["openai"] })
+      .returning();
+    await db.insert(topics).values({
+      key: "agents",
+      name: "Agents",
+      group: "domain",
+      keywords: ["agentic", "ai agent"],
+    });
+    await addSource({
+      key: "openai-blog",
+      name: "OpenAI",
+      tier: "PRIMARY",
+      config: { topicKeys: ["openai"] },
+    });
+    // Given a default of its own, which must be ignored: defaults come from the
+    // primary item's source, not from whichever sources happen to be attached.
+    await addSource({
+      key: "hackernews-ai",
+      name: "Hacker News",
+      kind: "hackernews",
+      tier: "COMMUNITY",
+      url: null,
+      config: { topicKeys: ["agents"] },
+    });
+
+    const routes = {
+      "openai-blog.test/feed": rssFeed([
+        { title: "Introducing our new model", link: GPT6_URL, date: hoursAgo(2) },
+      ]),
+      // The forum headline mentions agents; the blog post does not.
+      ...hnRoutes([{ id: 1, title: "This is an agentic model, apparently", url: GPT6_URL }]),
+    };
+    await runIngest(db, undefined, { now: NOW, fetchImpl: fakeNetwork(routes), sink: () => {} });
+
+    const [story] = await db.select().from(stories);
+    expect(story.sourceCount).toBe(2);
+    const tags = await db.select().from(storyTopics).where(eq(storyTopics.storyId, story.id));
+    expect(tags.map((t) => t.topicId)).toEqual([openaiTopic.id]);
   });
 
   // ── Failure reporting ─────────────────────────────────────────────────────
