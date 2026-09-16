@@ -428,6 +428,9 @@ withDb("pipeline orchestration", () => {
         lastActivityAt: story.lastActivityAt,
         contentType: story.contentType,
         sources: attached,
+        // The stored level, so this really is the story's own data going into
+        // both functions rather than a constant standing in for it.
+        verification: story.verification,
         topicKeys: [],
         userTopicKeys: [],
       },

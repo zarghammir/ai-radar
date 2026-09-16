@@ -1,4 +1,4 @@
-import type { ContentType, ScoreComponents, SourceTier } from "@/db/schema";
+import type { ContentType, ScoreComponents, SourceTier, VerificationLevel } from "@/db/schema";
 
 export interface RankInput {
   /**
@@ -16,6 +16,8 @@ export interface RankInput {
    * so the same array can be passed to both without a mapping step in between.
    */
   sources: { sourceKey: string; tier: SourceTier }[];
+  /** How well the story's provenance is established. Penalised, never rewarded. */
+  verification: VerificationLevel;
   /** Topic keys attached to the story. */
   topicKeys: string[];
   /** Topic keys the user follows. Empty = no personalisation. */
@@ -49,6 +51,18 @@ export const WEIGHTS = {
   topicExtraMatch: 4,
   topicMax: 22,
   engagementMax: 12,
+  /**
+   * Magnitudes, applied as NEGATIVE components. A weak claim should cost a
+   * story its place rather than merely fail to earn one, and the why-ranked
+   * panel draws these going the other way — so the sign is the point, and a
+   * clamp at zero would quietly remove the only thing that pushes down.
+   *
+   * Two keys rather than one because COMPONENT_LABELS is a static map: a
+   * single key would print "Unverified claim" on a story that is only
+   * emerging, which is a false statement in front of the reader.
+   */
+  unverifiedPenalty: 6,
+  emergingPenalty: 2,
   contentType: {
     RELEASE: 6,
     MODEL: 6,
@@ -112,6 +126,9 @@ export function rankStory(input: RankInput, now: Date = new Date()): RankResult 
     c.engagement = round(Math.min(WEIGHTS.engagementMax, e));
   }
 
+  if (input.verification === "UNVERIFIED") c.unverifiedPenalty = -WEIGHTS.unverifiedPenalty;
+  else if (input.verification === "EMERGING") c.emergingPenalty = -WEIGHTS.emergingPenalty;
+
   const ct = WEIGHTS.contentType[input.contentType];
   if (ct) c.contentType = ct;
 
@@ -143,4 +160,6 @@ export const COMPONENT_LABELS: Record<string, string> = {
   topicMatch: "Matches your topics",
   engagement: "Community engagement",
   contentType: "Content type",
+  unverifiedPenalty: "Unverified claim",
+  emergingPenalty: "Not yet corroborated",
 };

@@ -188,6 +188,9 @@ describe("the shipped catalogue produces the badges the product promises", () =>
           lastActivityAt: new Date("2026-09-16T11:00:00Z"),
           contentType: "NEWS",
           sources: [{ sourceKey: s.sourceKey, tier: s.tier }],
+          // Held constant so this measures the tier difference and nothing
+          // else; the verification penalty has its own tests.
+          verification: "CORROBORATED",
           topicKeys: [],
           userTopicKeys: [],
         },

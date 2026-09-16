@@ -11,6 +11,8 @@ const base = {
   sources: [verge],
   topicKeys: [] as string[],
   userTopicKeys: [] as string[],
+  // Carries no penalty, so the tests below measure what they say they measure.
+  verification: "CORROBORATED" as const,
 };
 /** Seven separate items, all from the same outlet. */
 const sevenFromOneOutlet = Array.from({ length: 7 }, () => ({ ...reuters }));
@@ -206,5 +208,74 @@ describe("rankStory and the analyst tier", () => {
 
   it("names the analyst component for the why-ranked view", () => {
     expect(COMPONENT_LABELS.analyst).toBeTruthy();
+  });
+});
+
+describe("rankStory and the verification penalty", () => {
+  it("pushes an unverified story down, and by a negative value", () => {
+    const unverified = rankStory({ ...base, verification: "UNVERIFIED" }, now);
+    const corroborated = rankStory({ ...base, verification: "CORROBORATED" }, now);
+
+    // The UI draws this as a hatched bar going the other way. A clamp at zero,
+    // or a positive "reduced bonus", would silently break a screen the owner
+    // has already approved, so the sign is the assertion.
+    expect(unverified.components.unverifiedPenalty).toBeLessThan(0);
+    expect(unverified.components.unverifiedPenalty).toBe(-WEIGHTS.unverifiedPenalty);
+    expect(corroborated.components.unverifiedPenalty).toBeUndefined();
+    expect(corroborated.score - unverified.score).toBeCloseTo(WEIGHTS.unverifiedPenalty, 5);
+  });
+
+  it("pushes an emerging story down by less", () => {
+    const emerging = rankStory({ ...base, verification: "EMERGING" }, now);
+    const corroborated = rankStory({ ...base, verification: "CORROBORATED" }, now);
+    expect(emerging.components.emergingPenalty).toBe(-WEIGHTS.emergingPenalty);
+    expect(corroborated.score - emerging.score).toBeCloseTo(WEIGHTS.emergingPenalty, 5);
+    // Ordering is the point: unverified is worse than emerging, not equal to it.
+    const unverified = rankStory({ ...base, verification: "UNVERIFIED" }, now);
+    expect(unverified.score).toBeLessThan(emerging.score);
+    expect(emerging.score).toBeLessThan(corroborated.score);
+  });
+
+  it("leaves a primary source and a corroborated story unpenalised", () => {
+    for (const verification of ["PRIMARY_SOURCE", "CORROBORATED"] as const) {
+      const c = rankStory({ ...base, verification }, now).components;
+      expect(c.unverifiedPenalty).toBeUndefined();
+      expect(c.emergingPenalty).toBeUndefined();
+    }
+  });
+
+  it("still sums to the score once a component is negative", () => {
+    // The additive promise has to survive a negative term, which is the whole
+    // reason this component is worth a test rather than a constant.
+    const r = rankStory({ ...base, verification: "UNVERIFIED" }, now);
+    const sum = Object.values(r.components).reduce((a, b) => a + b, 0);
+    expect(Math.abs(r.score - sum)).toBeLessThan(0.11);
+    expect(Object.values(r.components).some((v) => v < 0)).toBe(true);
+  });
+
+  it("sums correctly when the penalty outweighs everything else", () => {
+    // An all-positive story sums to more than any single component, so a sum
+    // assertion over one cannot tell addition from a coincidence. Here the
+    // penalty drags the total BELOW its largest term, and past zero.
+    const weak = rankStory(
+      {
+        ...base,
+        lastActivityAt: new Date("2026-09-10T11:00:00Z"),
+        contentType: "DISCUSSION",
+        sources: [{ sourceKey: "hn", tier: "COMMUNITY" }],
+        verification: "UNVERIFIED",
+      },
+      now,
+    );
+    const values = Object.values(weak.components);
+    const sum = values.reduce((a, b) => a + b, 0);
+    expect(Math.abs(weak.score - sum)).toBeLessThan(0.11);
+    expect(weak.score).toBeLessThan(Math.max(...values));
+    expect(weak.score).toBeLessThan(0);
+  });
+
+  it("names both penalties for the why-ranked panel", () => {
+    expect(COMPONENT_LABELS.unverifiedPenalty).toBe("Unverified claim");
+    expect(COMPONENT_LABELS.emergingPenalty).toBe("Not yet corroborated");
   });
 });
