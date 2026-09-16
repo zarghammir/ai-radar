@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { CONTENT_TYPES, SOURCE_KINDS, SOURCE_TIERS } from "./schema";
 import { SOURCE_SEEDS, TOPIC_SEEDS } from "./seed-data";
 import { getAdapter } from "@/sources/registry";
+import { deriveVerification } from "@/pipeline/clustering/verification";
+import { rankStory } from "@/pipeline/ranking/score";
 
 /**
  * The catalogue is data, and data can be wrong in ways the type system does not
@@ -26,6 +28,21 @@ describe("source catalogue", () => {
   it("uses unique keys", () => {
     const keys = SOURCE_SEEDS.map((s) => s.key);
     expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it("files the named expert newsletters under ANALYST", () => {
+    const analysts = SOURCE_SEEDS.filter((s) => s.tier === "ANALYST")
+      .map((s) => s.key)
+      .sort();
+    expect(analysts).toEqual(["import-ai", "interconnects", "simon-willison"]);
+  });
+
+  it("keeps enough newsrooms for corroboration to stay reachable", () => {
+    // ANALYST cannot supply corroboration on its own, so moving sources into it
+    // must not leave fewer than two newsrooms behind.
+    expect(
+      SOURCE_SEEDS.filter((s) => s.tier === "HIGH_QUALITY_REPORTING").length,
+    ).toBeGreaterThanOrEqual(2);
   });
 
   it("only names tiers, kinds and content types the schema declares", () => {
@@ -127,5 +144,57 @@ describe("topic catalogue", () => {
     const company = TOPIC_SEEDS.filter((t) => t.group === "company").flatMap((t) => t.keywords);
     const domain = TOPIC_SEEDS.filter((t) => t.group === "domain").flatMap((t) => t.keywords);
     expect(company.filter((k) => domain.includes(k)).length).toBeGreaterThan(0);
+  });
+});
+
+describe("the shipped catalogue produces the badges the product promises", () => {
+  // The rules are unit-tested against synthetic sources elsewhere. This runs
+  // them against the rows that actually ship, so a tier typo in the catalogue
+  // shows up as a wrong badge rather than as a passing unit test.
+  const item = (key: string) => {
+    const s = SOURCE_SEEDS.find((x) => x.key === key);
+    if (!s) throw new Error(`catalogue has no source "${key}"`);
+    return { sourceKey: s.key, sourceName: s.name, tier: s.tier };
+  };
+
+  it("two expert newsletters agreeing is emerging, and names them", () => {
+    const r = deriveVerification([item("simon-willison"), item("import-ai")]);
+    expect(r.level).toBe("EMERGING");
+    expect(r.note).toContain("Simon Willison");
+    expect(r.note).toContain("Import AI");
+  });
+
+  it("a newsroom plus an expert newsletter is corroborated", () => {
+    const r = deriveVerification([item("ars-technica-ai"), item("interconnects")]);
+    expect(r.level).toBe("CORROBORATED");
+  });
+
+  it("two newsrooms are corroborated", () => {
+    expect(deriveVerification([item("verge-ai"), item("wired-ai")]).level).toBe("CORROBORATED");
+  });
+
+  it("a lab publishing its own work is a primary source", () => {
+    expect(deriveVerification([item("openai-blog"), item("techcrunch-ai")]).level).toBe(
+      "PRIMARY_SOURCE",
+    );
+  });
+
+  it("ranks a shipped analyst source between a shipped newsroom and Hacker News", () => {
+    const now = new Date("2026-09-16T12:00:00Z");
+    const score = (key: string) => {
+      const s = item(key);
+      return rankStory(
+        {
+          lastActivityAt: new Date("2026-09-16T11:00:00Z"),
+          contentType: "NEWS",
+          sources: [{ sourceKey: s.sourceKey, tier: s.tier }],
+          topicKeys: [],
+          userTopicKeys: [],
+        },
+        now,
+      ).score;
+    };
+    expect(score("interconnects")).toBeLessThan(score("verge-ai"));
+    expect(score("interconnects")).toBeGreaterThan(score("hackernews-ai"));
   });
 });
