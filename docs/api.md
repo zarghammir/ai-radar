@@ -314,13 +314,13 @@ label map, so the wording in the UI cannot drift from the weights.
 If a component ever reaches the API without an entry in that map, its `label`
 is the raw key rather than being blank or missing — a new component must not
 blank a bar or throw. That is a safety net and not a state a reader should ever
-see, so #9's suite asserts that every component the ranker can emit has a
+see, so the ranker's own suite asserts that every component it can emit has a
 label, deriving the list from the ranking code itself. Render the `label`
 verbatim; the fallback exists so that doing so is always safe.
 
-**`value` may be negative.** Issue #9 adds a penalty so the why-ranked panel
-can show what pushed a story _down_ and not only what lifted it. It takes one
-of two forms: `unverifiedPenalty`, labelled "Unverified claim", or
+**`value` may be negative.** The ranking run applies a penalty so the
+why-ranked panel can show what pushed a story _down_ and not only what lifted
+it. It takes one of two forms: `unverifiedPenalty`, labelled "Unverified claim", or
 `emergingPenalty`, labelled "Not yet corroborated".
 
 **A story carries at most one of them**, because a story has exactly one
@@ -339,8 +339,8 @@ It is here rather than in the worked example above because that story is
 `PRIMARY_SOURCE`, and neither penalty can occur on one: a lab publishing its
 own announcement is neither unverified nor merely emerging.
 
-No negative value is produced until #9 lands, but a chart that assumes
-non-negative values will render wrongly the day it does.
+A chart that assumes non-negative values will render wrongly on the first
+unverified story it is given.
 
 As everywhere else in this array, read the `label` the server sends rather than
 matching on the key. These two are named here because a reader deserves to know
@@ -414,9 +414,9 @@ Everything arriving, filtered.
 Sorts:
 
 - **`newest`** — `lastActivityAt` descending. When a story last moved.
-- **`importance`** — `score` descending. Until issue #9 lands, every score is
-  `0` and this sort degenerates to id order; it is in the contract because the
-  column exists and the UI should build against it now.
+- **`importance`** — `score` descending. A story the ranking run has not
+  reached yet scores `0`, so a database that has never been ranked orders by id
+  here; that is the absence of a score, not a ranking of zero.
 - **`trending`** — how many distinct sources attached to the story in the last
   24 hours, descending, using each item's `fetchedAt`, with `score` as the
   tie-break. Computed per request from stored rows; no rate of change is stored
@@ -681,8 +681,8 @@ later. Each returns the stated empty value until its ticket lands.
 | `summary`         | `null`           | AI summariser, Phase 2. Clients must fall back to `excerpt`, which is always present for a story with a usable item |
 | `whyItMatters`    | `null`           | AI summariser, Phase 2                                                                                              |
 | `keyPoints`       | `[]`             | AI summariser, Phase 2                                                                                              |
-| `score`           | `0`              | Issue #9, ranking run                                                                                               |
-| `scoreComponents` | `[]`             | Issue #9, ranking run                                                                                               |
+| `score`           | `0`              | The ranking run, for a story it has not reached yet                                                                 |
+| `scoreComponents` | `[]`             | The ranking run, for a story it has not reached yet                                                                 |
 
 A client that renders `summary` without falling back to `excerpt` will show
 empty cards on every story in Phase 1. That is the one place this contract can
@@ -777,15 +777,16 @@ later reader deserves the reason rather than the result.
    dead control, which is worse than not offering one. It is a preference about
    a catalogue row, so `sources` joins the writable list for that column alone.
 7. **`scoreComponents[].value` may be negative**, so the why-ranked panel can
-   show what pushed a story down. #9 adds `unverifiedPenalty` and
-   `emergingPenalty`, each with its own label, because one key cannot carry two
-   wordings and the wrong one would be a false statement on the panel.
+   show what pushed a story down. The ranking run applies `unverifiedPenalty`
+   or `emergingPenalty`, each with its own label, because one key cannot carry
+   two wordings and the wrong one would be a false statement on the panel.
 8. **`theme` keeps two sources of truth.** The duplication is the fix for the
    white flash, not a defect to be tidied away.
 
 ## What is still not filled, and by whom
 
-`summary`, `whyItMatters` and `keyPoints` wait on the AI summariser; `score` and
-`scoreComponents` on issue #9. Every section built on them is **hidden when
+`summary`, `whyItMatters` and `keyPoints` wait on the AI summariser. `score`
+and `scoreComponents` come from the ranking run and are empty only for a story
+it has not reached. Every section built on them is **hidden when
 empty**, never rendered as a labelled empty block, and `summary` always falls
 back to `excerpt`. Without that fallback every card in Phase 1 is blank.
