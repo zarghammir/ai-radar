@@ -8,8 +8,14 @@ export interface RankInput {
    */
   lastActivityAt: Date;
   contentType: ContentType;
-  /** Tier of every distinct source attached to the story. */
-  sourceTiers: SourceTier[];
+  /**
+   * Every source item attached to the story, duplicates included. Ranking
+   * de-duplicates by sourceKey itself rather than trusting the caller to have
+   * done it, so it cannot disagree with deriveVerification about how many
+   * sources a story has. This is the shape deriveVerification already accepts,
+   * so the same array can be passed to both without a mapping step in between.
+   */
+  sources: { sourceKey: string; tier: SourceTier }[];
   /** Topic keys attached to the story. */
   topicKeys: string[];
   /** Topic keys the user follows. Empty = no personalisation. */
@@ -65,12 +71,17 @@ export function rankStory(input: RankInput, now: Date = new Date()): RankResult 
   const hours = Number.isFinite(ageHours) ? Math.max(0, ageHours) : 0;
   c.recency = round(WEIGHTS.recencyMax * Math.pow(0.5, hours / WEIGHTS.recencyHalfLifeHours));
 
-  const tiers = new Set(input.sourceTiers);
+  // One outlet is one source however many items it filed. deriveVerification
+  // de-duplicates by key before counting, and if ranking did not, a story that
+  // verification calls EMERGING would outscore one it calls CORROBORATED, paid
+  // for by the very component the UI labels "Corroborating sources".
+  const distinct = new Map(input.sources.map((s) => [s.sourceKey, s]));
+  const tiers = new Set([...distinct.values()].map((s) => s.tier));
   if (tiers.has("PRIMARY")) c.primarySource = WEIGHTS.primarySource;
   else if (tiers.has("HIGH_QUALITY_REPORTING")) c.qualityReporting = WEIGHTS.highQualityReporting;
   else if (tiers.has("COMMUNITY")) c.communitySignal = WEIGHTS.communityOnly;
 
-  const distinctSources = input.sourceTiers.length;
+  const distinctSources = distinct.size;
   if (distinctSources > 1) {
     c.corroboration = Math.min(
       WEIGHTS.corroborationMax,
