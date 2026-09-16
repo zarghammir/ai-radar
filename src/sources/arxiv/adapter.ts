@@ -12,6 +12,13 @@ const DEFAULT_CATEGORIES = ["cs.AI", "cs.LG", "cs.CL", "cs.CV", "cs.RO", "stat.M
 
 const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_" });
 
+/**
+ * fast-xml-parser collapses a repeated element to a single object when the
+ * document contains exactly one of it. Both shapes carry the same attributes,
+ * so the single case must not be typed more narrowly than the array case.
+ */
+type AtomLink = { "@_href": string; "@_rel"?: string; "@_title"?: string };
+
 type Entry = {
   id: string;
   title: string;
@@ -19,7 +26,7 @@ type Entry = {
   published: string;
   updated: string;
   author: { name: string } | { name: string }[];
-  link: { "@_href": string; "@_rel"?: string; "@_title"?: string }[] | { "@_href": string };
+  link: AtomLink | AtomLink[];
   category: { "@_term": string } | { "@_term": string }[];
   "arxiv:primary_category"?: { "@_term": string };
   "arxiv:comment"?: string;
@@ -55,7 +62,8 @@ export const arxivAdapter: SourceAdapter = {
       .filter((e) => e.id && e.title)
       .map((e) => {
         const links = arr(e.link);
-        const abs = links.find((l) => !l["@_rel"] || l["@_rel"] === "alternate")?.["@_href"] ?? e.id;
+        const abs =
+          links.find((l) => !l["@_rel"] || l["@_rel"] === "alternate")?.["@_href"] ?? e.id;
         const pdf = links.find((l) => l["@_title"] === "pdf")?.["@_href"] ?? null;
         const authors = arr(e.author).map((a) => a.name);
         const cats = arr(e.category).map((c) => c["@_term"]);
