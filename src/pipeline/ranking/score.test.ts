@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { COMPONENT_LABELS, rankStory, WEIGHTS } from "./score";
 import { deriveVerification } from "../clustering/verification";
@@ -277,5 +279,37 @@ describe("rankStory and the verification penalty", () => {
   it("names both penalties for the why-ranked panel", () => {
     expect(COMPONENT_LABELS.unverifiedPenalty).toBe("Unverified claim");
     expect(COMPONENT_LABELS.emergingPenalty).toBe("Not yet corroborated");
+  });
+});
+
+describe("every component the ranker can emit has a label", () => {
+  /**
+   * Derived from the emitting code, not from a list written here.
+   *
+   * A hand-written array rots the moment someone adds a component: it would
+   * still pass while the new component printed a developer identifier in front
+   * of a reader. Reading the assignments out of the source cannot drift from
+   * the source.
+   */
+  const emittedKeys = (): string[] => {
+    const source = readFileSync(fileURLToPath(new URL("./score.ts", import.meta.url)), "utf8");
+    const body = source.slice(source.indexOf("export function rankStory"));
+    return [...new Set([...body.matchAll(/\bc\.([A-Za-z][A-Za-z0-9]*)\s*=/g)].map((m) => m[1]))];
+  };
+
+  it("finds the components by reading the ranker itself", () => {
+    const keys = emittedKeys();
+    // Floor: a regex that matched nothing would satisfy every check below.
+    expect(keys.length).toBeGreaterThanOrEqual(10);
+    expect(keys).toContain("recency");
+    expect(keys).toContain("unverifiedPenalty");
+  });
+
+  it("labels all of them", () => {
+    // The API falls back to the raw key when a label is missing, so that a
+    // new component cannot blank a bar or throw. That fallback is a safety
+    // net, and this is what stops it ever being reached in front of a reader.
+    const unlabelled = emittedKeys().filter((key) => !COMPONENT_LABELS[key]);
+    expect(unlabelled, `no label in COMPONENT_LABELS for: ${unlabelled.join(", ")}`).toEqual([]);
   });
 });
