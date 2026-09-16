@@ -93,6 +93,8 @@ describe("rss adapter against captured responses", () => {
     const items = await rssAdapter.fetch(sourceWith({}), ctx);
     const source = { id: 1, key: "techcrunch-ai", defaultContentType: "NEWS" as const };
     const rows = items.map((i) => normalizeItem(i, source));
+    // Own floor: every assertion below passes on an empty feed.
+    expect(items.length).toBeGreaterThanOrEqual(20);
     expect(rows.filter(Boolean)).toHaveLength(items.length);
     for (const r of rows) expect(Number.isNaN(r!.publishedAt.getTime())).toBe(false);
   });
