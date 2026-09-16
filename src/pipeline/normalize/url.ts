@@ -12,13 +12,21 @@ const TRACKING_PARAMS = new Set([
   "ref",
   "ref_src",
   "source",
-  "s",
   "igshid",
   "_hsenc",
   "_hsmi",
   "oly_enc_id",
   "cmpid",
 ]);
+
+/**
+ * Parameters that are only noise on one host. On x.com `?s=` is the share
+ * surface tag; on an ordinary site it is usually a real query, and stripping
+ * it there would collapse two different pages into one canonical URL.
+ */
+const HOST_TRACKING_PARAMS: Record<string, Set<string>> = {
+  "x.com": new Set(["s"]),
+};
 
 /**
  * Canonical URL used for cross-source matching: same article from a company
@@ -48,9 +56,13 @@ export function canonicalizeUrl(input: string): string {
   }
 
   // Drop tracking params, keep the rest sorted for stability.
+  // Read after the hostname rewrites above, so twitter.com is already x.com.
+  const hostTracking = HOST_TRACKING_PARAMS[u.hostname];
   const kept: [string, string][] = [];
   for (const [k, v] of u.searchParams) {
-    if (TRACKING_PARAMS.has(k.toLowerCase()) || k.toLowerCase().startsWith("utm_")) continue;
+    const key = k.toLowerCase();
+    if (TRACKING_PARAMS.has(key) || key.startsWith("utm_")) continue;
+    if (hostTracking?.has(key)) continue;
     kept.push([k, v]);
   }
   kept.sort(([a], [b]) => a.localeCompare(b));

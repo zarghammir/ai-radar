@@ -17,6 +17,25 @@ describe("canonicalizeUrl", () => {
     expect(b).toBe(a);
     expect(c).toBe(a);
   });
+  it("keeps ?s= on an ordinary host, where it is a real query", () => {
+    // Two different search results must stay two different canonical urls.
+    expect(canonicalizeUrl("https://example.com/search?s=gpt-6")).toBe(
+      "https://example.com/search?s=gpt-6",
+    );
+    expect(canonicalizeUrl("https://example.com/search?s=gpt-6")).not.toBe(
+      canonicalizeUrl("https://example.com/search?s=claude-5"),
+    );
+  });
+  it("strips ?s= on x.com, where it is a share tag", () => {
+    expect(canonicalizeUrl("https://x.com/openai/status/1?s=20")).toBe(
+      "https://x.com/openai/status/1",
+    );
+  });
+  it("still strips source everywhere", () => {
+    expect(canonicalizeUrl("https://example.com/a?source=newsletter&b=1")).toBe(
+      "https://example.com/a?b=1",
+    );
+  });
   it("maps twitter to x.com", () => {
     expect(canonicalizeUrl("https://twitter.com/openai/status/1?s=20")).toBe(
       "https://x.com/openai/status/1",
