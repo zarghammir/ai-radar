@@ -11,6 +11,7 @@ import {
   topics,
 } from "@/db/schema";
 import { readingMinutes } from "@/pipeline/normalize/text";
+import { scoreComponentList } from "@/pipeline/ranking/rank-all";
 
 export interface SourceRef {
   key: string;
@@ -274,8 +275,9 @@ export async function buildDetail(db: Db, slug: string): Promise<StoryDetail | n
       title: r.title,
       url: r.url,
     })),
-    // Filled when #36 merges, which is what writes stories.score_components.
-    // Empty rather than absent so a client can map over it from day one.
-    scoreComponents: [],
+    // Labels come from the ranker's own map, so the wording a reader sees
+    // cannot drift from the weights that produced the number. Empty on a story
+    // the ranking run has not reached yet, never absent.
+    scoreComponents: scoreComponentList(story.scoreComponents),
   };
 }

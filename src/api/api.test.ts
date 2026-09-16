@@ -313,7 +313,7 @@ withDb("API routes", () => {
       expect(d.items as unknown as unknown[]).toHaveLength(2);
       expect(d.timeline as unknown as unknown[]).toHaveLength(2);
       expect((d.topics as unknown as { key: string }[])[0].key).toBe("openai");
-      // Empty until #36 merges, present so a client can map over it now.
+      // Empty on a story the ranking run has not reached, never absent.
       expect(d.scoreComponents).toEqual([]);
       expect(d.summary).toBeNull();
       expect(d.excerpt).toBe("a short excerpt for the card");
@@ -358,6 +358,31 @@ withDb("API routes", () => {
       );
       expect("whyItMatters" in d).toBe(true);
       expect(d.whyItMatters).toBeNull();
+    });
+
+    it("explains the score with server-supplied labels once ranked", async () => {
+      const { rankAllStories } = await import("@/pipeline/ranking/rank-all");
+      const { db } = await import("@/db/client");
+      const { COMPONENT_LABELS } = await import("@/pipeline/ranking/score");
+
+      const lab = await source("openai-blog", { name: "OpenAI", tier: "PRIMARY" });
+      await story({ slug: "ranked", sourceIds: [lab], verification: "PRIMARY_SOURCE" });
+      await rankAllStories(db, new Date());
+
+      const { GET } = await import("@/app/api/stories/[slug]/route");
+      const d = await body(
+        await GET(req("/api/stories/ranked"), {
+          params: Promise.resolve({ slug: "ranked" }),
+        } as never),
+      );
+      const comps = d.scoreComponents as unknown as { key: string; label: string; value: number }[];
+      expect(comps.length).toBeGreaterThanOrEqual(2);
+      // The label is the server's, not the client's: the wording cannot drift
+      // from the weights that produced the number.
+      for (const c of comps) expect(c.label).toBe(COMPONENT_LABELS[c.key as never]);
+      expect(comps.find((c) => c.key === "primarySource")!.value).toBeGreaterThan(0);
+      // The sum is what the why-ranked panel adds up to.
+      expect(comps.reduce((n, c) => n + c.value, 0)).toBeCloseTo(d.score as unknown as number, 1);
     });
 
     it("is a 404 for an unknown slug", async () => {
@@ -522,6 +547,55 @@ withDb("API routes", () => {
         "older",
         "newer",
       ]);
+    });
+
+    it("orders by real scores once the ranker has run", async () => {
+      // The test above sets scores by hand. This one lets the real ranker
+      // produce them, so the sort is proven against the thing that will
+      // actually populate the column rather than against a fixture — and the
+      // two orders differ, so it cannot pass by coinciding with newest.
+      const { rankAllStories } = await import("@/pipeline/ranking/rank-all");
+      const { db } = await import("@/db/client");
+
+      const lab = await source("openai-blog", { name: "OpenAI", tier: "PRIMARY" });
+      const forum = await source("hackernews-ai", {
+        name: "Hacker News",
+        kind: "hackernews",
+        tier: "COMMUNITY",
+      });
+      // Older but first-party, so it outranks despite being further down a
+      // newest-first list.
+      await story({
+        slug: "older-primary",
+        sourceIds: [lab],
+        verification: "PRIMARY_SOURCE",
+        lastActivityAt: new Date(Date.now() - 5 * 3_600_000),
+      });
+      await story({
+        slug: "newer-community",
+        sourceIds: [forum],
+        verification: "UNVERIFIED",
+        lastActivityAt: new Date(Date.now() - 60_000),
+      });
+
+      const result = await rankAllStories(db, new Date());
+      expect(result.ranked).toBe(2);
+
+      const { GET } = await import("@/app/api/radar/route");
+      const newest = (await body(await GET(req("/api/radar?sort=newest")))).stories as unknown as {
+        slug: string;
+      }[];
+      const important = (await body(await GET(req("/api/radar?sort=importance"))))
+        .stories as unknown as {
+        slug: string;
+        score: number;
+      }[];
+
+      expect(newest.map((x) => x.slug)).toEqual(["newer-community", "older-primary"]);
+      expect(important.map((x) => x.slug)).toEqual(["older-primary", "newer-community"]);
+      // Real scores, not the zero default, and the order follows them.
+      expect(important[0].score).toBeGreaterThan(important[1].score);
+      expect(important[0].score).toBeGreaterThan(0);
     });
 
     it("orders by how many sources arrived recently when trending", async () => {
