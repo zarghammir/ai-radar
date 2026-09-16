@@ -30,27 +30,27 @@ The current tab is an **orange bar plus a heavier label**. Content type is **a w
 Defined in `design/prototype/styles/tokens.css`. Dark is the world's native ground; light is
 the same bench in daylight. Both are authored, neither is a naive inversion.
 
-| Token | Light | Dark | Role |
-|---|---|---|---|
-| `--bg` | `#E4E3DE` | `#0B0C0E` | the bench |
-| `--bg-2` | `#DAD8D2` | `#141518` | nav bars, sidebar, chrome wells |
-| `--paper` | `#FFFFFF` | `#F3F3F1` | the print you read on — light in **both** themes |
-| `--edge` | `#CBC9C2` | `#2A2B2E` | chrome hairlines, sprocket holes |
-| `--ink` | `#17181B` | `#17181B` | headlines and body, on paper |
-| `--soft` | `#585C62` | `#585C62` | summaries and labels, on paper |
-| `--faint` | `#E2E0D9` | `#E2E0D9` | rules drawn on paper |
-| `--faint-2` | `#C9C7C0` | `#C9C7C0` | empty meter segments, chip borders |
-| `--ash` | `#5A564E` | `#9A958A` | chrome text on the bench |
-| `--ash-hi` | `#3D3A34` | `#D6D1C6` | chrome text that must carry weight |
-| `--org` | `#F0531C` | `#F0531C` | **reserved.** Fill only |
-| `--org-on` | `#0B0C0E` | `#0B0C0E` | the only text colour allowed on an orange fill |
-| `--org-text` | `#B3380B` | `#F0531C` | orange as text, darkened in light |
+| Token        | Light     | Dark      | Role                                             |
+| ------------ | --------- | --------- | ------------------------------------------------ |
+| `--bg`       | `#E4E3DE` | `#0B0C0E` | the bench                                        |
+| `--bg-2`     | `#DAD8D2` | `#141518` | nav bars, sidebar, chrome wells                  |
+| `--paper`    | `#FFFFFF` | `#F3F3F1` | the print you read on — light in **both** themes |
+| `--edge`     | `#CBC9C2` | `#2A2B2E` | chrome hairlines, sprocket holes                 |
+| `--ink`      | `#17181B` | `#17181B` | headlines and body, on paper                     |
+| `--soft`     | `#585C62` | `#585C62` | summaries and labels, on paper                   |
+| `--faint`    | `#E2E0D9` | `#E2E0D9` | rules drawn on paper                             |
+| `--faint-2`  | `#C9C7C0` | `#C9C7C0` | empty meter segments, chip borders               |
+| `--ash`      | `#5A564E` | `#9A958A` | chrome text on the bench                         |
+| `--ash-hi`   | `#3D3A34` | `#D6D1C6` | chrome text that must carry weight               |
+| `--org`      | `#F0531C` | `#F0531C` | **reserved.** Fill only                          |
+| `--org-on`   | `#0B0C0E` | `#0B0C0E` | the only text colour allowed on an orange fill   |
+| `--org-text` | `#B3380B` | `#F0531C` | orange as text, darkened in light                |
 
 **Paper stays light in dark mode on purpose.** Reading happens on the print; the dark ground
 is the bench it sits on. This is why the app is comfortable at 7am without being a dark-mode
 compromise: body text is always dark ink on light paper, at roughly 15:1.
 
-`--org-text` exists only because `#F0531C` as *text* on the light bench measures 2.6:1. It is
+`--org-text` exists only because `#F0531C` as _text_ on the light bench measures 2.6:1. It is
 now used nowhere for state — the orange **bar** marks the current item instead — and remains
 available for a rare inline emphasis.
 
@@ -67,27 +67,27 @@ deliberately achromatic near-black.
 
 Three faces, each with a job. Loaded from Google Fonts with real fallback stacks.
 
-| Role | Face | Used for |
-|---|---|---|
-| Text | **Archivo** 400/500/600/700 | headlines, summaries, body, controls |
-| Label | **Archivo Narrow** 600/700 | small capitals: content type, section labels, nav, grades |
-| Machine | **JetBrains Mono** 400/500/700 | times, counts, entry numbers, hostnames, axis ticks |
+| Role    | Face                           | Used for                                                  |
+| ------- | ------------------------------ | --------------------------------------------------------- |
+| Text    | **Archivo** 400/500/600/700    | headlines, summaries, body, controls                      |
+| Label   | **Archivo Narrow** 600/700     | small capitals: content type, section labels, nav, grades |
+| Machine | **JetBrains Mono** 400/500/700 | times, counts, entry numbers, hostnames, axis ticks       |
 
 Condensed type is for labels only. It never sets anything you have to read a sentence of —
 that was the single biggest legibility complaint in direction round one.
 
 ### Type scale
 
-| Token | Size | Line height | Where |
-|---|---|---|---|
-| `--t-display` | 27px | 1.10 | the greeting; 34px on desktop |
-| `--t-lead` | 25px | 1.16 | lead story headline; 30px on desktop |
-| `--t-title` | 20px | 1.22 | story headline; 22px on desktop |
-| `--t-body` | 15px | 1.50 | summaries; 16px on desktop |
-| `--t-why` | 14.5px | 1.48 | why-it-matters, key points, timeline |
-| `--t-small` | 13px | 1.45 | dates, hints, source links |
-| `--t-label` | 10.5px | — | small capitals, `letter-spacing: .18em` |
-| `--t-meta` | 10.5px | — | mono meta, `tabular-nums` |
+| Token         | Size   | Line height | Where                                   |
+| ------------- | ------ | ----------- | --------------------------------------- |
+| `--t-display` | 27px   | 1.10        | the greeting; 34px on desktop           |
+| `--t-lead`    | 25px   | 1.16        | lead story headline; 30px on desktop    |
+| `--t-title`   | 20px   | 1.22        | story headline; 22px on desktop         |
+| `--t-body`    | 15px   | 1.50        | summaries; 16px on desktop              |
+| `--t-why`     | 14.5px | 1.48        | why-it-matters, key points, timeline    |
+| `--t-small`   | 13px   | 1.45        | dates, hints, source links              |
+| `--t-label`   | 10.5px | —           | small capitals, `letter-spacing: .18em` |
+| `--t-meta`    | 10.5px | —           | mono meta, `tabular-nums`               |
 
 Headlines carry `text-wrap: balance` and negative tracking from `-.014em` to `-.024em` as
 size rises. Every column of digits uses `font-variant-numeric: tabular-nums`.
@@ -112,12 +112,12 @@ Discussion, Signal.
 **Verification** — how well-sourced it is. A **bordered chip** containing a four-segment
 meter and the word, sits top-right. Values:
 
-| Grade | Bars | Means |
-|---|---|---|
-| Primary source | 4 | The company, lab or author published it themselves. |
-| Corroborated | 3 | Two or more independent outlets report the same thing. |
-| Emerging | 2 | One outlet so far. Probably true, not yet confirmed. |
-| Unverified | 1 | A rumour, a leak or an anonymous claim. |
+| Grade          | Bars | Means                                                  |
+| -------------- | ---- | ------------------------------------------------------ |
+| Primary source | 4    | The company, lab or author published it themselves.    |
+| Corroborated   | 3    | Two or more independent outlets report the same thing. |
+| Emerging       | 2    | One outlet so far. Probably true, not yet confirmed.   |
+| Unverified     | 1    | A rumour, a leak or an anonymous claim.                |
 
 They differ by **shape** (no box vs bordered chip), **position** (left vs right), **weight**
 and **content** (a category word vs a meter and a grade word). A reader can tell them apart
