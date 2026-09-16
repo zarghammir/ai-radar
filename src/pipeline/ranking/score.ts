@@ -80,8 +80,8 @@ export function rankStory(input: RankInput, now: Date = new Date()): RankResult 
     }
   }
 
-  const points = input.engagementPoints ?? 0;
-  const comments = input.engagementComments ?? 0;
+  const points = safeCount(input.engagementPoints);
+  const comments = safeCount(input.engagementComments);
   if (points > 0 || comments > 0) {
     // 100 points ≈ 8, 500 ≈ 10.8, capped. Comments add a little.
     const e = 4 * Math.log10(points + 1) + 1.5 * Math.log10(comments + 1);
@@ -97,6 +97,15 @@ export function rankStory(input: RankInput, now: Date = new Date()): RankResult 
 
 function round(n: number): number {
   return Math.round(n * 10) / 10;
+}
+
+/**
+ * Engagement counts arrive from third-party metadata. A negative or non-finite
+ * count would make Math.log10 return NaN, and a single NaN component turns the
+ * whole score into NaN, which sorts unpredictably and poisons the stored value.
+ */
+function safeCount(n: number | undefined): number {
+  return typeof n === "number" && Number.isFinite(n) && n > 0 ? n : 0;
 }
 
 /** Human labels for the developer "why ranked" view. */

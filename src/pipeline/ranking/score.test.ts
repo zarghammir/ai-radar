@@ -37,7 +37,18 @@ describe("rankStory", () => {
     const two = rankStory({ ...base, sourceTiers: ["PRIMARY", "COMMUNITY"] }, now).components;
     expect(two.corroboration).toBe(WEIGHTS.corroborationPerSource);
     const many = rankStory(
-      { ...base, sourceTiers: ["PRIMARY", "COMMUNITY", "COMMUNITY", "COMMUNITY", "COMMUNITY", "COMMUNITY", "COMMUNITY"] },
+      {
+        ...base,
+        sourceTiers: [
+          "PRIMARY",
+          "COMMUNITY",
+          "COMMUNITY",
+          "COMMUNITY",
+          "COMMUNITY",
+          "COMMUNITY",
+          "COMMUNITY",
+        ],
+      },
       now,
     ).components;
     expect(many.corroboration).toBe(WEIGHTS.corroborationMax);
@@ -60,5 +71,25 @@ describe("rankStory", () => {
       .components.engagement!;
     expect(small).toBeGreaterThan(0);
     expect(big).toBe(WEIGHTS.engagementMax);
+  });
+});
+
+describe("rankStory numeric safety", () => {
+  it("never produces a NaN score from a negative engagement count", () => {
+    const r = rankStory({ ...base, engagementPoints: -5, engagementComments: 10 }, now);
+    expect(Number.isFinite(r.score)).toBe(true);
+    expect(Number.isFinite(r.components.engagement ?? 0)).toBe(true);
+  });
+
+  it("never produces a NaN score from a negative comment count", () => {
+    const r = rankStory({ ...base, engagementPoints: 10, engagementComments: -3 }, now);
+    expect(Number.isFinite(r.score)).toBe(true);
+    expect(Number.isFinite(r.components.engagement ?? 0)).toBe(true);
+  });
+
+  it("treats a story with no engagement signal as having no engagement component", () => {
+    const r = rankStory({ ...base, engagementPoints: 0, engagementComments: 0 }, now);
+    expect(r.components.engagement).toBeUndefined();
+    expect(Number.isFinite(r.score)).toBe(true);
   });
 });
