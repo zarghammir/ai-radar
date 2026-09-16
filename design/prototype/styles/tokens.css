@@ -1,0 +1,79 @@
+@charset "UTF-8";
+/* ===========================================================================
+   AI RADAR — DESIGN TOKENS
+   World: The Select Rail. A film cutting bench flattened into a screen.
+   PALETTE LAW: --org is reserved. It marks what is LIVE or WHERE YOU ARE —
+   the active reading mode, the flag where you stopped, the current tab, the
+   current hour on a chart. It is never used for decoration, never for a
+   generic link, never for a content-type badge, never for severity.
+   =========================================================================== */
+
+:root {
+  /* --- surfaces: the bench and the print ------------------------------- */
+  --bg:        #E4E3DE;   /* the bench, in daylight                        */
+  --bg-2:      #DAD8D2;   /* nav bars, sidebar, chrome wells               */
+  --paper:     #FFFFFF;   /* the print you actually read on                */
+  --edge:      #CBC9C2;   /* chrome hairlines, sprocket holes              */
+
+  /* --- ink: on paper ---------------------------------------------------- */
+  --ink:       #17181B;   /* headlines and body                            */
+  --soft:      #585C62;   /* summaries, labels                             */
+  --faint:     #E2E0D9;   /* rules drawn on paper                          */
+  --faint-2:   #C9C7C0;   /* empty meter segments, chip borders            */
+
+  /* --- ash: on the bench ------------------------------------------------ */
+  --ash:       #5A564E;   /* chrome text on the bench (>=4.5:1 on --bg-2)  */
+  --ash-hi:    #3D3A34;   /* chrome text that must carry weight            */
+
+  /* --- the reserved colour --------------------------------------------- */
+  --org:       #F0531C;   /* fill only: always with --org-on text on top    */
+  --org-on:    #0B0C0E;   /* the only text colour allowed on an orange fill */
+  --org-text:  #B3380B;   /* orange AS TEXT, darkened to clear 4.5:1 here   */
+
+  /* --- type ------------------------------------------------------------- */
+  --face-text:  "Archivo", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --face-label: "Archivo Narrow", "Archivo Condensed", var(--face-text);
+  --face-mono:  "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --t-display: 27px;  --t-display-lh: 1.10;
+  --t-lead:    25px;  --t-lead-lh:    1.16;
+  --t-title:   20px;  --t-title-lh:   1.22;
+  --t-body:    15px;  --t-body-lh:    1.50;
+  --t-why:   14.5px;  --t-why-lh:     1.48;
+  --t-small:   13px;  --t-small-lh:   1.45;
+  --t-label: 10.5px;  --t-label-ls:  .18em;
+  --t-meta:  10.5px;
+
+  /* --- spacing: 4px base ------------------------------------------------ */
+  --s1: 4px; --s2: 6px; --s3: 8px; --s4: 12px; --s5: 16px;
+  --s6: 20px; --s7: 24px; --s8: 32px; --s9: 40px;
+
+  /* --- structure -------------------------------------------------------- */
+  --rail-w: 26px;        /* the sprocket strip                             */
+  --radius: 2px;         /* film has corners, not pills                    */
+  --sidebar-w: 248px;
+  --column-w: 720px;
+  --aside-w: 300px;
+}
+
+/* Dark is this world's native ground: a bench under a lamp. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:      #0B0C0E;
+    --bg-2:    #141518;
+    --paper:   #F3F3F1;
+    --edge:    #2A2B2E;
+    --ash:     #9A958A;
+    --ash-hi:  #D6D1C6;
+    --org-text:#F0531C;
+  }
+}
+:root[data-theme="dark"] {
+  --bg:      #0B0C0E;
+  --bg-2:    #141518;
+  --paper:   #F3F3F1;
+  --edge:    #2A2B2E;
+  --ash:     #9A958A;
+  --ash-hi:  #D6D1C6;
+  --org-text:#F0531C;
+}
