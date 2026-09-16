@@ -105,14 +105,14 @@ export const hackerNewsAdapter: SourceAdapter = {
       ),
     );
     if (failures.length) {
-      const ids = failures
+      const failedIds = failures
         .map((f) => f.id)
         .sort((a, b) => a - b)
         .slice(0, 10)
         .join(", ");
       ctx.log(
         `hackernews: ${failures.length} of ${slice.length} item fetches failed ` +
-          `(ids ${ids}${failures.length > 10 ? ", …" : ""}); first reason: ${failures[0].reason}`,
+          `(ids ${failedIds}${failures.length > 10 ? ", …" : ""}); first reason: ${failures[0].reason}`,
       );
     }
 

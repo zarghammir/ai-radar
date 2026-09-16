@@ -23,6 +23,12 @@ describe("verification level and content type stay separate", () => {
   });
 
   it("the two vocabularies share no value", () => {
+    // Floors first: an emptied vocabulary would satisfy the overlap check and
+    // the enum comparison above, because both compare against the same
+    // constant. Adding a value is fine; removing one should be deliberate
+    // enough to update this line.
+    expect(CONTENT_TYPES.length).toBeGreaterThanOrEqual(10);
+    expect(VERIFICATION_LEVELS.length).toBeGreaterThanOrEqual(4);
     const levels = VERIFICATION_LEVELS as readonly string[];
     expect(CONTENT_TYPES.filter((c) => levels.includes(c))).toEqual([]);
   });
