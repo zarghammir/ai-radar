@@ -14,13 +14,15 @@ Status: under construction, Phase 1. See `docs/` as it fills in.
 
 ## Quick start (self-host)
 
-Needs **Node 22 or newer and npm 11 or newer**. `.nvmrc` pins the Node major and
+Needs **Node 22.13 or newer and npm 11 or newer**. (22.13 is the lowest
+Node that every dependency accepts: `vite` and `rolldown` need 22.12, and
+`eslint-visitor-keys` needs 22.13.) `.nvmrc` pins the Node major and
 `packageManager` in `package.json` pins the exact npm. Node 22 still ships npm 10,
 which cannot read this repository's lockfile, so upgrade npm once after installing
 Node:
 
 ```bash
-nvm use                 # or install Node 22+ however you prefer
+nvm install 22          # installs the latest 22.x; or install Node 22.13+ your own way
 npm install -g npm@11
 npm --version           # 11.x
 ```
