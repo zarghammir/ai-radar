@@ -1,3 +1,16 @@
+/**
+ * Parameters dropped on every host.
+ *
+ * A deliberate trade, not an oversight: each of these is a conventional
+ * campaign or referrer tag, so two URLs differing only by one are the same
+ * page. `source` and `ref` are the widest of them and would collapse a site
+ * that used either as a real query parameter. That is accepted; anything
+ * host-specific belongs in HOST_TRACKING_PARAMS below instead, because a rule
+ * that discards information for a whole host loses pages rather than noise.
+ *
+ * Everything else canonicalizeUrl removes is a true equivalence rather than a
+ * discard: scheme, fragment, a www or m prefix, a trailing slash, index.html.
+ */
 const TRACKING_PARAMS = new Set([
   "utm_source",
   "utm_medium",
@@ -51,8 +64,13 @@ export function canonicalizeUrl(input: string): string {
   if (u.hostname === "arxiv.org" || u.hostname === "export.arxiv.org") {
     u.hostname = "arxiv.org";
     const m = u.pathname.match(/\/(?:abs|pdf|html)\/([\w.\-/]+?)(?:v\d+)?(?:\.pdf)?\/?$/);
-    if (m) u.pathname = `/abs/${m[1]}`;
-    u.search = "";
+    if (m) {
+      u.pathname = `/abs/${m[1]}`;
+      // Only a paper URL's query is noise. Clearing it for the whole host also
+      // cleared it for listing and search pages, whose position lives in the
+      // query, collapsing distinct pages onto one canonical URL.
+      u.search = "";
+    }
   }
 
   // Drop tracking params, keep the rest sorted for stability.

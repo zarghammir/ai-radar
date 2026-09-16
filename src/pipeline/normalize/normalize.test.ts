@@ -36,6 +36,22 @@ describe("canonicalizeUrl", () => {
       "https://example.com/a?b=1",
     );
   });
+  it("keeps the query on an arXiv page that is not a paper", () => {
+    // A listing carries its position in the query. Clearing it collapses two
+    // pages onto one canonical url, and because the fingerprint is built from
+    // that url under a unique index, the second page is silently dropped.
+    const first = canonicalizeUrl("https://arxiv.org/list/cs.AI/recent?skip=0&show=50");
+    const second = canonicalizeUrl("https://arxiv.org/list/cs.AI/recent?skip=50&show=50");
+    expect(first).not.toBe(second);
+    expect(first).toContain("skip=0");
+    expect(second).toContain("skip=50");
+    expect(fingerprintFor("hn", first)).not.toBe(fingerprintFor("hn", second));
+  });
+  it("still clears the query on an arXiv paper url", () => {
+    expect(canonicalizeUrl("https://arxiv.org/abs/2509.01234v2?context=cs.LG")).toBe(
+      "https://arxiv.org/abs/2509.01234",
+    );
+  });
   it("maps twitter to x.com", () => {
     expect(canonicalizeUrl("https://twitter.com/openai/status/1?s=20")).toBe(
       "https://x.com/openai/status/1",
