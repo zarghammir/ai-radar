@@ -123,8 +123,13 @@ jobs:
         run: |
           cp .env.example .env
           sed -i "s|^INTERNAL_API_SECRET=.*|INTERNAL_API_SECRET=$(openssl rand -hex 32)|" .env
-          if grep -q '^INTERNAL_API_SECRET=change-me$' .env; then
-            echo "the placeholder secret was not replaced; the worker would refuse to start" >&2
+          # Assert what the value IS, not merely that it is not the placeholder:
+          # if the sed ever matched nothing — a renamed key, a reordered
+          # .env.example — the line would be absent entirely and a "not
+          # change-me" check would pass on a file with no secret at all.
+          if ! grep -qE '^INTERNAL_API_SECRET=[0-9a-f]{64}$' .env; then
+            echo "INTERNAL_API_SECRET is not a 64-character hex secret; the worker would refuse to start" >&2
+            grep -n '^INTERNAL_API_SECRET=' .env >&2 || echo "  (no INTERNAL_API_SECRET line at all)" >&2
             exit 1
           fi
           echo "INTERNAL_API_SECRET generated for the smoke"
@@ -176,15 +181,25 @@ jobs:
           # compose service wants. Without this flag, the day that worker lands
           # this step stops exiting and hangs until the job timeout — and the
           # failure would look like #5's fault rather than this command's.
-          # It is a no-op today: the not-implemented path ignores arguments.
+          # No longer a no-op: the worker exists and this flag is what makes it
+          # run one pass and stop instead of looping forever.
           OUT="$(docker compose run --rm worker --once 2>&1)"
           CODE=$?
           set -e
           echo "$OUT"
           echo "worker exit code: $CODE"
           if [ "$CODE" -eq 0 ]; then
-            echo "$OUT" | grep -q "\[worker\] running one ingestion pass" \
-              || { echo "worker exited 0 without running a pass" >&2; exit 1; }
+            # Assert the SUMMARY, not the launch. "[worker] running one ingestion
+            # pass" is printed by docker/worker-entrypoint.sh in the shell just
+            # before it execs the worker, so it proves the bundle started and
+            # nothing more: a pass skipped because another ingest holds the
+            # advisory lock prints a different line, exits 0, and would land
+            # here looking like a success. The "total:" line comes from
+            # formatTotalLine and cannot be printed unless a pass completed.
+            # [1-9] floors the source count, so a pass over zero sources — a
+            # database that seeded nothing — fails here too.
+            echo "$OUT" | grep -qE "^total: [1-9][0-9]* sources" \
+              || { echo "worker exited 0 without completing a pass" >&2; exit 1; }
             echo "RESULT: the worker ran a pass."
           elif [ "$CODE" -eq 78 ]; then
             echo "$OUT" | grep -q "NOT IMPLEMENTED: this image contains no worker entry" \
