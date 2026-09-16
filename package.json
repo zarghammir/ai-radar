@@ -3,22 +3,19 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "postinstall": "next typegen",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
-    "db:seed": "tsx src/db/seed.ts",
-    "db:studio": "drizzle-kit studio",
-    "worker": "tsx src/worker/main.ts",
-    "worker:once": "tsx src/worker/main.ts --once",
-    "ingest": "tsx src/worker/main.ts --once"
+    "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.126.0",
