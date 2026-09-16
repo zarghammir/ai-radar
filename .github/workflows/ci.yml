@@ -45,36 +45,37 @@ jobs:
 
     steps:
       - name: Check out the branch
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Node and the npm cache
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "22"
+          # One source of truth for the Node version, shared with contributors.
+          node-version-file: .nvmrc
           cache: npm
 
-      # The lockfile in this repo is written by npm 11. npm 10, which ships with
-      # Node 22, computes a different tree for it and refuses `npm ci` with
-      # "Missing: esbuild@0.28.2 from lock file". Reproduced on both: npm 10
-      # exits 1 and npm 11 exits 0 against this same lockfile.
-      - name: Pin npm to the version the lockfile was written with
+      # Node 22 ships npm 10, which cannot read this lockfile: npm 11 omits 27
+      # nested entries that npm 10 expects, so it reports "Missing: esbuild@…".
+      # The pin stays until the runner's bundled npm reaches 11. The exact
+      # version comes from packageManager in package.json, so there is one
+      # place to change it and it cannot drift from what contributors install.
+      - name: Pin npm to the version in packageManager
         run: |
-          npm install -g npm@11
+          NPM_VERSION="$(node -p "require('./package.json').packageManager.split('@')[1]")"
+          echo "packageManager pins npm $NPM_VERSION"
+          npm install -g "npm@${NPM_VERSION}"
           node -v
           npm -v
 
       - name: Install dependencies
         run: npm ci
 
-      # Next writes route helper types (LayoutProps, PageProps …) into
-      # .next/types, which is gitignored. Without this step a clean checkout
-      # cannot typecheck, and the failure looks like a real type error.
-      - name: Generate Next route types
-        run: npx next typegen
-
       - name: Lint
         run: npm run lint
 
+      # `typecheck` is `next typegen && tsc --noEmit`. The typegen half is not
+      # decoration: LayoutProps and friends live in gitignored .next/types, so a
+      # clean checkout cannot typecheck without it.
       - name: Typecheck
         run: npm run typecheck
 
