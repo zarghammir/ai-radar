@@ -344,6 +344,22 @@ withDb("API routes", () => {
       expect((d.sources as unknown as { key: string }[]).map((x) => x.key)).toEqual(["verge-ai"]);
     });
 
+    it("returns whyItMatters as null rather than leaving the key out", async () => {
+      // An omitted key and a null are not the same value to a client, and a
+      // list where the key is sometimes absent is worse than one where it is
+      // always present and sometimes null.
+      const src = await source("verge-ai");
+      await story({ slug: "plain", sourceIds: [src] });
+      const { GET } = await import("@/app/api/stories/[slug]/route");
+      const d = await body(
+        await GET(req("/api/stories/plain"), {
+          params: Promise.resolve({ slug: "plain" }),
+        } as never),
+      );
+      expect("whyItMatters" in d).toBe(true);
+      expect(d.whyItMatters).toBeNull();
+    });
+
     it("is a 404 for an unknown slug", async () => {
       const { GET } = await import("@/app/api/stories/[slug]/route");
       const res = await GET(req("/api/stories/nope"), {
@@ -377,6 +393,30 @@ withDb("API routes", () => {
       expect(data.hasMore).toBe(false);
       expect(data.nextCursor).toBeNull();
       expect(data.appliedFilters).toMatchObject({ since: "7d", sort: "newest" });
+    });
+
+    it("carries whyItMatters on every card, valued or null", async () => {
+      // Today renders this in a LIST, so it has to be on the card: fetching one
+      // story's detail per row to get it is the wrong shape for a list.
+      const src = await source("verge-ai");
+      const withIt = await story({ slug: "explained", sourceIds: [src] });
+      await story({ slug: "plain", sourceIds: [src] });
+      await sql.unsafe(`update stories set why_it_matters = $1 where id = $2`, [
+        "It is the first model to ship with this context window.",
+        withIt,
+      ]);
+
+      const { GET } = await import("@/app/api/radar/route");
+      const cards = (await body(await GET(req("/api/radar")))).stories as unknown as {
+        slug: string;
+        whyItMatters: string | null;
+      }[];
+      expect(cards).toHaveLength(2);
+      for (const c of cards) expect("whyItMatters" in c).toBe(true);
+      expect(cards.find((c) => c.slug === "explained")!.whyItMatters).toBe(
+        "It is the first model to ship with this context window.",
+      );
+      expect(cards.find((c) => c.slug === "plain")!.whyItMatters).toBeNull();
     });
 
     it("leaves hidden stories out of the list", async () => {
@@ -767,6 +807,22 @@ withDb("API routes", () => {
       const stories = data.stories as unknown as { readingMinutes: number }[];
       expect(stories).toHaveLength(data.count as unknown as number);
       expect(data.readingMinutes).toBe(stories.reduce((n, s) => n + s.readingMinutes, 0));
+    });
+
+    it("carries whyItMatters on brief cards too", async () => {
+      const src = await source("verge-ai");
+      const id = await story({
+        slug: "a",
+        sourceIds: [src],
+        lastActivityAt: new Date(Date.now() - 60_000),
+      });
+      await sql.unsafe(
+        `update stories set why_it_matters = 'Because it matters.' where id = ${id}`,
+      );
+      const { GET } = await import("@/app/api/brief/route");
+      const data = await body(await GET(req("/api/brief")));
+      const cards = data.stories as unknown as { whyItMatters: string | null }[];
+      expect(cards[0].whyItMatters).toBe("Because it matters.");
     });
 
     it("leaves out anything older than the window", async () => {

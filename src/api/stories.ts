@@ -30,6 +30,13 @@ export interface StoryCard {
   slug: string;
   title: string;
   summary: string | null;
+  /**
+   * On the card as well as the detail: Today shows it in a list, and a client
+   * cannot fetch one story's detail per row to get it. Null on every story
+   * until the Phase 2 summariser, and null rather than absent, because an
+   * omitted key and a null are not the same value to a client.
+   */
+  whyItMatters: string | null;
   excerpt: string | null;
   url: string | null;
   contentType: ContentType;
@@ -62,7 +69,6 @@ export interface StoryItem {
 }
 
 export interface StoryDetail extends StoryCard {
-  whyItMatters: string | null;
   keyPoints: string[];
   items: StoryItem[];
   timeline: {
@@ -188,6 +194,7 @@ export async function buildCards(db: Db, storyRows: StoryRow[]): Promise<StoryCa
       slug: s.slug,
       title: s.title,
       summary: s.summary,
+      whyItMatters: s.whyItMatters,
       excerpt,
       url: primary?.url ?? null,
       contentType: s.contentType,
@@ -257,7 +264,6 @@ export async function buildDetail(db: Db, slug: string): Promise<StoryDetail | n
 
   return {
     ...card,
-    whyItMatters: story.whyItMatters,
     keyPoints: story.keyPoints,
     items,
     timeline: ordered.map((r) => ({
