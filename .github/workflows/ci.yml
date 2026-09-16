@@ -151,7 +151,13 @@ jobs:
         run: |
           set -eu
           set +e
-          OUT="$(docker compose run --rm worker 2>&1)"
+          # --once is load-bearing, not decoration. Issue #5 gives the worker a
+          # loop mode and a one-pass mode, and the loop is the default the
+          # compose service wants. Without this flag, the day that worker lands
+          # this step stops exiting and hangs until the job timeout — and the
+          # failure would look like #5's fault rather than this command's.
+          # It is a no-op today: the not-implemented path ignores arguments.
+          OUT="$(docker compose run --rm worker --once 2>&1)"
           CODE=$?
           set -e
           echo "$OUT"
