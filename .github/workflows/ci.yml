@@ -5,11 +5,14 @@ on:
   push:
     branches: [main]
 
-# One run per branch. A new push cancels the previous run rather than paying
-# for two answers to the same question.
+# One run per ref. On a pull request a new push cancels the previous run rather
+# than paying for two answers to the same question. On main nothing is ever
+# cancelled: two merges landing inside a run's ~70 seconds share the ref
+# refs/heads/main, and cancelling there would leave the first commit with no
+# verdict and no way to tell which merge broke a later red.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
