@@ -16,7 +16,12 @@ import {
 // Verification (credibility of the claim) and content type (what kind of thing
 // it is) are deliberately separate fields. See docs/architecture.md.
 
-export const SOURCE_TIERS = ["PRIMARY", "HIGH_QUALITY_REPORTING", "COMMUNITY", "DISCOVERY"] as const;
+export const SOURCE_TIERS = [
+  "PRIMARY",
+  "HIGH_QUALITY_REPORTING",
+  "COMMUNITY",
+  "DISCOVERY",
+] as const;
 export const SOURCE_KINDS = [
   "rss",
   "hackernews",
@@ -107,7 +112,11 @@ export const rawItems = pgTable(
     contentType: contentTypeEnum("content_type").notNull(),
     /** Anything adapter-specific: HN points, arXiv authors/categories, stars … */
     metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
-    /** Dedupe key: sha256 of the canonical URL (or source+externalId when no URL). */
+    /**
+     * Dedupe key: sha256 of "<source key>|<canonical url>". Scoped to the
+     * source on purpose — the same article arriving from three sources must
+     * stay three rows, or there is nothing left to count as corroboration.
+     */
     fingerprint: text("fingerprint").notNull(),
     /** Assigned by the clusterer. Null until clustered. */
     storyId: integer("story_id"),
