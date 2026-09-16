@@ -20,6 +20,7 @@
   --soft: #585c62; /* summaries, labels                             */
   --faint: #e2e0d9; /* rules drawn on paper                          */
   --faint-2: #c9c7c0; /* empty meter segments, chip borders            */
+  --meta: #6e6a61; /* mono meta text on paper (5.0:1, both themes)  */
 
   /* --- ash: on the bench ------------------------------------------------ */
   --ash: #5a564e; /* chrome text on the bench (>=4.5:1 on --bg-2)  */

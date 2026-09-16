@@ -30,29 +30,41 @@ The current tab is an **orange bar plus a heavier label**. Content type is **a w
 Defined in `design/prototype/styles/tokens.css`. Dark is the world's native ground; light is
 the same bench in daylight. Both are authored, neither is a naive inversion.
 
-| Token        | Light     | Dark      | Role                                             |
-| ------------ | --------- | --------- | ------------------------------------------------ |
-| `--bg`       | `#E4E3DE` | `#0B0C0E` | the bench                                        |
-| `--bg-2`     | `#DAD8D2` | `#141518` | nav bars, sidebar, chrome wells                  |
-| `--paper`    | `#FFFFFF` | `#F3F3F1` | the print you read on — light in **both** themes |
-| `--edge`     | `#CBC9C2` | `#2A2B2E` | chrome hairlines, sprocket holes                 |
-| `--ink`      | `#17181B` | `#17181B` | headlines and body, on paper                     |
-| `--soft`     | `#585C62` | `#585C62` | summaries and labels, on paper                   |
-| `--faint`    | `#E2E0D9` | `#E2E0D9` | rules drawn on paper                             |
-| `--faint-2`  | `#C9C7C0` | `#C9C7C0` | empty meter segments, chip borders               |
-| `--ash`      | `#5A564E` | `#9A958A` | chrome text on the bench                         |
-| `--ash-hi`   | `#3D3A34` | `#D6D1C6` | chrome text that must carry weight               |
-| `--org`      | `#F0531C` | `#F0531C` | **reserved.** Fill only                          |
-| `--org-on`   | `#0B0C0E` | `#0B0C0E` | the only text colour allowed on an orange fill   |
-| `--org-text` | `#B3380B` | `#F0531C` | orange as text, darkened in light                |
+| Token        | Light     | Dark      | Role                                                      |
+| ------------ | --------- | --------- | --------------------------------------------------------- |
+| `--bg`       | `#E4E3DE` | `#0B0C0E` | the bench                                                 |
+| `--bg-2`     | `#DAD8D2` | `#141518` | nav bars, sidebar, chrome wells                           |
+| `--paper`    | `#FFFFFF` | `#F3F3F1` | the print you read on — light in **both** themes          |
+| `--edge`     | `#CBC9C2` | `#2A2B2E` | chrome hairlines, sprocket holes                          |
+| `--ink`      | `#17181B` | `#17181B` | headlines and body, on paper                              |
+| `--soft`     | `#585C62` | `#585C62` | summaries and labels, on paper                            |
+| `--faint`    | `#E2E0D9` | `#E2E0D9` | rules drawn on paper                                      |
+| `--faint-2`  | `#C9C7C0` | `#C9C7C0` | empty meter segments, chip borders                        |
+| `--ash`      | `#5A564E` | `#9A958A` | chrome text on the bench                                  |
+| `--ash-hi`   | `#3D3A34` | `#D6D1C6` | chrome text that must carry weight                        |
+| `--org`      | `#F0531C` | `#F0531C` | **reserved.** Fill only                                   |
+| `--org-on`   | `#0B0C0E` | `#0B0C0E` | the only text colour allowed on an orange fill            |
+| `--meta`     | `#6E6A61` | `#6E6A61` | mono meta text on paper (5.0:1, constant)                 |
+| `--org-text` | `#B3380B` | `#F0531C` | orange as text, **on the bench only** — see the law below |
 
 **Paper stays light in dark mode on purpose.** Reading happens on the print; the dark ground
 is the bench it sits on. This is why the app is comfortable at 7am without being a dark-mode
 compromise: body text is always dark ink on light paper, at roughly 15:1.
 
-`--org-text` exists only because `#F0531C` as _text_ on the light bench measures 2.6:1. It is
-now used nowhere for state — the orange **bar** marks the current item instead — and remains
-available for a rare inline emphasis.
+`--org-text` exists only because `#F0531C` as _text_ on the light bench measures 2.74:1. It
+is used nowhere for state — the orange **bar** marks the current item instead — and as of the
+review of PR #23 it is used nowhere in the prototype's CSS at all.
+
+> **Second palette law: orange as text never goes on paper.** `--org-text` is safe on the
+> bench in both themes (4.69:1 light, 5.55:1 dark) and on `--paper` in light only (6.02:1).
+> On `--paper` in **dark** it is `#F0531C` and measures **3.17:1**, which fails AA for normal
+> text. The external-link arrow shipped that way and the reviewer caught it; it is now
+> `--soft`. Anything drawn on paper takes `--ink`, `--soft` or `--meta`. If orange on paper is
+> ever genuinely needed, add a `--org-text-on-paper` token that clears 4.5:1 in _both_ themes
+> rather than reusing this one.
+
+This matters for issue #12: the app shell is built from this document, and the prototype's one
+accessibility failure was exactly this pairing.
 
 ### Charts
 
@@ -166,8 +178,35 @@ The bar is **WCAG 2.2 AA**, recorded from the owner's own words: "I just want an
 that everyone can use."
 
 Measured on the shipped prototype across 24 states (5 screens plus first-run × 2 breakpoints ×
-2 themes): **1768 text elements checked, 0 contrast failures** against 4.5:1 for body text
-and 3:1 for large text, computed from rendered colours with the real ancestor background.
+2 themes) by `design/contrast-audit.js`, which is in the repository so the numbers can be
+reproduced and disputed:
+
+|                                                | measured |
+| ---------------------------------------------- | -------- |
+| states rendered                                | 24 / 24  |
+| meaningful text elements                       | 1766     |
+| decorative `·` separators, reported separately | 112      |
+| total text nodes (1766 + 112)                  | 1878     |
+| contrast failures                              | **0**    |
+| horizontal overflow                            | 0 px     |
+| real external anchors                          | 88       |
+
+Thresholds are 4.5:1 for normal text and 3:1 at ≥24px or ≥18.66px bold, computed from rendered
+colours with translucent foregrounds composited and the ancestor chain composited to an opaque
+background. Per-screen element counts: Today 131 phone / 157 laptop, Radar 119 / 134, Story 56
+/ 65, Saved 34 / 43, Settings 69 / 78, First run 22 / 31.
+
+**An earlier version of this section claimed "1768 text elements, 0 contrast failures" and that
+was wrong.** The audit script skipped any element whose text was shorter than two characters,
+which excluded the single-glyph `↗` external-link arrow — the one element that was failing, at
+3.17:1 in dark. A filter that removes the failing case makes a measurement agree with itself.
+The script now counts text of any length, and reverting the arrow fix makes it report exactly
+the 8 failures the reviewer found, which is what proves it can fail at all.
+
+The 112 `·` separators in the Radar list are `--edge` at 10px (1.29:1 light, 1.38:1 dark). WCAG
+exempts pure decoration so they are not counted as failures, but they are counted and shown
+rather than dropped. They are announced by a screen reader as "middle dot" 28 times per list;
+drawing them as pseudo-elements or marking them `aria-hidden` is queued for #12.
 
 - Verification, content type and current-tab state each carry a non-colour signal.
 - Every control is a real `<button>` or `<a>`; focus is a 2px orange outline with 2px offset.

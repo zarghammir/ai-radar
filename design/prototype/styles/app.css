@@ -183,7 +183,7 @@
   margin: var(--s4) 0 0;
   font-family: var(--face-mono);
   font-size: var(--t-meta);
-  color: #6e6a61;
+  color: var(--meta);
   font-variant-numeric: tabular-nums;
   flex-wrap: wrap;
 }
@@ -216,7 +216,7 @@
   margin-left: auto;
   font-family: var(--face-mono);
   font-size: var(--t-meta);
-  color: #6e6a61;
+  color: var(--meta);
   font-variant-numeric: tabular-nums;
 }
 .spark svg,
@@ -249,7 +249,7 @@
   margin-left: auto;
   font-family: var(--face-mono);
   font-size: var(--t-meta);
-  color: #6e6a61;
+  color: var(--meta);
 }
 .read:hover u {
   background: var(--org);
@@ -344,10 +344,6 @@
   font-weight: 600;
   letter-spacing: 0.09em;
 }
-.tabs button[aria-current="page"] {
-  color: var(--org-text);
-}
-
 /* ---------- charts ------------------------------------------------------ */
 .chart {
   margin: var(--s4) var(--s5) 0 var(--rail-w);
@@ -589,7 +585,7 @@
 .tl time {
   font-family: var(--face-mono);
   font-size: 11px;
-  color: #6e6a61;
+  color: var(--meta);
   flex: 0 0 44px;
   padding-top: 2px;
   font-variant-numeric: tabular-nums;
@@ -617,11 +613,13 @@
   margin-left: auto;
   font-family: var(--face-mono);
   font-size: var(--t-meta);
-  color: #6e6a61;
+  color: var(--meta);
 }
 .srcs a u {
   text-decoration: none;
-  color: var(--org-text);
+  /* NOT --org-text: on paper it is 3.17:1 in dark. See the palette law in
+     docs/DESIGN.md section 2 — orange as text never goes on paper. */
+  color: var(--soft);
   font-weight: 700;
 }
 
@@ -674,7 +672,7 @@
   margin: 5px 0 0;
   font-family: var(--face-mono);
   font-size: var(--t-meta);
-  color: #6e6a61;
+  color: var(--meta);
   display: flex;
   gap: var(--s2);
   flex-wrap: wrap;
