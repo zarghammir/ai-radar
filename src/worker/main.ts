@@ -53,9 +53,14 @@ async function runPass(): Promise<number> {
     return 0;
   }
 
-  for (const source of outcome.result.bySource) console.log(formatSourceLine(source));
-  console.log(formatTotalLine(outcome.result, Date.now() - started));
-  return exitCodeFor(outcome.result);
+  const { ingest, ranked } = outcome.result;
+  for (const source of ingest.bySource) console.log(formatSourceLine(source));
+  console.log(formatTotalLine(ingest, Date.now() - started));
+  // Said out loud because ingesting without scoring fills the database and
+  // leaves the screen empty, and the two are indistinguishable from the counts
+  // above.
+  console.log(`[worker] scored ${ranked.ranked} stor${ranked.ranked === 1 ? "y" : "ies"}.`);
+  return exitCodeFor(ingest);
 }
 
 async function main(): Promise<void> {

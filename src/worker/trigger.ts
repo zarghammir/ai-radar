@@ -46,13 +46,14 @@ export async function handleIngestTrigger(request: Request, deps: TriggerDeps): 
     );
   }
 
-  const result = outcome.result;
+  const { ingest, ranked } = outcome.result;
   return Response.json({
     ran: true,
-    sources: result.bySource.length,
-    fetched: result.bySource.reduce((sum, r) => sum + r.fetched, 0),
-    new: result.itemsInserted,
-    stories: result.storiesCreated,
-    failed: result.bySource.filter((r) => r.error).length,
+    sources: ingest.bySource.length,
+    fetched: ingest.bySource.reduce((sum, r) => sum + r.fetched, 0),
+    new: ingest.itemsInserted,
+    stories: ingest.storiesCreated,
+    scored: ranked.ranked,
+    failed: ingest.bySource.filter((r) => r.error).length,
   });
 }
