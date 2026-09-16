@@ -92,3 +92,12 @@ describe("rankStory numeric safety", () => {
     expect(Number.isFinite(r.score)).toBe(true);
   });
 });
+
+describe("rankStory date safety", () => {
+  it("never produces a NaN score from an unparseable last activity date", () => {
+    const r = rankStory({ ...base, lastActivityAt: new Date("not a date") }, now);
+    expect(Number.isFinite(r.score)).toBe(true);
+    expect(Number.isFinite(r.components.recency)).toBe(true);
+    expect(r.components.recency).toBe(WEIGHTS.recencyMax);
+  });
+});

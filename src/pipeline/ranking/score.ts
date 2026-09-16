@@ -57,7 +57,12 @@ export const WEIGHTS = {
 export function rankStory(input: RankInput, now: Date = new Date()): RankResult {
   const c: ScoreComponents = {};
 
-  const hours = Math.max(0, (now.getTime() - input.lastActivityAt.getTime()) / 3_600_000);
+  // An unparseable date yields NaN here, and one NaN component turns the whole
+  // additive score into NaN. Treat an unusable date as "just now" rather than
+  // poisoning the score; normalizeItem already stops invalid dates upstream,
+  // so this is the second line of defence, not the first.
+  const ageHours = (now.getTime() - input.lastActivityAt.getTime()) / 3_600_000;
+  const hours = Number.isFinite(ageHours) ? Math.max(0, ageHours) : 0;
   c.recency = round(WEIGHTS.recencyMax * Math.pow(0.5, hours / WEIGHTS.recencyHalfLifeHours));
 
   const tiers = new Set(input.sourceTiers);
