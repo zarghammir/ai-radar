@@ -33,7 +33,10 @@ export function canonicalizeUrl(input: string): string {
   }
   u.protocol = "https:";
   u.hash = "";
-  u.hostname = u.hostname.toLowerCase().replace(/^www\./, "").replace(/^m\./, "");
+  u.hostname = u.hostname
+    .toLowerCase()
+    .replace(/^www\./, "")
+    .replace(/^m\./, "");
   if (u.hostname === "mobile.twitter.com" || u.hostname === "twitter.com") u.hostname = "x.com";
 
   // arXiv: strip version suffix and unify abs/pdf/html
@@ -55,7 +58,8 @@ export function canonicalizeUrl(input: string): string {
 
   // Trailing slash and default ports
   if (u.pathname.length > 1) u.pathname = u.pathname.replace(/\/+$/, "");
-  if (u.pathname.endsWith("/index.html")) u.pathname = u.pathname.slice(0, -"/index.html".length) || "/";
+  if (u.pathname.endsWith("/index.html"))
+    u.pathname = u.pathname.slice(0, -"/index.html".length) || "/";
   return u.toString();
 }
 

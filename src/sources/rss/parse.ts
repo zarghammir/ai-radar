@@ -26,8 +26,7 @@ function text(node: Node): string | null {
   if (typeof node === "object") {
     const n = node as Record<string, unknown>;
     if (typeof n["#cdata"] === "string") return n["#cdata"] as string;
-    if (typeof n["#text"] === "string" || typeof n["#text"] === "number")
-      return String(n["#text"]);
+    if (typeof n["#text"] === "string" || typeof n["#text"] === "number") return String(n["#text"]);
   }
   return null;
 }
@@ -92,8 +91,7 @@ export function parseFeed(xml: string): { title: string | null; items: ParsedFee
   // RSS 2.0
   const rss = doc.rss as Record<string, unknown> | undefined;
   const channel = (rss?.channel ?? (doc["rdf:RDF"] as Record<string, unknown>)?.channel) as
-    | Record<string, unknown>
-    | undefined;
+    Record<string, unknown> | undefined;
   const rdf = doc["rdf:RDF"] as Record<string, unknown> | undefined;
   const items = asArray((rss ? channel?.item : rdf?.item) as Node[]) as Record<string, unknown>[];
   return {
