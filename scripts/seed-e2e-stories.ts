@@ -32,6 +32,11 @@ import { and, eq } from "drizzle-orm";
 /** Enough for the browser scripts, which ask for three ids and a brief. */
 const MIN_STORIES = 4;
 
+/**
+ * Dealt round-robin across whatever is enabled, so the count does not depend on
+ * how many sources the database happens to have.
+ */
+
 const ITEMS = [
   {
     title: "Anthropic publishes a threat report on agentic misuse",
@@ -84,11 +89,20 @@ async function main() {
   // would seed a database whose stories are outside the window Today asks for.
   const now = new Date();
 
-  // ENABLED sources only, which is what runIngest itself iterates. The shipped
-  // catalogue enables exactly ONE — openai-blog — and every other source is
-  // present but off, so a seed keyed on "every rss source" writes feeds nobody
-  // fetches. That is how the first version of this script produced one story
-  // and tripped its own floor.
+  // ENABLED sources only, which is what runIngest itself iterates — and the
+  // reason is that A DEVELOPER'S DATABASE DOES NOT MATCH THE SHIPPED ONE.
+  //
+  // The shipped catalogue has seventeen sources and enables all of them:
+  // seed-data.ts sets `enabled` on none of them and the column defaults to
+  // true. The database I first ran this against had exactly ONE row in
+  // `sources`, because it predates most of the catalogue and had never been
+  // re-seeded. Feeds keyed on "every rss source" were therefore written for
+  // sources that did not exist locally, one story arrived, and the floor below
+  // caught it.
+  //
+  // Keying on what is actually enabled here-and-now makes the seed independent
+  // of both facts: it writes the same number of stories against a full
+  // catalogue, a partial one, or a developer's half-migrated copy.
   const feeds = await db
     .select()
     .from(sources)
