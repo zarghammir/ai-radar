@@ -15,10 +15,30 @@
 export function matchesKeyword(text: string, keyword: string): boolean {
   const kw = keyword.toLowerCase().trim();
   if (!kw) return false;
-  const haystack = ` ${text.toLowerCase().replace(/[^a-z0-9.+\- ]/g, " ")} `;
-  return kw.length <= 4
-    ? haystack.includes(` ${kw} `) || haystack.includes(` ${kw}s `)
-    : haystack.includes(kw);
+  const cleaned = text.toLowerCase().replace(/[^a-z0-9.+\- ]/g, " ");
+
+  // Long keywords match as substrings of the text AS WRITTEN, hyphens and all.
+  // This branch must not gain a word boundary: eighteen keywords across the two
+  // vocabularies contain a hyphen — "text-to-video", "gpt-5", "dall-e",
+  // "self-driving", "arc-agi" — and "apache 2.0" needs its dot. Splitting here
+  // would make every one of them unmatchable.
+  if (kw.length > 4) return ` ${cleaned} `.includes(kw);
+
+  // Short tokens still match only as whole words, because "ai" as a substring
+  // hits "chain", "said" and "detail". But A HYPHEN IS A WORD BOUNDARY, and
+  // treating it as an ordinary character is why "AI-powered", "GPT-5" and
+  // "LLM-based" were never recognised as AI at all — dropped at the Hacker
+  // News gate before a reader could see them (#73).
+  //
+  // Only hyphens are removed here, not the dot: "a.i." is four characters and
+  // therefore a short token, and it is the one short keyword with punctuation
+  // in it. Nothing is lost by splitting on hyphens — NO short keyword in
+  // either vocabulary contains one, so there is no match to cost.
+  //
+  // This does not widen "ai" into ordinary words: "Thai-food" becomes
+  // "thai food", where "ai" is still inside a word rather than beside one.
+  const words = ` ${cleaned.replace(/-/g, " ")} `;
+  return words.includes(` ${kw} `) || words.includes(` ${kw}s `);
 }
 
 export function matchesAnyKeyword(text: string, keywords: string[]): boolean {
