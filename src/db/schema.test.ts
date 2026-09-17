@@ -14,6 +14,10 @@ import { CONTENT_TYPES, VERIFICATION_LEVELS, rawItems, stories } from "./schema"
  * number in a document rots silently: nothing fails when a table is added, the
  * sentence simply becomes wrong and stays wrong. Adding a table is fine — update
  * both. What this refuses is the count drifting with nobody noticing.
+ *
+ * Note what this does NOT do: it cannot read the document. Bump the literal
+ * below and leave the prose alone and it rots exactly as before, with a green
+ * suite over it. A pin on the code is not a pin on the prose that cites it.
  */
 describe("the schema's shape is what the architecture document says", () => {
   it("has the number of tables docs/architecture.md claims", () => {

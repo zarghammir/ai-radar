@@ -90,12 +90,12 @@ ones — `params.ts` turns a query string into typed values, `http.ts` defines t
 single response shape. Read the directory for the current set. Errors carry a
 machine-readable `code` and a human `message`; clients branch on the code.
 
-**No screen calls these route handlers.** Nothing under `src/app`, `src/components`
-or `src/lib` fetches `/api/…`; the Today page reads through `src/lib/api/client.ts`,
-which serves fixtures under an explicit `NEXT_PUBLIC_USE_FIXTURES` mode rather
-than a fallback. So the API is finished and exercised by its own tests before it
-has a caller — **which is worth knowing before you conclude a route is dead and
-delete it.**
+**Screens do not call route handlers directly.** They go through
+`src/lib/api/client.ts`, and its `/api/…` calls are inert while
+`NEXT_PUBLIC_USE_FIXTURES` is on — the calls exist, and one variable activates
+them. So the API is finished and exercised by its own tests before it has a live
+caller, **which is worth knowing before you conclude a route is dead and delete
+it.**
 
 > **Why fixtures are a mode and not a fallback:** a client that tries the network
 > and quietly uses fixtures on a 404 cannot tell "this route does not exist yet"
@@ -140,8 +140,10 @@ exceptions list.
 
 ## Data model, in one paragraph
 
-Ten tables — a count `src/db/schema.test.ts` now floors, so this sentence fails
-a test rather than rotting quietly. `sources` is the catalogue; `raw_items` is one row per thing a source
+Ten tables — a count `src/db/schema.test.ts` floors, so it can no longer drift
+**silently**: adding a table stops the suite and tells you to update both. The
+test cannot read this page, so keeping the two in step is still a person's job.
+`sources` is the catalogue; `raw_items` is one row per thing a source
 produced; `stories` cluster items that are the same event; `topics` and
 `story_topics` tag them; `user_preferences`, `saved_items` and `read_state` are
 the single local user; `ingest_runs` is one row per source per pass, with counts
