@@ -21,6 +21,7 @@
  *   - a QUIET DAY and an EMPTY DAY as whole scenarios.
  */
 import { takeWithinReadingTime } from "@/api/reading-budget";
+import { typesForView, type BriefView } from "@/lib/api/views";
 import type { BriefResponse, SourceRef, StoryCard } from "@/lib/api/types";
 
 const openai: SourceRef = {
@@ -306,10 +307,15 @@ const WINDOW = {
   timezone: "America/Toronto",
 };
 
-function brief(stories: StoryCard[], length: BriefResponse["length"]): BriefResponse {
+function brief(
+  stories: StoryCard[],
+  length: BriefResponse["length"],
+  view: BriefView = "all",
+): BriefResponse {
   return {
     window: WINDOW,
     length,
+    view,
     count: stories.length,
     readingMinutes: stories.reduce((total, s) => total + s.readingMinutes, 0),
     stories,
@@ -322,12 +328,22 @@ function brief(stories: StoryCard[], length: BriefResponse["length"]): BriefResp
  * if the window has any. Mirrors the rule in docs/api.md so the switch behaves
  * here the way it will behave against the real route.
  */
-export function fixtureBrief(length: BriefResponse["length"] = "10"): BriefResponse {
-  const ranked = [...FIXTURE_STORIES].sort((a, b) => b.score - a.score);
+export function fixtureBrief(
+  length: BriefResponse["length"] = "10",
+  view: BriefView = "all",
+): BriefResponse {
+  // Filtered BEFORE the budget, exactly as the server does it — otherwise a
+  // ten-minute brief would spend its budget on stories the view excludes and
+  // return three. The fixture path and the live path have to make the same
+  // mistake or neither, or fixture mode stops being a way to see the product.
+  const types = typesForView(view);
+  const ranked = FIXTURE_STORIES.filter((story) => types.includes(story.contentType)).sort(
+    (a, b) => b.score - a.score,
+  );
   // The SERVER's rule, imported rather than reimplemented. A copy of it here
   // used `continue` where the server uses `break`, which agreed only because
   // every fixture story is one minute — see src/api/reading-budget.ts.
-  return brief(takeWithinReadingTime(ranked, length), length);
+  return brief(takeWithinReadingTime(ranked, length), length, view);
 }
 
 /** A quiet day: the brief is real but thin. */

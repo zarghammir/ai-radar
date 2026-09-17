@@ -9,6 +9,7 @@ function briefOf(stories: Partial<StoryCard>[], length: BriefResponse["length"])
   return {
     window: fixtureBrief("all").window,
     length,
+    view: "all",
     count: full.length,
     readingMinutes: full.reduce((t, s) => t + s.readingMinutes, 0),
     stories: full,

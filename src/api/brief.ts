@@ -1,5 +1,6 @@
-import { and, desc, gte } from "drizzle-orm";
+import { and, desc, gte, inArray } from "drizzle-orm";
 import type { Db } from "@/db/client";
+import type { ContentType } from "@/db/schema";
 import { stories } from "@/db/schema";
 import { ApiError } from "./http";
 import type { BriefLength } from "./reading-budget";
@@ -164,12 +165,35 @@ export const BRIEF_CANDIDATE_LIMIT = 200;
  * another argument.
  *
  * Every key defaults NARROW, and omitting the object entirely is exactly the
- * behaviour this function had before any of them existed.
+ * behaviour this function had before any of them existed. #102 took that
+ * instruction literally on the merge: `types` arrived on this branch as a third
+ * POSITIONAL parameter and is a key here instead.
+ *
+ * THE TWO AXES ARE ORTHOGONAL AND BOTH APPLY. `includeAdjacent` is about
+ * whether a story is AI-related at all; `types` is about which KIND of thing it
+ * is. They narrow on different columns and neither substitutes for the other,
+ * so the query carries both conditions rather than choosing between them.
  */
 export interface BriefOptions {
   /** Include adjacent tech — stories kept deliberately that never used AI
    *  vocabulary. False is the front door: the app is an AI radar. */
   includeAdjacent?: boolean;
+
+  /**
+   * Which content types the brief may contain. OMITTING IT PRESERVES TODAY'S
+   * BEHAVIOUR: every stored type.
+   *
+   * A list rather than a view name on purpose — this module decides what a
+   * brief IS, not what leads on the front door, and a view is a product
+   * decision that belongs to the caller (see src/lib/api/views.ts).
+   *
+   * The filter is applied IN THE QUERY, before the candidate limit and
+   * therefore before the reading-time budget its caller applies. Filtering
+   * afterwards would return three stories for a ten-minute brief, because the
+   * budget would already have been spent on rows the reader never sees — a bug
+   * a reader would feel and never be able to describe.
+   */
+  types?: readonly ContentType[];
 }
 
 export async function storiesInWindow(
@@ -177,7 +201,7 @@ export async function storiesInWindow(
   window: BriefWindow,
   options: BriefOptions = {},
 ): Promise<StoryCard[]> {
-  const { includeAdjacent = false } = options;
+  const { includeAdjacent = false, types } = options;
   const rows = await db
     .select()
     .from(stories)
@@ -186,6 +210,7 @@ export async function storiesInWindow(
         gte(stories.lastActivityAt, window.from),
         notHidden(),
         ...(includeAdjacent ? [] : [notAdjacentTech()]),
+        types && types.length > 0 ? inArray(stories.contentType, [...types]) : undefined,
       ),
     )
     .orderBy(desc(stories.score), desc(stories.id))

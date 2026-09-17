@@ -8,6 +8,7 @@ import {
 } from "@/api/brief";
 import { getPreferences } from "@/api/reader";
 import { handle, json } from "@/api/http";
+import { parseView, typesForView } from "@/lib/api/views";
 
 export async function GET(request: Request): Promise<Response> {
   return handle(async () => {
@@ -23,8 +24,12 @@ export async function GET(request: Request): Promise<Response> {
       DEFAULT_BRIEF_LENGTH,
     );
 
+    // The same filter the page applies, from the same function, so the two
+    // cannot disagree about what a brief is. Omitted means everything stored,
+    // which is what this route returned before #102.
+    const view = parseView(new URL(request.url).searchParams.get("view")) ?? "all";
     const window = briefWindow(now, prefs.briefTime, prefs.timezone);
-    const ranked = await storiesInWindow(getDb(), window);
+    const ranked = await storiesInWindow(getDb(), window, { types: typesForView(view) });
     const stories = takeWithinReadingTime(ranked, length);
 
     return json({
@@ -35,6 +40,7 @@ export async function GET(request: Request): Promise<Response> {
         timezone: window.timezone,
       },
       length,
+      view,
       // Both describe the response, not the window.
       count: stories.length,
       readingMinutes: stories.reduce((n, s) => n + s.readingMinutes, 0),

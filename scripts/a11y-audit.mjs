@@ -21,7 +21,11 @@ const require = createRequire(import.meta.url);
 const base = process.argv[2] || "http://127.0.0.1:3210";
 const AXE = readFileSync(require.resolve("axe-core/axe.min.js"), "utf8");
 
-const ROUTES = ["/", "/radar", "/research", "/releases", "/saved", "/settings", "/welcome"];
+// Research and Releases are gone since #102 — they are positions on Today's
+// view control now, not destinations. Sweeping a deleted route would 404 and
+// the landing-path floor would report it as landing somewhere else, which is
+// true but unhelpful.
+const ROUTES = ["/", "/radar", "/saved", "/settings", "/welcome"];
 
 /**
  * The reader this audit drives: someone who has finished onboarding and has
@@ -55,13 +59,31 @@ const MARKS_TEMPLATE = [
   },
 ];
 /**
- * AUDIT_CONTROL=narrow squeezes the phone viewport until the six-tab bar MUST
- * clip. It exists so the bar gate can be seen going red: a gate that has only
+ * AUDIT_CONTROL=narrow squeezes the phone viewport until the bar MUST clip. It exists so the bar gate can be seen going red: a gate that has only
  * ever passed is not yet known to be able to fail. A control run labels itself
  * in the output so it can never be mistaken for a real one.
  */
 const CONTROL = process.env.AUDIT_CONTROL || null;
-const PHONE_WIDTH = CONTROL === "narrow" ? 200 : 390;
+
+/**
+ * The control's width, and it had to MOVE when #102 removed two tabs.
+ *
+ * This was 200px when the bar carried six tabs — about 33px each, which forced
+ * every label to clip. Four tabs at 200px get about 50px each, which is roughly
+ * the width of the word "Settings" at this size. So the old number sits right
+ * on the boundary: the control might still redden, and it might quietly stop,
+ * and those look identical in a green run.
+ *
+ * A CONTROL THAT SILENTLY STOPS GOING RED IS WORSE THAN NO CONTROL, because the
+ * gate it guards keeps reporting a pass that nobody can any longer distinguish
+ * from an untested one. So the width drops to keep the same pressure per tab.
+ *
+ * UNVERIFIED AT FOUR TABS. The arithmetic says 160px gives ~40px a tab and must
+ * clip; nobody has watched it do so. The next run with a browser has to see
+ * this control go red before its green means anything again.
+ */
+const CONTROL_WIDTH = 160;
+const PHONE_WIDTH = CONTROL === "narrow" ? CONTROL_WIDTH : 390;
 
 const SIZES = [
   { name: "phone", width: PHONE_WIDTH, height: 780 },
@@ -69,7 +91,11 @@ const SIZES = [
 ];
 
 /** The bar is lg:hidden, so it belongs in exactly the phone states. */
-const EXPECTED_TABS = 6;
+// Four since #102 removed Research and Releases from the navigation. This is
+// asserted rather than derived on purpose: the bar's geometry is the thing
+// under test, so a count read from the same config the bar renders from would
+// agree with it however wrong both were.
+const EXPECTED_TABS = 4;
 const THEMES = ["light", "dark"];
 
 import { launchBrowser, requireServer } from "./lib/browser.mjs";
@@ -141,8 +167,10 @@ try {
         }
 
         /**
-         * The bottom bar carries all six surfaces below lg. At 390px that is
-         * ~65px per tab, so it has to be measured rather than eyeballed.
+         * The bottom bar carries every surface below lg. It has to be
+         * measured rather than eyeballed — four tabs at 390px have more room
+         * each than six did, which makes the narrow control weaker, not
+         * stronger. See CONTROL_WIDTH.
          *
          * Measured on the box that actually clips — the <nav> itself and each
          * label — not a wrapper, and against documentElement.clientWidth,
@@ -350,6 +378,7 @@ console.log(
       bottomBar: {
         control: CONTROL,
         phoneViewport: PHONE_WIDTH,
+        controlWidthUnverifiedAtFourTabs: CONTROL === "narrow" ? CONTROL_WIDTH : null,
         floorPassed: floorFailures.length === 0,
         floorFailures,
         expectedBarStates,

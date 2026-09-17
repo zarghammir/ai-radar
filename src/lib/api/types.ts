@@ -94,6 +94,8 @@ export type BriefLengthParam = "5" | "10" | "all";
 export interface BriefResponse {
   window: BriefWindow;
   length: BriefLengthParam;
+  /** Which view produced this. "all" is everything stored. See views.ts. */
+  view: "built" | "all";
   /** Describes the RESPONSE, not the window. */
   count: number;
   readingMinutes: number;
