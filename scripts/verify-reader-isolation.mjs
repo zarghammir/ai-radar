@@ -117,7 +117,47 @@ try {
    * lengths must not move each other's — the identical property as the saves,
    * one field over, which is the whole reason that rule exists.
    */
+  /* THE CONTROL GAP, NAMED WHERE IT APPLIES RATHER THAN ONLY IN A PR BODY.
+   *
+   * The saves assertion above has a control: VERIFY_CONTROL=shared-identity
+   * gives the second browser the first one's storage and the assertion reddens.
+   * THAT CONTROL CANNOT REDDEN THE ONE BELOW, and not because of its shape —
+   * `second` is created before either browser writes a length, and a
+   * storageState copy taken at creation cannot carry a write that happens
+   * afterwards. A control that works here has to share a backing store, or
+   * re-copy storage between the second browser's write and the first's read.
+   *
+   * So: the assertion below is repaired and can now fail, and it is UNCONTROLLED.
+   * It has never been watched going red. Treat it accordingly until it has.
+   */
   const settingMark = sectionStart(floor);
+  /**
+   * READ ONLY. Opens Settings and reports which length is checked.
+   *
+   * It is separate from setLength because the first version of this check was
+   * INERT and nothing could have reddened it. The third step called setLength
+   * again — which checks the radio, reloads, and reads back what it just
+   * checked. So it set "Five minutes" on the first browser and then asserted
+   * the first browser had "Five minutes". A genuinely shared preferences store
+   * passes that: A sets five, B sets everything, A sets five again and reads
+   * five. The leak is invisible and the message describing it can never print.
+   *
+   * The failure must be OBSERVED, never re-established by the observation.
+   */
+  const readLength = async (context) => {
+    const page = await context.newPage();
+    await page.goto(`${base}/settings`, { waitUntil: "networkidle" });
+    const ready = await page
+      .waitForSelector("[data-settings-state='ready']", { timeout: 5000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!ready) return null;
+    for (const option of ["Five minutes", "Ten minutes", "Everything"]) {
+      if (await page.getByRole("radio", { name: option }).isChecked()) return option;
+    }
+    return null;
+  };
+
   const setLength = async (context, label) => {
     const page = await context.newPage();
     await page.goto(`${base}/settings`, { waitUntil: "networkidle" });
@@ -128,17 +168,14 @@ try {
     if (!ready) return null;
     await page.getByRole("radio", { name: label }).check();
     await page.waitForTimeout(250);
-    await page.reload({ waitUntil: "networkidle" });
-    await page.waitForSelector("[data-settings-state='ready']", { timeout: 5000 });
-    for (const option of ["Five minutes", "Ten minutes", "Everything"]) {
-      if (await page.getByRole("radio", { name: option }).isChecked()) return option;
-    }
-    return null;
+    await page.close();
+    return readLength(context);
   };
 
   const lengthA = await setLength(first, /Five minutes/i);
   const lengthB = await setLength(second, /Everything/i);
-  const lengthAAfter = await setLength(first, /Five minutes/i);
+  // READ, not set. This is the line the review blocked on.
+  const lengthAAfter = await readLength(first);
   out.briefLength = { first: lengthA, second: lengthB, firstAfterSecondChanged: lengthAAfter };
 
   // The floor: both browsers actually reached Settings and stored something.
