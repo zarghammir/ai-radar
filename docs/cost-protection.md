@@ -38,10 +38,19 @@ Stated as verified facts rather than intentions, because a document that describ
 guards which do not exist is worse than no document.
 
 - **No code in `src/` calls a paid API.** `@anthropic-ai/sdk` is a dependency, but
-  nothing imports it yet. There is currently no way for this app to spend money.
-- **The app has exactly one API route**, `POST /api/internal/ingest`, and it is guarded
-  by `INTERNAL_API_SECRET` before it reads or writes anything. There is no public route
-  to protect yet, because there is no public route.
+  nothing imports it yet. There is currently no way for this app to spend money, and
+  `npm run routes:check` is what keeps that true for anything a reader can reach.
+- **Twelve public API routes exist, and none of them can reach a paid service.** This
+  used to hold because there was no public route at all — true, but true for a reason
+  that has now gone. It is checked rather than asserted: `npm run routes:check` walks
+  the import graph out of every public route handler and fails if any can reach a feed
+  adapter, the HTTP client, or an LLM SDK. It has no exceptions list, because a
+  carve-out is a hole with a comment on it, and it prints how many routes it examined,
+  because a checker that walks nothing reports no violations.
+- **One internal route can trigger ingestion**, `POST /api/internal/ingest`, guarded by
+  `INTERNAL_API_SECRET` and refusing before it reads or writes anything — so an
+  unauthenticated caller leaves no trace in `ingest_runs` and costs nothing to refuse.
+  It is not part of the client API and is not subject to the rule above.
 - **Ingestion is free.** Every source in the seeded catalogue is a public feed or a free
   API. A pass costs bandwidth and nothing else.
 - **The cap is not yet enforced.** `LLM_MAX_STORIES_PER_DAY` is documented in

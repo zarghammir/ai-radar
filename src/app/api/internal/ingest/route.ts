@@ -11,6 +11,6 @@ import { handleIngestTrigger } from "@/worker/trigger";
  * exactly what the Docker image build is.
  */
 export async function POST(request: Request): Promise<Response> {
-  const { db, sql } = await import("@/db/client");
-  return handleIngestTrigger(request, { db, sql });
+  const { getDb, getSql } = await import("@/db/client");
+  return handleIngestTrigger(request, { db: getDb(), sql: getSql() });
 }

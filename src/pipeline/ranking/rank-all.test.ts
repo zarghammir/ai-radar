@@ -6,9 +6,10 @@ import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { eq } from "drizzle-orm";
 import type { Db } from "@/db/client";
 import * as schema from "@/db/schema";
+import { TRUNCATE_ALL } from "@/db/tables";
 import { rawItems, sources, stories, storyTopics, topics, userPreferences } from "@/db/schema";
-import { COMPONENT_LABELS, WEIGHTS } from "./score";
-import { RANKING_WINDOW_HOURS, rankAllStories, scoreComponentList } from "./rank-all";
+import { WEIGHTS } from "./score";
+import { RANKING_WINDOW_HOURS, rankAllStories } from "./rank-all";
 
 /**
  * Its own database, and its own NAME: two test files that create and drop the
@@ -55,9 +56,7 @@ withDb("rankAllStories", () => {
   });
 
   beforeEach(async () => {
-    await sql.unsafe(
-      `TRUNCATE story_topics, raw_items, stories, topics, ingest_runs, sources, user_preferences RESTART IDENTITY CASCADE`,
-    );
+    await sql.unsafe(TRUNCATE_ALL);
   });
 
   async function addSource(over: Partial<typeof sources.$inferInsert> & { key: string }) {
@@ -404,27 +403,5 @@ withDb("rankAllStories", () => {
   it("does not rank when there is nothing in the window", async () => {
     const result = await rankAllStories(db, NOW);
     expect(result.ranked).toBe(0);
-  });
-});
-
-describe("scoreComponentList", () => {
-  it("labels every component and keeps the values", () => {
-    const list = scoreComponentList({ recency: 13.1, primarySource: 20, unverifiedPenalty: -6 });
-    expect(list).toEqual([
-      { key: "recency", label: COMPONENT_LABELS.recency, value: 13.1 },
-      { key: "primarySource", label: COMPONENT_LABELS.primarySource, value: 20 },
-      { key: "unverifiedPenalty", label: "Unverified claim", value: -6 },
-    ]);
-  });
-
-  it("falls back to the key when a component has no label", () => {
-    // A component added to the model without a label must still render, and
-    // must be visibly unlabelled rather than silently dropped.
-    const list = scoreComponentList({ somethingNew: 3 });
-    expect(list).toEqual([{ key: "somethingNew", label: "somethingNew", value: 3 }]);
-  });
-
-  it("returns an empty list for a story that has not been ranked", () => {
-    expect(scoreComponentList({})).toEqual([]);
   });
 });

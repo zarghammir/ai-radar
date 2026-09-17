@@ -15,11 +15,11 @@
  */
 import "dotenv/config";
 import { sql } from "drizzle-orm";
-import { db } from "./client";
+import { getDb } from "./client";
 import { sources, topics } from "./schema";
 import { SOURCE_SEEDS, TOPIC_SEEDS } from "./seed-data";
 
-async function seedSources() {
+async function seedSources(db: ReturnType<typeof getDb>) {
   const existing = new Set((await db.select({ key: sources.key }).from(sources)).map((r) => r.key));
 
   await db
@@ -59,7 +59,7 @@ async function seedSources() {
   };
 }
 
-async function seedTopics() {
+async function seedTopics(db: ReturnType<typeof getDb>) {
   const existing = new Set((await db.select({ key: topics.key }).from(topics)).map((r) => r.key));
 
   await db
@@ -85,8 +85,9 @@ async function seedTopics() {
 }
 
 async function main() {
-  const s = await seedSources();
-  const t = await seedTopics();
+  const db = getDb();
+  const s = await seedSources(db);
+  const t = await seedTopics(db);
 
   const byTier = SOURCE_SEEDS.reduce<Record<string, number>>((a, x) => {
     a[x.tier] = (a[x.tier] ?? 0) + 1;
