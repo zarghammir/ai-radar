@@ -601,7 +601,7 @@ withDb("API routes", () => {
     it("leaves adjacent tech out of the brief", async () => {
       await twoStories();
       const { GET } = await import("@/app/api/brief/route");
-      const data = await body(await GET(req("http://t/api/brief")));
+      const data = await body(await GET(req("/api/brief")));
       const slugs = (data.stories as { slug: string }[]).map((s) => s.slug);
       expect(slugs).toContain("an-ai-story");
       expect(slugs).not.toContain("a-dev-tool");
@@ -611,11 +611,11 @@ withDb("API routes", () => {
       await twoStories();
       const { GET } = await import("@/app/api/radar/route");
 
-      const def = await body(await GET(req("http://t/api/radar")));
+      const def = await body(await GET(req("/api/radar")));
       const defaultSlugs = (def.stories as { slug: string }[]).map((s) => s.slug);
       expect(defaultSlugs).toEqual(["an-ai-story"]);
 
-      const all = await body(await GET(req("http://t/api/radar?view=everything")));
+      const all = await body(await GET(req("/api/radar?view=everything")));
       const everySlug = (all.stories as { slug: string }[]).map((s) => s.slug);
       // Both halves asserted in one call: the adjacent story appears AND the
       // AI one is still there. A widened view that swapped the set rather than
@@ -628,7 +628,7 @@ withDb("API routes", () => {
       // An unknown value must not silently open the front door.
       await twoStories();
       const { GET } = await import("@/app/api/radar/route");
-      const data = await body(await GET(req("http://t/api/radar?view=banana")));
+      const data = await body(await GET(req("/api/radar?view=banana")));
       expect((data.stories as { slug: string }[]).map((s) => s.slug)).toEqual(["an-ai-story"]);
     });
   });

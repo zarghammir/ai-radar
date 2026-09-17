@@ -991,7 +991,13 @@ withDb("pipeline orchestration", () => {
 
     it("keeps a story out of adjacent tech when one item does match", async () => {
       // One matching item is enough. A launch nobody described in AI words is
-      // adjacent; the same launch written up by a source that did is not.
+      // adjacent; the same launch written up by somebody who did is not.
+      //
+      // Two SOURCES rather than two items from one, because a fingerprint is
+      // scoped to source plus canonical url — one source publishing the same
+      // link twice is one item, and an earlier version of this test proved
+      // only that.
+      const url = "https://example.com/pg";
       await addSource({
         key: "hn-discovery",
         name: "Show HN",
@@ -1000,17 +1006,29 @@ withDb("pipeline orchestration", () => {
         url: null,
         config: { list: "top", minPoints: 3, keywordPolicy: "label" },
       });
+      await addSource({
+        key: "a-newsletter",
+        name: "A newsletter",
+        tier: "ANALYST",
+        // Also a label source, so the miss cannot be rescued by provenance —
+        // this test is about one item MATCHING, not about where it came from.
+        config: { keywordPolicy: "label" },
+      });
       await runIngest(db, undefined, {
         now: NOW,
-        fetchImpl: fakeNetwork(
-          hnRoutes([
-            { id: 1, title: TITLE, url: "https://example.com/pg" },
-            { id: 2, title: "An AI agent that writes migrations", url: "https://example.com/pg" },
+        fetchImpl: fakeNetwork({
+          ...hnRoutes([{ id: 1, title: TITLE, url }]),
+          "a-newsletter.test/feed": rssFeed([
+            { title: "An AI agent that writes migrations", link: url, date: hoursAgo(2) },
           ]),
-        ),
+        }),
         sink: () => {},
       });
-      // Same canonical url, so both items land on one story.
+
+      const items = await db.select().from(schema.rawItems);
+      expect(items).toHaveLength(2);
+      expect(items.filter((i) => i.matchedAiVocabulary === true)).toHaveLength(1);
+
       const rows = await db.select().from(schema.stories);
       expect(rows).toHaveLength(1);
       expect(rows[0].adjacentTech).toBe(false);
