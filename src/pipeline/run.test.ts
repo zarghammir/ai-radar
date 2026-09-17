@@ -543,7 +543,13 @@ withDb("pipeline orchestration", () => {
     // The story's face, its type and when it began must all follow the item
     // that is now primary, not the one that happened to arrive first.
     expect(story.title).toBe("Introducing GPT-6");
-    expect(story.contentType).toBe("RELEASE");
+    // MODEL rather than the blog's RELEASE default: since #41 the primary
+    // item's type is classified from its own title, and "Introducing GPT-6" is
+    // a model launch. What this line is here to prove is unchanged — that the
+    // type follows the item that is now primary — so it also asserts the type
+    // is no longer the one the forum item gave the story.
+    expect(story.contentType).toBe("MODEL");
+    expect(story.contentType).not.toBe(afterRunOne.contentType);
     expect(story.firstSeenAt.getTime()).toBe(NOW.getTime() - 3 * 3_600_000);
     // The slug is the permalink and deliberately does not move.
     expect(story.slug).toBe("everyone-is-talking-about-the-new-model");

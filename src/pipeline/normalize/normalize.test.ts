@@ -222,7 +222,11 @@ describe("cross-source identity", () => {
 describe("normalizeItem content-type precedence", () => {
   const labBlog = { id: 1, key: "google-deepmind", defaultContentType: "RESEARCH" as const };
   const newsroom = { id: 2, key: "verge-ai", defaultContentType: "NEWS" as const };
-  const base = { url: "https://example.com/a", publishedAt: new Date("2026-09-16T10:00:00Z") };
+  const base = {
+    externalId: "c1",
+    url: "https://example.com/a",
+    publishedAt: new Date("2026-09-16T10:00:00Z"),
+  };
 
   it("prefers what the adapter declared over the title", () => {
     // arXiv and Hacker News read the type from the feed. An inference from
