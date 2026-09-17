@@ -8,7 +8,7 @@ import {
 } from "@/api/brief";
 import { getPreferences } from "@/api/reader";
 import { handle, json } from "@/api/http";
-import { parseView, typesForView } from "@/lib/api/views";
+import { parseViewOrThrow, typesForView } from "@/lib/api/views";
 
 export async function GET(request: Request): Promise<Response> {
   return handle(async () => {
@@ -25,9 +25,14 @@ export async function GET(request: Request): Promise<Response> {
     );
 
     // The same filter the page applies, from the same function, so the two
-    // cannot disagree about what a brief is. Omitted means everything stored,
-    // which is what this route returned before #102.
-    const view = parseView(new URL(request.url).searchParams.get("view")) ?? "all";
+    // cannot disagree about what a brief is.
+    //
+    // OMITTED means everything stored, which is what this route returned before
+    // #102. UNRECOGNISED is refused rather than widened — a typo must not open
+    // the front door, and falling back to "all" is exactly how it would. That
+    // matches parseBriefLength on the line below, which throws rather than
+    // guessing, and the same rule #105 sets for its own axis.
+    const view = parseViewOrThrow(new URL(request.url).searchParams.get("view"), "all");
     const window = briefWindow(now, prefs.briefTime, prefs.timezone);
     const ranked = await storiesInWindow(getDb(), window, { types: typesForView(view) });
     const stories = takeWithinReadingTime(ranked, length);
