@@ -298,6 +298,51 @@ function isDeclaredFact(declared: ContentType): boolean {
 }
 
 /**
+ * Titles that state their own kind, where the rules below do not apply.
+ *
+ * "Show HN:" is Hacker News's convention for *I built this and here it is*. It
+ * is a claim the item makes about itself, in its own text, which is exactly
+ * what this module reads — so honouring it is not source coupling. The
+ * classifier never learns where a title came from.
+ *
+ * ANCHORED, deliberately. A headline that merely mentions Show HN is an
+ * article about Show HN and is classified normally; only a title that opens
+ * with the announcement is one.
+ *
+ * SIX BRANCHES can type a title, and a Show HN launch reaches five of them
+ * without the prefix mattering at all. Each was considered separately and each
+ * is rejected for the same reason, so the reason is written once:
+ *
+ *   MODEL 1  family && (launched || family.index === 0)
+ *            the prefix pushes any family name off index 0, but a launch verb
+ *            anywhere in the title still opens it
+ *   MODEL 2  PARAMETER_COUNT && noun          prefix-independent
+ *            "Show HN: I fine-tuned a 7B model for SQL generation"
+ *   MODEL 3  launched && noun                 prefix-independent
+ *   TOOL     launched && TOOL_WORDS           prefix-independent
+ *            "Show HN: Launching an open-source SDK"
+ *   REGULATION / BUSINESS  single phrase      prefix-independent
+ *            "Show HN: an EU AI Act compliance checker"
+ *
+ * The reason: every vocabulary in this file was measured against news
+ * headlines, where "a 7B model" reports a release and "AI Act" reports a
+ * regulation. On a launch list the same words describe what a person BUILT —
+ * a model they fine-tuned, a compliance checker they wrote — and the rules
+ * read the subject matter as the kind. The item has already said what it is.
+ *
+ * NOT by adding "Show HN:" to LAUNCH_VERBS, which the ticket first proposed:
+ * that leaves MODEL 2 untouched and actively OPENS MODEL 1, MODEL 3 and TOOL
+ * to every title on the list. It makes the promotion worse, and promotion is
+ * the dangerous direction — a false MODEL is worth about ninety rank places.
+ */
+const SELF_ANNOUNCED_LAUNCH = /^\s*show hn\s*:/i;
+
+/** Exported for the test that proves the guard is anchored. */
+export function announcesItsOwnLaunch(title: string): boolean {
+  return SELF_ANNOUNCED_LAUNCH.test(title);
+}
+
+/**
  * Infer a content type from an item's title, falling back to what the source
  * declared. Pure, and never crosses a content family.
  *
@@ -307,6 +352,11 @@ function isDeclaredFact(declared: ContentType): boolean {
  */
 export function classifyContentType(title: string, declared: ContentType): ContentType {
   if (isDeclaredFact(declared)) return declared;
+  // A title that announces itself as a launch is one. Returning `declared`
+  // rather than a literal keeps the provenance honest: the value came from the
+  // source default, so decideContentType records it as `default` and the
+  // backfill stays free to revisit it when these rules improve.
+  if (announcesItsOwnLaunch(title)) return declared;
   for (const rule of RULES) if (rule.test(title)) return rule.type;
   return declared;
 }
