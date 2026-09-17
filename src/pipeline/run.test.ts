@@ -890,4 +890,55 @@ withDb("pipeline orchestration", () => {
     });
     expect(result.bySource.map((s) => s.sourceKey)).toEqual(["openai-blog"]);
   });
+
+  // ── #99 ────────────────────────────────────────────────────────────────────
+  // Asserted at the point the value is WRITTEN, not at the API that serves it.
+  // GET /api/sources is one consumer; #86's health reads the same row, and the
+  // next consumer will not know to check. The property has to hold at the write
+  // or every reader has to remember it.
+  it("writes no credential fragment into lastError when a pass fails", async () => {
+    await openAiBlog();
+
+    const configuredUrl = new URL(process.env.DATABASE_URL!);
+    const fragments = [
+      configuredUrl.hostname,
+      configuredUrl.port,
+      configuredUrl.username,
+      configuredUrl.password,
+      configuredUrl.pathname.replace(/^\//, ""),
+    ].filter((v) => v.length >= 3);
+
+    // FLOOR on the instrument itself: if the configured URL yielded nothing
+    // long enough to redact, every assertion below would pass vacuously.
+    expect(fragments.length).toBeGreaterThan(0);
+
+    // The shape postgres.js produces when a socket dies mid-pass: the
+    // coordinates are in the MESSAGE, which is how they reached the stored
+    // string. Thrown from fetch so it lands in the same per-source try that
+    // wraps the database work.
+    const boom = `write CONNECT_TIMEOUT ${configuredUrl.hostname}:${configuredUrl.port || "5432"}`;
+    expect(fragments.some((f) => boom.includes(f))).toBe(true); // the input really carries one
+
+    const failing = (async () => {
+      throw new Error(boom);
+    }) as unknown as typeof fetch;
+
+    await runIngest(db, undefined, { now: NOW, fetchImpl: failing, sink: () => {} });
+
+    const [row] = await db.select().from(sources).where(eq(sources.key, "openai-blog"));
+    expect(row.lastError).toBeTruthy(); // something was stored, so this is not vacuous
+    for (const fragment of fragments) expect(row.lastError).not.toContain(fragment);
+    // The positive: an operator can still tell what happened.
+    expect(row.lastError).toContain("CONNECT_TIMEOUT");
+
+    // ingestRuns.error is the same string plus the fetch context's log tail,
+    // and the tail does not pass through describeError — so it is redacted
+    // again at the write. This is the assertion that would catch a contributor
+    // logging something new into that context.
+    const runs = await db.select().from(ingestRuns);
+    expect(runs.length).toBeGreaterThan(0);
+    for (const run of runs) {
+      for (const fragment of fragments) expect(run.error ?? "").not.toContain(fragment);
+    }
+  });
 });

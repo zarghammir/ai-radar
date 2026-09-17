@@ -1,0 +1,63 @@
+-- #99: remove credential fragments from error text written before the
+-- redaction existed, WITHOUT changing what that text means to source health.
+--
+-- WHAT WAS WRONG. These columns hold the output of describeError(), which until
+-- this change carried whatever a driver or the Postgres server put in a
+-- message — including the database host, and on some failure shapes the port
+-- and the user. sources.last_error is served by GET /api/sources with no
+-- authentication, so any such row is a live disclosure until that source next
+-- succeeds.
+--
+-- WHY A PLACEHOLDER RATHER THAN NULL, which is the part that matters.
+-- Setting ingest_runs.error to NULL would not be a clear, it would be a
+-- FALSIFICATION. Source health (#86) reads that column directly:
+--
+--   completed_runs        counts rows where error is not null OR finished_at is not null
+--   consecutive_failures  counts rows where error is not null AND started_at is later
+--                         than the newest run with error IS NULL and finished_at set
+--
+-- So nulling it turns every recorded failure into a success, moves the "last
+-- succeeded at" mark forward, and drops consecutive_failures to zero. Every
+-- broken source would be reported HEALTHY, and the signal that exists to say
+-- "this feed has been refused on every run for a week" would say the opposite.
+-- A migration that hid an outage while claiming to remove a credential would
+-- be a far worse defect than the one it fixes.
+--
+-- The placeholder keeps the column NOT NULL, so every health count is
+-- arithmetically identical before and after. Only the human-readable text
+-- changes, and it says what happened to it rather than pretending there was
+-- never an error.
+--
+-- AND THE `WHERE ... IS NOT NULL` PREDICATE IS LOAD-BEARING FOR THE OPPOSITE
+-- REASON. Drop it and the placeholder is written to every row, successes
+-- included. Because health reads this column's PRESENCE and not its content,
+-- the watermark subquery then finds no run with error IS NULL, coalesces to
+-- '-infinity', and counts EVERY run as a consecutive failure. Every source
+-- would report FAILING.
+--
+-- So this column has two opposite failure modes and one line guards both:
+--   writing NULL too widely     -> every failure reads as a success (all HEALTHY)
+--   writing the placeholder too widely -> every success reads as a failure (all FAILING)
+-- Whoever edits either statement should re-derive both directions rather than
+-- trusting that the surviving one was the only risk.
+--
+-- WHY BLANKET RATHER THAN TARGETED. We cannot tell from inside SQL which rows
+-- contain a fragment: the credential lives in DATABASE_URL, which the database
+-- does not know. The only alternative is matching on what a hostname LOOKS
+-- like — a shape-based pattern, which is exactly the approach this fix exists
+-- to replace, and the approach that failed twice on #89.
+--
+-- Reported by the PM lane, who read the live /api/sources response while
+-- ranking this ticket: last_error was null on all 17 sources, so this is
+-- expected to be a no-op in production. NOT VERIFIED HERE — that check needs
+-- the production URL or the credential, and this lane has neither, by design.
+-- The migration does not depend on it: it is written for every other
+-- environment and for the next incident. Doing it while the field is empty
+-- costs nothing; doing it afterwards means choosing what to keep under
+-- pressure.
+UPDATE "sources"
+   SET "last_error" = '[cleared by migration 0003: this text predates credential redaction (#99) and may have contained part of the database connection string]'
+ WHERE "last_error" IS NOT NULL;--> statement-breakpoint
+UPDATE "ingest_runs"
+   SET "error" = '[cleared by migration 0003: this text predates credential redaction (#99) and may have contained part of the database connection string]'
+ WHERE "error" IS NOT NULL;

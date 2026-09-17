@@ -1,5 +1,6 @@
 import { and, desc, eq, gte, inArray, isNotNull, ne } from "drizzle-orm";
 import type { Db } from "@/db/client";
+import { redactConnectionParts } from "@/db/redact";
 import type { ContentType, ItemRole, Source, SourceTier } from "@/db/schema";
 import { ingestRuns, rawItems, sources, stories, storyTopics, topics } from "@/db/schema";
 import { getAdapter } from "@/sources/registry";
@@ -52,12 +53,29 @@ export interface RunIngestOptions extends FetchContextOptions {
 }
 
 /**
- * The stored reason for a failure, cause chain included.
+ * The stored reason for a failure, cause chain included, with every fragment
+ * of the database credential removed.
  *
  * A driver wraps a database error in one whose message is the SQL it was
  * running, and puts the database's own words on `cause`. Reading `.message`
  * alone leaves an operator with the statement that failed and no idea why:
  * a constraint, a bad cast and a full disk all look identical.
+ *
+ * WHY THE REDACTION IS HERE AND NOT AT THE THREE PLACES THIS GETS PRINTED
+ * (#99). What this returns is not only logged — it is WRITTEN to
+ * `sources.lastError` and `ingestRuns.error` a few lines below, and
+ * `GET /api/sources` serves `lastError` to anyone, with no authentication. So
+ * a database failure mid-pass put the database's hostname on the public web
+ * and left it there until that source next succeeded. Hardening the log sites
+ * would have left the API serving the same fragment: this is the one point
+ * both the log and the stored value pass through.
+ *
+ * THE DIAGNOSTIC COST IS ZERO, which is why this is not a trade. The host,
+ * the user and the password are not information to the person who owns the
+ * database — they already know where their database is. They are information
+ * only to a stranger. What an operator actually needs is the failing
+ * statement, the error code and the source key, and all three survive; the
+ * tests assert that positively, so a function that returned "" could not pass.
  */
 export function describeError(error: unknown): string {
   const seen: string[] = [];
@@ -68,7 +86,7 @@ export function describeError(error: unknown): string {
     if (!(current instanceof Error)) break;
     current = current.cause;
   }
-  return seen.join("\n") || String(error);
+  return redactConnectionParts(seen.join("\n") || String(error));
 }
 
 /** Primary for a first-party source, discussion for a forum, report otherwise. */
@@ -343,7 +361,15 @@ export async function runIngest(
 
     // Lines are diagnostic context for a failure, so they are stored with it.
     // On a healthy run they have already gone to the sink.
-    const storedError = error ? [error, ...lines].join("\n") : null;
+    //
+    // Redacted again here, deliberately, even though `error` already is. This
+    // is the point at which a string becomes a stored, served value, and
+    // `lines` arrives from createFetchContext rather than from describeError —
+    // so asserting the property at the WRITE rather than at its likeliest
+    // source is what makes it hold for a contributor who later logs something
+    // new into the context. Redaction is idempotent: the labels it leaves
+    // behind contain no fragment for a second pass to match.
+    const storedError = error ? redactConnectionParts([error, ...lines].join("\n")) : null;
     await db
       .update(ingestRuns)
       .set({
