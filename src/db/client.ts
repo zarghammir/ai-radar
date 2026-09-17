@@ -42,12 +42,20 @@ let connection: Connection | null = null;
 /**
  * Memoised on purpose, and it is the load-bearing part.
  *
- * withIngestLock takes a session-level advisory lock on a connection reserved
- * from this client. Handing out a fresh client per call would give two callers
- * two pools, both would reserve successfully, and both would believe they hold
- * a lock that is meant to admit one — a single-writer guarantee silently
- * failing, presenting later as corrupted slugs rather than as an error. Types
- * cannot see this, so it has a test with a fresh-client-per-call control.
+ * NOT for the lock's sake. pg_try_advisory_lock is database-global rather than
+ * pool-local, so two separate clients are two sessions and the second is
+ * refused exactly as a second connection in one pool would be — measured, not
+ * assumed. An earlier version of this comment claimed both callers would
+ * believe they held the lock, and that is false; it is left recorded here
+ * because a wrong rationale is worse than none, and this one would have led
+ * someone to conclude the lock is safe because the client is memoised and then
+ * remove the reserve() that actually keeps it safe.
+ *
+ * The real reason is the line above: globalThis is only populated when
+ * NODE_ENV !== "production", so in production a non-memoised accessor builds a
+ * NEW POOL on every call — connection exhaustion, and a worker running on one
+ * pool while the process closes another. Types cannot see that, so it has a
+ * test, and that test has to run as production or it cannot fail.
  */
 function current(): Connection {
   connection ??= connect();

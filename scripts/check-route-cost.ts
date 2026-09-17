@@ -44,7 +44,15 @@ function importsOf(file: string): { local: string[]; packages: string[] } {
   const local: string[] = [];
   const packages: string[] = [];
   const valueImports = source.replace(/^import type .*$/gm, "");
-  for (const [, spec] of valueImports.matchAll(/from "([^"]+)"/g)) {
+  // Both forms that execute module code: `from "x"` and a bare `import "x"`.
+  // A bare side-effect import IS a value import by this script's own model —
+  // missing it was an accidental exception in a checker that deliberately
+  // refuses to have an exceptions list.
+  const specs = [
+    ...[...valueImports.matchAll(/from "([^"]+)"/g)].map((m) => m[1]),
+    ...[...valueImports.matchAll(/^\s*import\s+"([^"]+)"/gm)].map((m) => m[1]),
+  ];
+  for (const spec of specs) {
     const candidate = spec.startsWith("@/")
       ? join("src", spec.slice(2))
       : spec.startsWith(".")

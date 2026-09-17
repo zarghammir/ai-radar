@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
@@ -45,13 +45,41 @@ withDb("the database client, against a real database", () => {
     await admin?.end();
   }, 30_000);
 
-  it("hands back the same client and the same database every time", async () => {
-    // The memoisation, asserted directly. A fresh client per call would give
-    // the worker one pool to run on and another to close, and would put the
-    // advisory lock on a pool nothing else uses.
-    const { getDb, getSql } = await import("@/db/client");
-    expect(getSql()).toBe(getSql());
+  it("hands back the same database every time", async () => {
+    const { getDb } = await import("@/db/client");
     expect(getDb()).toBe(getDb());
+  });
+
+  it("hands back the same client in production, where nothing else caches it", async () => {
+    // This has to run as production or it cannot fail. Everywhere else
+    // connect() reuses globalThis.__aiRadarSql, so the client identity holds
+    // whatever the memoisation does and the assertion passes with it removed —
+    // only the drizzle wrapper is rebuilt, which is why the getDb line above
+    // was carrying the whole control on its own.
+    //
+    // Production is also the case that would bite: there, a non-memoised
+    // accessor builds a new pool on every call.
+    const globalForDb = globalThis as unknown as {
+      __aiRadarSql?: { end: (o?: unknown) => Promise<void> };
+    };
+    // connect() READS the global cache whatever NODE_ENV says and only skips
+    // WRITING it in production, so without clearing it here this test reuses
+    // the shared client and then ends it — which is precisely what it did, and
+    // the next test hung on a closed pool rather than failing an assertion.
+    const shared = globalForDb.__aiRadarSql;
+    delete globalForDb.__aiRadarSql;
+    vi.resetModules();
+    vi.stubEnv("NODE_ENV", "production");
+    try {
+      const mod = await import("@/db/client");
+      const first = mod.getSql();
+      expect(mod.getSql()).toBe(first);
+      await first.end({ timeout: 5 }).catch(() => {});
+    } finally {
+      vi.unstubAllEnvs();
+      vi.resetModules();
+      globalForDb.__aiRadarSql = shared;
+    }
   });
 
   it("lets exactly one of two concurrent callers hold the ingest lock", async () => {
