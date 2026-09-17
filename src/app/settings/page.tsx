@@ -3,6 +3,9 @@ import { brand } from "@/config/brand";
 import { PageShell } from "@/components/page-shell";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { InstallPrompt } from "@/components/install-prompt";
+import { PreferenceSections } from "@/components/settings/preference-sections";
+import { getTopics } from "@/lib/api/client";
+import type { TopicSummary } from "@/lib/api/types";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -31,7 +34,26 @@ function Section({
   );
 }
 
-export default function SettingsPage() {
+/**
+ * The catalogue of subjects, read on the server.
+ *
+ * `null` means the read FAILED and is a different answer from an empty list,
+ * which means there are no subjects yet. The Interests panel says something
+ * different for each; collapsing them would tell a reader with a broken
+ * database that the app has simply not learned any subjects.
+ */
+async function loadTopics(): Promise<TopicSummary[] | null> {
+  try {
+    return await getTopics();
+  } catch (error) {
+    console.error("settings: could not read the topic catalogue", error);
+    return null;
+  }
+}
+
+export default async function SettingsPage() {
+  const topics = await loadTopics();
+
   return (
     <PageShell
       eyebrow={brand.name}
@@ -40,6 +62,8 @@ export default function SettingsPage() {
     >
       <InstallPrompt />
       <div className="flex flex-col gap-4">
+        <PreferenceSections topics={topics} />
+
         <Section
           title="Appearance"
           hint="System follows your device. The choice is remembered on this device only."
@@ -80,14 +104,15 @@ export default function SettingsPage() {
         </Section>
 
         <Section
-          title="Sources, brief and notifications"
-          hint="Not wired up yet. These land with the ingestion pipeline; this release is the shell, the theme and installability only."
+          title="Where stories come from"
+          hint="The list of sources is fixed for now. Turning one off needs an endpoint that does not exist yet, so the switches are not drawn rather than drawn dead."
         >
           {/* --soft and --faint-2, not --ash and --edge: this sits on paper,
               and bench colours on paper fail AA in dark. */}
           <p className="border-faint-2 text-soft border border-dashed p-4 text-[14px] leading-relaxed">
-            Choosing sources, setting the time your brief is ready, and picking how you hear about
-            it all arrive with the first working brief.
+            Every source the app reads is listed in the repository and each story names the one it
+            came from. Choosing which to follow arrives with the endpoint that can store the
+            choice.
           </p>
         </Section>
       </div>
