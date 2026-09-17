@@ -136,8 +136,9 @@ jobs:
     env:
       DATABASE_URL: postgres://ai_radar:ai_radar@localhost:5432/ai_radar_e2e
       NEXT_TELEMETRY_DISABLED: "1"
-      # Both scripts default to this and take it as argv[2]; naming it once here
-      # keeps the server and the scripts from drifting apart.
+      # The one place the server's URL is written. It reaches both scripts as
+      # argv[2] (see .github/scripts/run-browser-check.sh), which is what makes
+      # it bind both rather than only the one that also reads the variable.
       VERIFY_URL: http://127.0.0.1:3210
 
     steps:
@@ -194,49 +195,19 @@ jobs:
           cat /tmp/next-server.log >&2
           exit 1
 
-      # Exit 2 from these scripts means THE INSTRUMENT COULD NOT RUN — no
-      # browser, or nothing serving. That is a different state from "the checks
-      # failed" (1) and from "the checks passed" (0), and it must never be
-      # treated as a skip: a green tick for a run that measured nothing is the
-      # failure this repository has catalogued more than any other.
+      # Both checks go through one wrapper, which owns the exit-code contract:
+      # 0 passed, 1 the checks ran and failed, 2 the instrument could not run.
+      # Its reasoning lives in the file. Two callers, one copy — a control can
+      # only ever exercise one caller, so two copies would drift.
       #
-      # Both cases are red. They are separated only so the log says which
-      # happened, because the fix is completely different.
+      # The URL is passed as an argument, not left to the environment:
+      # verify-shell.mjs reads argv[2] || VERIFY_URL, a11y-audit.mjs reads
+      # argv[2] only, so argv is the one input that binds both to this server.
       - name: Accessibility, overflow and bottom-bar sweep
-        run: |
-          set +e
-          npm run a11y
-          CODE=$?
-          set -e
-          case "$CODE" in
-            0) echo "RESULT: the sweep ran and passed." ;;
-            2)
-              echo "::error::The accessibility sweep could NOT RUN — no browser could be resolved, or nothing was serving. This is not a pass and not a skip." >&2
-              exit 1
-              ;;
-            *)
-              echo "::error::The accessibility sweep RAN and FAILED (exit $CODE)." >&2
-              exit "$CODE"
-              ;;
-          esac
+        run: bash .github/scripts/run-browser-check.sh "The accessibility sweep" a11y "$VERIFY_URL"
 
       - name: The four checks axe cannot see
-        run: |
-          set +e
-          npm run verify:shell
-          CODE=$?
-          set -e
-          case "$CODE" in
-            0) echo "RESULT: the shell verification ran and passed." ;;
-            2)
-              echo "::error::The shell verification could NOT RUN — no browser could be resolved, or nothing was serving. This is not a pass and not a skip." >&2
-              exit 1
-              ;;
-            *)
-              echo "::error::The shell verification RAN and FAILED (exit $CODE)." >&2
-              exit "$CODE"
-              ;;
-          esac
+        run: bash .github/scripts/run-browser-check.sh "The shell verification" verify:shell "$VERIFY_URL"
 
       - name: Server log, if anything above failed
         if: failure()
