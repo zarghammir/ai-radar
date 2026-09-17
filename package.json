@@ -30,7 +30,8 @@
     "worker": "tsx src/worker/main.ts",
     "worker:once": "tsx src/worker/main.ts --once",
     "verify:today": "node scripts/verify-today.mjs",
-    "backfill:content-types": "tsx scripts/reclassify-content-types.ts"
+    "backfill:content-types": "tsx scripts/reclassify-content-types.ts",
+    "measure:keyword-gate": "tsx scripts/measure-keyword-gate.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.126.0",
