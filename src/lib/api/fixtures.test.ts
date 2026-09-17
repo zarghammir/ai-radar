@@ -131,6 +131,10 @@ describe("the thin days", () => {
  */
 describe("fixtures are states the pipeline can actually produce", () => {
   it("derives each fixture's verification from its own sources", () => {
+    // A floor, so this cannot pass by having nothing to check. Seven other
+    // tests already redden on an empty fixture set, but a test should not
+    // depend on its neighbours to be meaningful.
+    expect(FIXTURE_STORIES.length).toBeGreaterThanOrEqual(4);
     const mismatches = FIXTURE_STORIES.filter((s) => {
       const derived = deriveVerification(
         s.sources.map((src) => ({ sourceKey: src.key, sourceName: src.name, tier: src.tier })),
@@ -165,6 +169,7 @@ describe("fixtures are states the pipeline can actually produce", () => {
  */
 describe("fixture reading times are what the pipeline would compute", () => {
   it("matches readingMinutes() over each story's own body text", () => {
+    expect(FIXTURE_STORIES.length).toBeGreaterThanOrEqual(4);
     const wrong = FIXTURE_STORIES.filter(
       (s) => s.readingMinutes !== readingMinutes([s.summary ?? s.excerpt ?? ""]),
     ).map(

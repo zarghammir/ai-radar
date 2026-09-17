@@ -286,11 +286,19 @@ function brief(stories: StoryCard[], length: BriefResponse["length"]): BriefResp
  * if the window has any. Mirrors the rule in docs/api.md so the switch behaves
  * here the way it will behave against the real route.
  */
-export function fixtureBrief(length: BriefResponse["length"] = "10"): BriefResponse {
-  const ranked = [...FIXTURE_STORIES].sort((a, b) => b.score - a.score);
-  if (length === "all") return brief(ranked, "all");
-
-  const budget = Number(length);
+/**
+ * The contract's selection rule, exported so it can be tested against story
+ * sets the fixtures do not contain.
+ *
+ * Highest ranked first, taking each story while it fits, and ALWAYS at least
+ * one even if that story alone exceeds the budget — docs/api.md, the paragraph
+ * on `length`. Because every later story that would exceed the budget is
+ * skipped, ONLY THE FIRST can push past it: an over-budget selection therefore
+ * always holds exactly one story, which is what lets the header say "the top
+ * story alone" as a fact.
+ */
+export function selectWithinBudget(stories: StoryCard[], budget: number): StoryCard[] {
+  const ranked = [...stories].sort((a, b) => b.score - a.score);
   const chosen: StoryCard[] = [];
   let spent = 0;
   for (const s of ranked) {
@@ -298,7 +306,17 @@ export function fixtureBrief(length: BriefResponse["length"] = "10"): BriefRespo
     chosen.push(s);
     spent += s.readingMinutes;
   }
-  return brief(chosen, length);
+  return chosen;
+}
+
+export function fixtureBrief(length: BriefResponse["length"] = "10"): BriefResponse {
+  if (length === "all") {
+    return brief(
+      [...FIXTURE_STORIES].sort((a, b) => b.score - a.score),
+      "all",
+    );
+  }
+  return brief(selectWithinBudget(FIXTURE_STORIES, Number(length)), length);
 }
 
 /** A quiet day: the brief is real but thin. */

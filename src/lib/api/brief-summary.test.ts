@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { briefSummary } from "@/lib/api/brief-summary";
-import { fixtureBrief, fixtureEmptyBrief } from "@/lib/api/fixtures";
+import { fixtureBrief, fixtureEmptyBrief, selectWithinBudget } from "@/lib/api/fixtures";
 import type { BriefResponse, StoryCard } from "@/lib/api/types";
 
 function briefOf(stories: Partial<StoryCard>[], length: BriefResponse["length"]): BriefResponse {
@@ -55,15 +55,45 @@ describe("briefSummary", () => {
       expect(briefSummary(briefOf([{ readingMinutes: 40 }], "all")).overBudget).toBeNull();
     });
 
-    // Derived from the selection rule rather than assumed: only the FIRST story
-    // can push past the budget, because every later one that would exceed it is
-    // skipped. So an over-budget brief always holds exactly one story, and the
-    // copy can say "the top story alone" truthfully.
-    it("is only ever reachable with a single story, which is why the copy can say so", () => {
-      for (const length of ["5", "10"] as const) {
-        const b = fixtureBrief(length);
-        if (b.readingMinutes > Number(length)) expect(b.count).toBe(1);
-      }
+    /**
+     * The copy says "the top story alone", which is only honest if an
+     * over-budget selection can hold exactly one story and never two.
+     *
+     * An earlier version of this test asked the FIXTURES for that state:
+     *   if (b.readingMinutes > Number(length)) expect(b.count).toBe(1);
+     * Every fixture story is one minute, so the condition was never true and
+     * the assertion never ran — changing toBe(1) to toBe(999) left the suite
+     * green. Worse, the PR body said in plain words that the over-budget state
+     * is unreachable with these fixtures, so the fact that this guard could not
+     * fire was already written down one document away from the test depending
+     * on it firing. Both statements could not be load-bearing.
+     *
+     * It now exercises the RULE against a story set built to force the state,
+     * which is the thing the copy actually depends on.
+     */
+    it("holds exactly one story when the top story alone exceeds the budget", () => {
+      const long = { ...fixtureBrief("all").stories[0], id: 9001, score: 99, readingMinutes: 6 };
+      const others = [
+        { ...fixtureBrief("all").stories[1], id: 9002, score: 50, readingMinutes: 1 },
+        { ...fixtureBrief("all").stories[2], id: 9003, score: 40, readingMinutes: 1 },
+      ];
+      const chosen = selectWithinBudget([long, ...others], 5);
+      // The assertion runs unconditionally: no `if` can skip it.
+      expect(chosen).toHaveLength(1);
+      expect(chosen[0].id).toBe(9001);
+      expect(chosen.reduce((t, s) => t + s.readingMinutes, 0)).toBeGreaterThan(5);
+    });
+
+    it("never lets a second story push the selection over the budget", () => {
+      const stories = [
+        { ...fixtureBrief("all").stories[0], id: 9101, score: 99, readingMinutes: 4 },
+        { ...fixtureBrief("all").stories[1], id: 9102, score: 80, readingMinutes: 4 },
+        { ...fixtureBrief("all").stories[2], id: 9103, score: 70, readingMinutes: 1 },
+      ];
+      // 4 fits, 4+4 would exceed 5 so it is skipped, 4+1 fits.
+      const chosen = selectWithinBudget(stories, 5);
+      expect(chosen.map((s) => s.id)).toEqual([9101, 9103]);
+      expect(chosen.reduce((t, s) => t + s.readingMinutes, 0)).toBeLessThanOrEqual(5);
     });
   });
 
