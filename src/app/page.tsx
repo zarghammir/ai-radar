@@ -3,7 +3,7 @@ import { ReadingMode } from "@/components/today/reading-mode";
 import { EmptyState, PageShell } from "@/components/page-shell";
 import { LocalDate } from "@/components/local-date";
 import { briefSummary } from "@/lib/api/brief-summary";
-import { getBrief, USING_FIXTURES } from "@/lib/api/client";
+import { getBrief } from "@/lib/api/client";
 import { defaultBriefLength } from "@/lib/api/brief-length";
 import type { BriefLengthParam } from "@/lib/api/types";
 
@@ -17,9 +17,61 @@ function parseLength(value: string | string[] | undefined): BriefLengthParam | n
 }
 
 export default async function TodayPage({ searchParams }: PageProps<"/">) {
+  // From #16: the stored preference is the default, ?length= overrides it for
+  // one visit. defaultBriefLength has its own catch and answers ten minutes
+  // when preferences cannot be read, so it cannot be the thing that throws
+  // below — an unreachable database shows the unreachable screen, not a page
+  // that failed while deciding how long it should be.
   const chosen = parseLength((await searchParams).length);
   const length = chosen ?? (await defaultBriefLength());
-  const brief = await getBrief(length);
+
+  /**
+   * THREE STATES, and two of them must never look alike.
+   *
+   *   stories        — the brief
+   *   count === 0    — a quiet morning: the worker ran and nothing arrived
+   *   the call threw — we could not reach the stories at all
+   *
+   * An empty database and an unreachable one both produce "no stories" if you
+   * only look at the length of an array. They are not the same thing: one means
+   * nothing happened, the other means we do not know what happened. Without
+   * this catch the third state is an unhandled error and the reader gets the
+   * framework's crash page instead of a screen anyone designed.
+   */
+  let brief: Awaited<ReturnType<typeof getBrief>> | null = null;
+  let unreachable = false;
+  try {
+    brief = await getBrief(length);
+  } catch (error) {
+    // The driver's message goes to the CONSOLE, not onto the page. An earlier
+    // version of this screen printed it, and merging #16 is what made that
+    // wrong twice over: every other surface in the app now logs it and shows
+    // words instead, and a Postgres error can carry the host and the
+    // credentials out of DATABASE_URL onto a page somebody screenshots. The
+    // operator who needs the detail is the person with the server log.
+    console.error("today: could not reach the story database", error);
+    unreachable = true;
+  }
+
+  if (!brief) {
+    return (
+      <PageShell
+        eyebrow={<LocalDate />}
+        title="Good morning"
+        summary={<span>Your stories are out of reach</span>}
+      >
+        <EmptyState
+          title="Cannot reach your stories"
+          body={
+            "The app is running but it could not read the story database, so this is not " +
+            "a quiet morning — it is a missing answer. Check that the database is running " +
+            "and that DATABASE_URL points at it, then reload. The reason is in the server log."
+          }
+        />
+      </PageShell>
+    );
+  }
+
   const summary = briefSummary(brief);
 
   return (
@@ -48,11 +100,7 @@ export default async function TodayPage({ searchParams }: PageProps<"/">) {
       {brief.count === 0 ? (
         <EmptyState
           title="No brief yet"
-          body={
-            USING_FIXTURES
-              ? "The ingestion worker has not run on this install. Once it has, this screen shows a ranked, bounded digest with a verification grade beside every story."
-              : `Nothing arrived in the window that opened at ${brief.window.briefTime}. The worker keeps checking; this fills as soon as a sweep finds something.`
-          }
+          body={`Nothing has arrived since your brief window opened at ${brief.window.briefTime}. The database answered, so this is a quiet morning rather than a fault. It fills as soon as the worker's next sweep finds something.`}
         />
       ) : (
         <BriefList stories={brief.stories} />

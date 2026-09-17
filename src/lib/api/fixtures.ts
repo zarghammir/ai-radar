@@ -1,6 +1,9 @@
 /**
- * Fixtures for the Today page, standing in for /api/brief until the routes on
- * feat/api-routes merge.
+ * Fixtures for the Today page. The real /api/brief is what Today reads; these
+ * are opt-in via NEXT_PUBLIC_USE_FIXTURES=1, for working on the screen without
+ * a database. They are also the fixed content the browser checks run against,
+ * because a screen check that fails when a publisher rate-limits us is a red
+ * that teaches people to ignore reds.
  *
  * The content is REAL: genuine AI stories from 9-16 September 2026, with real
  * outlets and working URLs. No lorem.

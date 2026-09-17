@@ -21,15 +21,17 @@ import type {
 /**
  * Where the Today page gets its data.
  *
- * The routes on feat/api-routes are not merged, so this reads fixtures. That is
- * an EXPLICIT MODE, not a fallback: a client that tries the network and quietly
- * uses fixtures when it gets a 404 cannot tell "this route does not exist yet"
- * from "this save failed", and would report a failed write as a success. Those
- * are different states and the product treats them differently everywhere else.
+ * It reads the LIVE API. Fixtures are opt-in, for working on the screen without
+ * a database: set NEXT_PUBLIC_USE_FIXTURES=1.
  *
- * Flip by setting NEXT_PUBLIC_USE_FIXTURES=0 once /api/brief exists.
+ * The flag is an EXPLICIT MODE and never a fallback. A client that tries the
+ * network and quietly uses fixtures when it gets a 404 cannot tell "this route
+ * does not exist yet" from "your save failed", and would report a failed write
+ * as a success. Those are different states, and the product distinguishes them
+ * everywhere else. Do not "simplify" this into a try/catch around fetch — that
+ * looks more robust and is the opposite.
  */
-export const USING_FIXTURES = process.env.NEXT_PUBLIC_USE_FIXTURES !== "0";
+export const USING_FIXTURES = process.env.NEXT_PUBLIC_USE_FIXTURES === "1";
 
 const SAVED_KEY = "ai-radar-fixture-saved";
 const HIDDEN_KEY = "ai-radar-fixture-hidden";
