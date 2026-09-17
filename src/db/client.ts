@@ -91,20 +91,40 @@ function redactConnectionParts(text: string): string {
   } catch {
     // The URL is set but unparseable, so its parts are unknown and nothing can
     // be checked against them. Refusing to print is the only safe answer.
+    //
+    // This is a SUBSTITUTION, not a loss: the sentence below tells the operator
+    // that DATABASE_URL will not parse, which is very nearly what the swallowed
+    // message was about to say anyway.
+    //
+    // KNOWN DEGRADATION, one credential format. postgres.js also accepts the
+    // libpq keyword DSN ("host=db.example.com user=me dbname=radar"), which
+    // `new URL()` rejects. Someone connecting that way would connect fine and
+    // then get this line for EVERY error, with the real reason swallowed.
+    // Remote — .env.example and Neon both hand out URL-form strings — and left
+    // as a caveat rather than a parser, because a second parser is a second
+    // thing to get wrong. Named here so the next person meets it instead of
+    // discovering it.
     return "[redacted: DATABASE_URL is set but could not be parsed, so the parts that would need removing are unknown]";
   }
 
-  const user = safeDecode(parsed.username);
-  const password = safeDecode(parsed.password);
-  const database = safeDecode(parsed.pathname.replace(/^\//, ""));
+  // Both forms of every part that can be percent-encoded: the RAW form as it
+  // sits in the URL, and the DECODED form a driver is likely to print. Today
+  // postgres.js prints decoded values, so the decoded form is the one that
+  // fires — but the whole reason this redacts by value rather than by message
+  // shape is to cover forms nothing has produced yet. Carrying both for the
+  // user and only one for the password would be that principle applied to one
+  // field and dropped for the next, in the file that exists to apply it.
+  const rawDatabase = parsed.pathname.replace(/^\//, "");
   const candidates: Array<[string, string]> = [
     [url, "[connection string]"],
     [`${parsed.hostname}:${parsed.port}`, "[host]:[port]"],
-    [password, "[password]"],
+    [safeDecode(parsed.password), "[password]"],
+    [parsed.password, "[password]"],
     [parsed.hostname, "[host]"],
-    [user, "[user]"],
+    [safeDecode(parsed.username), "[user]"],
     [parsed.username, "[user]"],
-    [database, "[database]"],
+    [safeDecode(rawDatabase), "[database]"],
+    [rawDatabase, "[database]"],
     [parsed.port, "[port]"],
   ];
 

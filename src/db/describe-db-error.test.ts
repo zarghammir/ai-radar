@@ -115,6 +115,41 @@ describe("describeDbError", () => {
     expect(describeDbError(new Error("a cat sat on a mat"))).toBe("a cat sat on a mat");
   });
 
+  it("redacts BOTH the raw and the decoded form of every encoded part", () => {
+    // Today postgres.js prints decoded values, so only the decoded form fires.
+    // The raw forms are here for the same reason the redaction works by value
+    // at all: a form nothing has produced yet. Asserting both keeps the
+    // candidate list symmetric, which is what stops a later reader wondering
+    // whether the missing halves were deliberate.
+    process.env.DATABASE_URL =
+      "postgres://us%40er:p%40ss%3Aword@zz-host-9q7x.example.invalid:59999/db%2Dname";
+
+    const raw = describeDbError(new Error('role "us%40er" / p%40ss%3Aword / db%2Dname'));
+    expect(raw).not.toContain("us%40er");
+    expect(raw).not.toContain("p%40ss%3Aword");
+    expect(raw).not.toContain("db%2Dname");
+
+    const decoded = describeDbError(new Error('role "us@er" / p@ss:word / db-name'));
+    expect(decoded).not.toContain("us@er");
+    expect(decoded).not.toContain("p@ss:word");
+    expect(decoded).not.toContain("db-name");
+
+    // The positive beside the negatives: the sentence is still a sentence.
+    expect(decoded).toContain("role");
+  });
+
+  it("degrades safely, and visibly, for the libpq keyword DSN form", () => {
+    // postgres.js accepts this form; `new URL()` rejects it. Someone using it
+    // would connect fine and then get the redacted line for EVERY error. This
+    // asserts the documented caveat rather than leaving it as a comment: the
+    // behaviour is safe (nothing leaks) and self-describing (it says why).
+    process.env.DATABASE_URL =
+      "host=zz-host-9q7x.example.invalid user=UsrSecret9q7x dbname=DbSecret9q7x";
+    const out = describeDbError(new Error("getaddrinfo ENOTFOUND zz-host-9q7x.example.invalid"));
+    for (const fragment of FRAGMENTS) expect(out).not.toContain(fragment);
+    expect(out).toContain("could not be parsed");
+  });
+
   it("handles a non-Error value without throwing", () => {
     expect(describeDbError("zz-host-9q7x.example.invalid refused")).toBe("[host] refused");
   });
