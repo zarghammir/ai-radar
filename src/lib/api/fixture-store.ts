@@ -1,5 +1,5 @@
 import { FIXTURE_STORIES } from "@/lib/api/fixtures";
-import type { Preferences, TopicSummary } from "@/lib/api/types";
+import type { Preferences, StoryCard, TopicSummary } from "@/lib/api/types";
 
 /**
  * The reader's own state while the app runs on fixtures.
@@ -42,6 +42,23 @@ export interface SavedMarks {
   note: string | null;
   tags: string[];
   savedAt: string;
+  /**
+   * The story as it was when the reader saved it.
+   *
+   * SINCE #91 the reader's saved ids live in this browser and the catalogue
+   * lives in a shared database, so something has to turn one into the other.
+   * There is no endpoint that takes a set of ids and returns their cards —
+   * /api/saved returns the one shared list, which is exactly the thing the
+   * ruling says the screen must stop asking for, and /api/stories/[slug] is one
+   * request per save.
+   *
+   * So the card is kept with the save. Three consequences worth stating rather
+   * than discovering: Saved works with no network at all, which suits a PWA;
+   * the copy is a SNAPSHOT, so a grade that changes later will not change here;
+   * and a save made before this existed has no card, which `savedCards` below
+   * handles rather than dropping.
+   */
+  card?: StoryCard;
 }
 
 export function localMarks(): Record<string, SavedMarks> {
@@ -55,6 +72,10 @@ export function localMarks(): Record<string, SavedMarks> {
       note: typeof mark.note === "string" ? mark.note : null,
       tags: Array.isArray(mark.tags) ? mark.tags.filter((t) => typeof t === "string") : [],
       savedAt: typeof mark.savedAt === "string" ? mark.savedAt : new Date().toISOString(),
+      // Absent for anything saved before #91. Read back as undefined rather
+      // than coerced, so the caller can tell "no snapshot" from "a snapshot of
+      // nothing" — see savedCards.
+      card: mark.card && typeof mark.card === "object" ? (mark.card as StoryCard) : undefined,
     };
   }
   return out;
@@ -173,4 +194,37 @@ export function fixtureTopics(): TopicSummary[] {
   return [...counts.values()].sort(
     (a, b) => b.storyCount - a.storyCount || a.name.localeCompare(b.name),
   );
+}
+
+/**
+ * The saved stories this browser knows about, newest first.
+ *
+ * Built entirely from local state, on both paths. A save made before the card
+ * was kept alongside it falls back to the fixture catalogue — which is where
+ * every save made before #91 came from, since the live path had never shipped.
+ * An id with neither is DROPPED rather than rendered blank, and the count of
+ * those is returned so a caller can say so instead of quietly showing less.
+ *
+ * Takes the ids rather than reading them: they live in client.ts, which imports
+ * this module, and reaching back for them would make that a cycle.
+ */
+export function savedCards(ids: ReadonlySet<number>): {
+  cards: StoryCard[];
+  unresolved: number;
+} {
+  const marks = localMarks();
+  const read = localReadIds();
+  const cards: StoryCard[] = [];
+  let unresolved = 0;
+
+  for (const id of ids) {
+    const mark = marks[String(id)];
+    const card = mark?.card ?? FIXTURE_STORIES.find((story) => story.id === id);
+    if (!card) {
+      unresolved += 1;
+      continue;
+    }
+    cards.push({ ...card, saved: true, read: read.has(id) });
+  }
+  return { cards, unresolved };
 }

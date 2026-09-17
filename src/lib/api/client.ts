@@ -1,9 +1,9 @@
-import { FIXTURE_STORIES, fixtureBrief } from "@/lib/api/fixtures";
+import { fixtureBrief } from "@/lib/api/fixtures";
 import {
   fixtureTopics,
   localMarks,
+  savedCards,
   localPreferences,
-  localReadIds,
   patchLocalPreferences,
   writeLocalMarks,
   writeLocalRead,
@@ -86,12 +86,15 @@ async function json<T>(input: string, init?: RequestInit): Promise<T> {
 }
 
 /**
- * Applies the reader's own saved/hidden state to a brief. In fixture mode that
- * state lives in localStorage; against the real API it arrives on the card and
- * this is a no-op.
+ * Applies the reader's own saved and hidden state to a brief.
+ *
+ * ON BOTH PATHS SINCE #91. It used to be a no-op against the live API, on the
+ * assumption that the card would carry the reader's state from the database.
+ * The owner ruled that it must not: the catalogue is shared because the news is
+ * the same for everyone, and the reader's state is not. One shared row would
+ * mean person 47 saves a story and person 12 sees it saved.
  */
 export function applyLocalState(brief: BriefResponse): BriefResponse {
-  if (!USING_FIXTURES) return brief;
   const saved = localSavedIds();
   const hidden = localHiddenIds();
   const stories = brief.stories
@@ -111,36 +114,26 @@ export async function getBrief(length: BriefLengthParam): Promise<BriefResponse>
 }
 
 export async function setSaved(story: StoryCard, saved: boolean): Promise<void> {
-  if (USING_FIXTURES) {
-    const ids = localSavedIds();
-    if (saved) ids.add(story.id);
-    else ids.delete(story.id);
-    writeIds(SAVED_KEY, ids);
-    // The note, the tags and the date saved live in a second key. Unsaving
-    // drops them, matching the real route, where DELETE removes the row and
-    // takes the note with it — a note that survives an unsave would come back
-    // attached to a story the reader thought they had cleared.
-    writeLocalMarks(
-      story.id,
-      saved ? { note: null, tags: [], savedAt: new Date().toISOString() } : null,
-    );
-    return;
-  }
-  await json(`/api/saved/${story.id}`, { method: saved ? "POST" : "DELETE" });
+  const ids = localSavedIds();
+  if (saved) ids.add(story.id);
+  else ids.delete(story.id);
+  writeIds(SAVED_KEY, ids);
+  // The note, the tags and the date saved live in a second key. Unsaving drops
+  // them: a note that survived an unsave would come back attached to a story
+  // the reader thought they had cleared.
+  writeLocalMarks(
+    story.id,
+    // The card travels with the save: the ids are this browser's and the
+    // catalogue is shared, and nothing turns one into the other. See SavedMarks.
+    saved ? { note: null, tags: [], savedAt: new Date().toISOString(), card: story } : null,
+  );
 }
 
 export async function setHidden(story: StoryCard, hidden: boolean): Promise<void> {
-  if (USING_FIXTURES) {
-    const ids = localHiddenIds();
-    if (hidden) ids.add(story.id);
-    else ids.delete(story.id);
-    writeIds(HIDDEN_KEY, ids);
-    return;
-  }
-  await json(`/api/hide/${story.id}`, {
-    method: "POST",
-    body: JSON.stringify({ hidden }),
-  });
+  const ids = localHiddenIds();
+  if (hidden) ids.add(story.id);
+  else ids.delete(story.id);
+  writeIds(HIDDEN_KEY, ids);
 }
 
 /**
@@ -152,27 +145,23 @@ export async function setHidden(story: StoryCard, hidden: boolean): Promise<void
  * archived nothing, and no screen may present it as the second thing.
  */
 export async function getSaved(archived = false): Promise<SavedResponse> {
-  if (USING_FIXTURES) {
-    if (archived) return { stories: [], nextCursor: null, hasMore: false };
-    const ids = localSavedIds();
-    const marks = localMarks();
-    const read = localReadIds();
-    const stories: SavedCard[] = FIXTURE_STORIES.filter((story) => ids.has(story.id)).map(
-      (story) => ({
-        ...story,
-        saved: true,
-        read: read.has(story.id),
-        note: marks[String(story.id)]?.note ?? null,
-        tags: marks[String(story.id)]?.tags ?? [],
-        // Empty, not invented, when this id was saved by a build that did not
-        // record the date. The card omits the line rather than guessing.
-        savedAt: marks[String(story.id)]?.savedAt ?? "",
-      }),
-    );
-    stories.sort((a, b) => b.savedAt.localeCompare(a.savedAt));
-    return { stories, nextCursor: null, hasMore: false };
-  }
-  return json<SavedResponse>(`/api/saved?archived=${archived ? "true" : "false"}`);
+  // Built from THIS browser's state on both paths, per the #91 ruling. There is
+  // no request here: /api/saved still exists and still answers, and the screen
+  // no longer asks it anything, because its answer is one list shared by every
+  // reader of the same instance.
+  if (archived) return { stories: [], nextCursor: null, hasMore: false };
+  const marks = localMarks();
+  const { cards } = savedCards(localSavedIds());
+  const stories: SavedCard[] = cards.map((card) => ({
+    ...card,
+    note: marks[String(card.id)]?.note ?? null,
+    tags: marks[String(card.id)]?.tags ?? [],
+    // Empty, not invented, when this id was saved by a build that did not
+    // record the date. The card omits the line rather than guessing.
+    savedAt: marks[String(card.id)]?.savedAt ?? "",
+  }));
+  stories.sort((a, b) => b.savedAt.localeCompare(a.savedAt));
+  return { stories, nextCursor: null, hasMore: false };
 }
 
 /**
@@ -184,27 +173,18 @@ export async function setSavedMarks(
   storyId: number,
   marks: { note: string | null; tags: string[] },
 ): Promise<void> {
-  if (USING_FIXTURES) {
-    const existing = localMarks()[String(storyId)];
-    writeLocalMarks(storyId, {
-      note: marks.note,
-      tags: marks.tags,
-      savedAt: existing?.savedAt ?? new Date().toISOString(),
-    });
-    return;
-  }
-  await json(`/api/saved/${storyId}`, {
-    method: "POST",
-    body: JSON.stringify({ note: marks.note, tags: marks.tags }),
+  const existing = localMarks()[String(storyId)];
+  writeLocalMarks(storyId, {
+    note: marks.note,
+    tags: marks.tags,
+    savedAt: existing?.savedAt ?? new Date().toISOString(),
+    // Editing a note must not discard the snapshot the save took.
+    card: existing?.card,
   });
 }
 
 export async function setRead(storyId: number, read: boolean): Promise<void> {
-  if (USING_FIXTURES) {
-    writeLocalRead(storyId, read);
-    return;
-  }
-  await json(`/api/read/${storyId}`, { method: "POST", body: JSON.stringify({ read }) });
+  writeLocalRead(storyId, read);
 }
 
 /** Only the fields the route accepts: preferencesPatchSchema is `.strict()`. */

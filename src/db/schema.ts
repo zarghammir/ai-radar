@@ -238,6 +238,15 @@ export const storyTopics = pgTable(
 
 // ─── User preferences ────────────────────────────────────────────────────────
 // V1 is single-user (self-hosted, no login). One row with id = 1.
+//
+// AND THE READER'S OWN STATE IS NOT HERE, BY DECISION — see #91. Saved stories,
+// read marks and hidden stories live in the reader's BROWSER, not in this
+// database, because one instance can be read by more than one person and this
+// row is shared by all of them. saved_items and read_state below are still
+// written by their routes and still serve anyone using the API directly; the
+// app's own screens do not use them. Before moving a reader's state INTO this
+// schema, read that ruling: it was decided rather than defaulted, and accounts
+// or an anonymous device identity can be added on top without discarding it.
 // The column shape is ready for a user_id when accounts arrive.
 
 export const userPreferences = pgTable("user_preferences", {
