@@ -1214,13 +1214,17 @@ withDb("API routes", () => {
     it("answers with defaults on a fresh install rather than a 404", async () => {
       const { GET } = await import("@/app/api/preferences/route");
       const data = await body(await GET());
-      expect(data).toMatchObject({
-        briefTime: "07:30",
-        timezone: "UTC",
-        briefLength: "10",
-        theme: "system",
-      });
+      expect(data).toMatchObject({ briefTime: "07:30", timezone: "UTC" });
       expect(data.topicKeys).toEqual([]);
+
+      // #94: what this row must NO LONGER carry. These are the reader's, not
+      // the instance's, and one shared row served them to every reader of it —
+      // the email being personal data collected for a feature that does not
+      // exist. Asserting their ABSENCE is the guard: without it, putting any of
+      // them back would ship silently and this test would still pass.
+      for (const gone of ["email", "briefLength", "theme", "onboardedAt"]) {
+        expect(data, `${gone} is back in the shared preferences row`).not.toHaveProperty(gone);
+      }
     });
 
     it("updates only the fields it is given", async () => {
@@ -1230,13 +1234,26 @@ withDb("API routes", () => {
       const res = await PUT(
         new Request(`${BASE}/api/preferences`, {
           method: "PUT",
-          body: JSON.stringify({ briefLength: "5", topicKeys: ["openai"] }),
+          body: JSON.stringify({ timezone: "Europe/Lisbon", topicKeys: ["openai"] }),
         }) as never,
       );
       expect(res.status).toBe(200);
       const data = await body(res);
-      expect(data).toMatchObject({ briefLength: "5", briefTime: "07:30" });
+      // The one it was given changed; the one it was not kept its default.
+      expect(data).toMatchObject({ timezone: "Europe/Lisbon", briefTime: "07:30" });
       expect(data.topicKeys).toEqual(["openai"]);
+
+      // And a field that moved to the device is REFUSED rather than ignored.
+      // preferencesPatchSchema is .strict(), so this is the difference between
+      // the column being gone and the write being quietly dropped — a dropped
+      // write is a preference the reader believes they set.
+      const refused = await PUT(
+        new Request(`${BASE}/api/preferences`, {
+          method: "PUT",
+          body: JSON.stringify({ briefLength: "5" }),
+        }) as never,
+      );
+      expect(refused.status).toBe(400);
     });
 
     it("rejects an unknown topic rather than dropping it", async () => {

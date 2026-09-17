@@ -111,6 +111,47 @@ try {
     floor.push(`the second browser can see the first browser's save (${a.savedId})`);
   }
 
+  /* ---- and the same question for a SETTING, not just a save ------------
+   *
+   * #94 moved briefLength onto the device. Two browsers choosing different
+   * lengths must not move each other's — the identical property as the saves,
+   * one field over, which is the whole reason that rule exists.
+   */
+  const settingMark = sectionStart(floor);
+  const setLength = async (context, label) => {
+    const page = await context.newPage();
+    await page.goto(`${base}/settings`, { waitUntil: "networkidle" });
+    const ready = await page
+      .waitForSelector("[data-settings-state='ready']", { timeout: 5000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!ready) return null;
+    await page.getByRole("radio", { name: label }).check();
+    await page.waitForTimeout(250);
+    await page.reload({ waitUntil: "networkidle" });
+    await page.waitForSelector("[data-settings-state='ready']", { timeout: 5000 });
+    for (const option of ["Five minutes", "Ten minutes", "Everything"]) {
+      if (await page.getByRole("radio", { name: option }).isChecked()) return option;
+    }
+    return null;
+  };
+
+  const lengthA = await setLength(first, /Five minutes/i);
+  const lengthB = await setLength(second, /Everything/i);
+  const lengthAAfter = await setLength(first, /Five minutes/i);
+  out.briefLength = { first: lengthA, second: lengthB, firstAfterSecondChanged: lengthAAfter };
+
+  // The floor: both browsers actually reached Settings and stored something.
+  if (!lengthA || !lengthB) floor.push("one of the two browsers could not set a brief length");
+  bailIfBroken(floor, settingMark);
+  if (lengthB !== "Everything")
+    floor.push(`the second browser chose Everything and has ${lengthB}`);
+  if (lengthAAfter !== "Five minutes") {
+    floor.push(
+      `the second browser's choice moved the first browser's brief length to ${lengthAAfter}`,
+    );
+  }
+
   await first.close();
   await second.close();
 } catch (error) {
