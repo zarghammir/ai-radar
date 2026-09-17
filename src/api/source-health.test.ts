@@ -14,11 +14,15 @@ describe("classifySourceHealth", () => {
     expect(classifySourceHealth({ completedRuns: 0, consecutiveFailures: 0 })).toBe("UNKNOWN");
   });
 
-  it("does not let an in-flight run make an unknown source look healthy", () => {
-    // completedRuns counts runs that finished either way, so a source whose
-    // first run has only just started is still UNKNOWN rather than OK.
-    expect(classifySourceHealth({ completedRuns: 0, consecutiveFailures: 0 })).not.toBe("OK");
-  });
+  // REMOVED: a test named "does not let an in-flight run make an unknown source
+  // look healthy", which passed the same input as the test above and asserted
+  // something weaker. This function has no notion of an in-flight run — that
+  // distinction is made entirely in SQL, by counting only runs that finished
+  // either way — so the name described a path the body could not reach, and
+  // the real case went untested behind it.
+  //
+  // It is covered where it can actually be exercised: "keeps a source whose
+  // only run is still in flight UNKNOWN", in api.test.ts, against a database.
 
   it("is OK below the threshold and FAILING at it", () => {
     const N = UNHEALTHY_AFTER_CONSECUTIVE_FAILURES;
