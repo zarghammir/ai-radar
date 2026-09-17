@@ -35,13 +35,17 @@ run the seed, and the worker picks it up on its next pass.
 Then:
 
 ```sh
-npm run sources:check   # fetches every catalogue source through its real adapter
+npm run sources:check   # fetches every ENABLED catalogue source through its real adapter
 npm run db:seed         # writes the catalogue to the database
 ```
 
 `sources:check` reads the **catalogue**, not the database, so it tells you
 whether the thing you just added actually works before you seed it — and it
 runs without a database at all. It exits non-zero if any source fails.
+
+It skips entries with `enabled: false`. If you add a source switched off and
+`sources:check` says nothing about it, that is why — and it means a disabled
+source is never proved to work before someone switches it on.
 
 ### What the seed does, and does not, overwrite
 
