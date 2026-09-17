@@ -6,6 +6,7 @@ import { CONTENT_TYPES, type ContentType } from "@/db/schema";
 import { SOURCE_SEEDS } from "@/db/seed-data";
 import {
   CLASSIFIABLE,
+  announcesItsOwnLaunch,
   decideContentType,
   NOT_CLASSIFIABLE,
   REJECTED_KEYWORDS,
@@ -323,5 +324,111 @@ describe("the premise the provenance migration rests on", () => {
     for (const d of declared) {
       expect(["PAPER", "DISCUSSION"], `${d.file} declares ${d.type}`).toContain(d.type);
     }
+  });
+});
+
+describe("a title that announces its own launch", () => {
+  /**
+   * #79. Show HN items arrive typed RELEASE by their source default, and
+   * RELEASE is not a declared fact, so every one of them runs through the
+   * rules above. Six branches can type a title and five of them reach a Show
+   * HN launch without the prefix mattering — so the words that describe what
+   * somebody BUILT get read as the kind of thing the item IS.
+   *
+   * Each case below is one of those branches, named for it, with the type it
+   * would have been given.
+   */
+  const branches: Array<{ branch: string; bare: string; wouldHaveBeen: ContentType }> = [
+    {
+      branch: "MODEL 2 — parameter count beside a model noun",
+      bare: "I fine-tuned a 7B model for SQL generation",
+      wouldHaveBeen: "MODEL",
+    },
+    {
+      branch: "MODEL 3 — a launch verb beside a model noun",
+      bare: "Introducing a small language model that runs offline",
+      wouldHaveBeen: "MODEL",
+    },
+    {
+      branch: "MODEL 1 — a model family beside a launch verb",
+      bare: "Announcing Gemma 4 fine-tuning on a laptop",
+      wouldHaveBeen: "MODEL",
+    },
+    {
+      branch: "TOOL — a launch verb beside a tool word",
+      bare: "Launching an open-source SDK",
+      wouldHaveBeen: "TOOL",
+    },
+    {
+      branch: "REGULATION — a single phrase",
+      bare: "an EU AI Act compliance checker",
+      wouldHaveBeen: "REGULATION",
+    },
+    {
+      branch: "BUSINESS — a single phrase",
+      bare: "I raised a seed round for my side project",
+      wouldHaveBeen: "BUSINESS",
+    },
+  ];
+
+  for (const c of branches) {
+    it(`keeps a launch as RELEASE: ${c.branch}`, () => {
+      // Two assertions over the SAME words, differing only by the prefix, so
+      // the prefix is isolated as the cause.
+      //
+      // The first is not decoration: it proves the branch this case is named
+      // for is live and would have typed these words. Without it the second
+      // assertion would keep passing if the rule stopped firing for some
+      // unrelated reason, and would then be guarding nothing.
+      expect(classifyContentType(c.bare, "NEWS")).toBe(c.wouldHaveBeen);
+      expect(classifyContentType(`Show HN: ${c.bare}`, "RELEASE")).toBe("RELEASE");
+    });
+  }
+
+  it("returns whatever was declared, not RELEASE specifically", () => {
+    // The guard reads the TITLE, so it applies whatever the source said. This
+    // is why the case above cannot assert the would-have-been against the
+    // prefixed title: the guard answers NEWS there, not MODEL. An earlier
+    // version of this file asserted exactly that and CI caught it.
+    expect(classifyContentType("Show HN: I fine-tuned a 7B model", "NEWS")).toBe("NEWS");
+  });
+
+  it("covers every branch that can type a title", () => {
+    // A floor on the list above: RULES has four entries and MODEL has three
+    // internal branches, so six is the number to keep it at.
+    expect(branches.length).toBe(6);
+    expect(new Set(branches.map((b) => b.wouldHaveBeen))).toEqual(
+      new Set(["MODEL", "TOOL", "REGULATION", "BUSINESS"]),
+    );
+  });
+
+  it("is anchored: a headline that merely mentions Show HN is classified normally", () => {
+    // Otherwise any article about the list inherits the exemption.
+    expect(announcesItsOwnLaunch("A guide to Show HN: what gets upvoted")).toBe(false);
+    expect(classifyContentType("What Show HN taught us about the EU AI Act", "NEWS")).toBe(
+      "REGULATION",
+    );
+  });
+
+  it("returns the declared type rather than a literal, so provenance stays default", () => {
+    // `adapter` is the one provenance the backfill never revisits. Writing it
+    // here would freeze every Show HN row against future fixes to these rules
+    // — which is why the adapter-declares-RELEASE version of this fix was
+    // rejected in #80.
+    // Declared NEWS rather than RELEASE deliberately. With RELEASE the literal
+    // and the declared value coincide, so this assertion could not tell them
+    // apart — a control returning a literal "RELEASE" left it green while the
+    // test's name claimed it guarded exactly that.
+    expect(
+      decideContentType(undefined, "Show HN: an EU AI Act compliance checker", "NEWS"),
+    ).toEqual({ type: "NEWS", source: "default" });
+  });
+
+  it("cannot change the classification of anything that is not a launch", () => {
+    // The precision floor, structural rather than measured: the guard is the
+    // only new path, it is anchored, and no title in the corpus trips it — so
+    // #57's measured 90% MODEL precision is untouched by construction.
+    expect(CORPUS_TITLES.length).toBeGreaterThanOrEqual(15);
+    expect(CORPUS_TITLES.filter(announcesItsOwnLaunch)).toEqual([]);
   });
 });
