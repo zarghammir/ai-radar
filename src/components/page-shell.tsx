@@ -35,7 +35,10 @@ export function PageShell({
         <h1 className="text-ash-hi mt-1 text-[27px] leading-tight font-bold tracking-tight text-balance lg:text-[34px]">
           {title}
         </h1>
-        {summary ? <div className="text-ash mt-2 text-[13.5px]">{summary}</div> : null}
+        {/* empty:hidden on the CONTAINER, not a check at each call site. An
+            element is always truthy, so a `summary` that renders null still
+            draws this div and its margin; the ternary cannot see that. */}
+        {summary ? <div className="text-ash mt-2 text-[13.5px] empty:hidden">{summary}</div> : null}
         {controls}
       </header>
       <div className="mt-6">{children}</div>
