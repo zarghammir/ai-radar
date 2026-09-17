@@ -121,7 +121,7 @@ export const FIXTURE_STORIES: StoryCard[] = [
     publishedAt: "2026-09-16T14:20:00.000Z",
     firstSeenAt: "2026-09-16T14:31:00.000Z",
     lastActivityAt: "2026-09-16T17:02:00.000Z",
-    readingMinutes: 4,
+    readingMinutes: 1,
     score: 58.2,
   }),
   story({
@@ -147,7 +147,7 @@ export const FIXTURE_STORIES: StoryCard[] = [
     publishedAt: "2026-09-16T08:20:00.000Z",
     firstSeenAt: "2026-09-16T08:34:00.000Z",
     lastActivityAt: "2026-09-16T09:10:00.000Z",
-    readingMinutes: 5,
+    readingMinutes: 1,
     score: 51.4,
   }),
   story({
@@ -172,7 +172,7 @@ export const FIXTURE_STORIES: StoryCard[] = [
     publishedAt: "2026-09-14T17:05:00.000Z",
     firstSeenAt: "2026-09-14T17:18:00.000Z",
     lastActivityAt: "2026-09-16T11:40:00.000Z",
-    readingMinutes: 3,
+    readingMinutes: 1,
     score: 44.9,
   }),
   story({
@@ -197,7 +197,7 @@ export const FIXTURE_STORIES: StoryCard[] = [
     publishedAt: "2026-09-15T04:10:00.000Z",
     firstSeenAt: "2026-09-15T05:02:00.000Z",
     lastActivityAt: "2026-09-16T07:55:00.000Z",
-    readingMinutes: 6,
+    readingMinutes: 1,
     score: 33.1,
   }),
   story({
@@ -231,7 +231,7 @@ export const FIXTURE_STORIES: StoryCard[] = [
     publishedAt: "2026-09-16T07:25:00.000Z",
     firstSeenAt: "2026-09-16T07:41:00.000Z",
     lastActivityAt: "2026-09-16T10:12:00.000Z",
-    readingMinutes: 3,
+    readingMinutes: 1,
     score: 21.7,
   }),
   story({
@@ -257,7 +257,7 @@ export const FIXTURE_STORIES: StoryCard[] = [
     publishedAt: "2026-09-14T12:40:00.000Z",
     firstSeenAt: "2026-09-14T13:05:00.000Z",
     lastActivityAt: "2026-09-15T16:20:00.000Z",
-    readingMinutes: 3,
+    readingMinutes: 1,
     score: 28.4,
     read: true,
   }),

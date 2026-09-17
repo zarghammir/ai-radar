@@ -7,6 +7,7 @@ import {
 } from "@/lib/api/fixtures";
 import { alsoReportedBy, storyBody } from "@/lib/api/labels";
 import { deriveVerification } from "@/pipeline/clustering/verification";
+import { readingMinutes } from "@/pipeline/normalize/text";
 
 /**
  * A floor on the fixtures. Without it someone tidies away the uncomfortable
@@ -64,12 +65,19 @@ describe("fixtureBrief treats length as a reading-minute budget", () => {
     expect(all.count).toBe(all.stories.length);
   });
 
-  it("returns fewer stories for 5 than for 10, and fewer for 10 than for all", () => {
+  it("returns fewer stories as the budget shrinks", () => {
     const five = fixtureBrief("5").stories.length;
     const ten = fixtureBrief("10").stories.length;
     const all = fixtureBrief("all").stories.length;
     expect(five).toBeLessThan(ten);
-    expect(ten).toBeLessThan(all);
+    // NOT strictly fewer: every fixture story is one minute, because that is
+    // what readingMinutes() computes from a two-sentence excerpt. Six
+    // one-minute stories all fit inside ten minutes, so the ten-minute brief
+    // IS the whole brief here. An earlier version asserted ten < all and
+    // passed only because the fixtures overstated reading time as article
+    // time — the assertion was true about numbers the product never produces.
+    expect(ten).toBeLessThanOrEqual(all);
+    expect(five).toBeLessThan(all);
   });
 
   it("keeps the five-minute brief inside its budget", () => {
@@ -145,5 +153,24 @@ describe("fixtures are states the pipeline can actually produce", () => {
         s.slug,
       ).toContain(s.primarySource.key);
     }
+  });
+});
+
+/**
+ * readingMinutes is COMPUTED by the pipeline from the story's summary or
+ * excerpt at 220 words a minute — not the time to read the original article.
+ * These fixtures originally carried 3-6 minutes, which is article time, and
+ * that made the reading-length switch look far more aggressive than it is: a
+ * ten-minute brief held two stories instead of all six.
+ */
+describe("fixture reading times are what the pipeline would compute", () => {
+  it("matches readingMinutes() over each story's own body text", () => {
+    const wrong = FIXTURE_STORIES.filter(
+      (s) => s.readingMinutes !== readingMinutes([s.summary ?? s.excerpt ?? ""]),
+    ).map(
+      (s) =>
+        `${s.slug}: fixture ${s.readingMinutes}, computed ${readingMinutes([s.summary ?? s.excerpt ?? ""])}`,
+    );
+    expect(wrong).toEqual([]);
   });
 });
