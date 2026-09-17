@@ -226,6 +226,182 @@ withDb("API routes", () => {
       expect(list[0]).not.toHaveProperty("url");
       expect(JSON.stringify(list[0])).not.toContain("must not be exposed");
     });
+
+    /**
+     * Health over run history. These exist because the pure classifier cannot
+     * check the query that feeds it: the consecutive-failure count is computed
+     * in SQL, and every interesting case is about which rows it counts.
+     */
+    async function run(
+      sourceId: number,
+      at: string,
+      outcome: "ok" | "failed" | "in-flight",
+    ): Promise<void> {
+      await sql.unsafe(
+        `insert into ingest_runs (source_id, started_at, finished_at, error)
+         values ($1, $2::timestamptz, $3, $4)`,
+        [
+          sourceId,
+          at,
+          outcome === "in-flight" ? null : at,
+          outcome === "failed" ? "HTTP 403" : null,
+        ],
+      );
+    }
+
+    async function healthOf(key: string) {
+      const { GET } = await import("@/app/api/sources/route");
+      const data = await body(await GET());
+      const list = data.sources as unknown as Record<string, unknown>[];
+      const row = list.find((s) => s.key === key);
+      expect(row, `no source ${key} in the response`).toBeDefined();
+      return row as { health: string; consecutiveFailures: number };
+    }
+
+    it("reports a source that has never run as UNKNOWN, not healthy", async () => {
+      await source("never-run");
+      expect(await healthOf("never-run")).toMatchObject({
+        health: "UNKNOWN",
+        consecutiveFailures: 0,
+      });
+    });
+
+    it("reports a source that has never once succeeded as FAILING", async () => {
+      // This is import-ai on a hosted runner: refused by IP on every run since
+      // the source existed, so there is no last success to count from. The
+      // query bounds on negative infinity rather than guarding on null, and
+      // without that this source counts zero failures and reads as healthy.
+      const id = await source("import-ai");
+      await run(id, "2026-09-16T09:00:00Z", "failed");
+      await run(id, "2026-09-16T09:30:00Z", "failed");
+      await run(id, "2026-09-16T10:00:00Z", "failed");
+      expect(await healthOf("import-ai")).toMatchObject({
+        health: "FAILING",
+        consecutiveFailures: 3,
+      });
+    });
+
+    it("counts only the failures since the last success", async () => {
+      const id = await source("flaky");
+      await run(id, "2026-09-16T08:00:00Z", "failed");
+      await run(id, "2026-09-16T08:30:00Z", "failed");
+      await run(id, "2026-09-16T09:00:00Z", "ok");
+      await run(id, "2026-09-16T09:30:00Z", "failed");
+      await run(id, "2026-09-16T10:00:00Z", "failed");
+      // Five runs, four of them failures, but only two since it last worked —
+      // so it is below the threshold and reported OK rather than FAILING.
+      expect(await healthOf("flaky")).toMatchObject({ health: "OK", consecutiveFailures: 2 });
+    });
+
+    it("clears the count when the most recent run succeeded", async () => {
+      const id = await source("recovered");
+      await run(id, "2026-09-16T08:00:00Z", "failed");
+      await run(id, "2026-09-16T08:30:00Z", "failed");
+      await run(id, "2026-09-16T09:00:00Z", "failed");
+      await run(id, "2026-09-16T09:30:00Z", "ok");
+      expect(await healthOf("recovered")).toMatchObject({ health: "OK", consecutiveFailures: 0 });
+    });
+
+    /**
+     * Health is per-source, and that is the whole point of #38 — so a suite in
+     * which every fixture creates ONE source cannot test it. With a single
+     * source the correlated count and a global count over ingest_runs are the
+     * same number, and all three `source_id = s.id` correlations in the query
+     * can be deleted without a single test failing.
+     *
+     * In production eighteen sources share that table. A lost correlation
+     * marks all eighteen FAILING the moment one crosses the threshold, or lets
+     * one healthy feed clear everyone else's count: this ticket's own defect,
+     * restored across the whole catalogue.
+     *
+     * Three tests rather than one clever fixture, because the three
+     * correlations need three different arrangements to catch — a single
+     * fixture can expose one or another but not all of them at once.
+     */
+    it("counts each source's failures separately, not the table's", async () => {
+      // Catches the correlation on the failure count itself. B's success is
+      // EARLIER than A's failures, so without `f.source_id = s.id` the query
+      // hands B all three of A's failures and reports B as FAILING.
+      const a = await source("blocked-feed");
+      const b = await source("working-feed");
+      await run(b, "2026-09-16T08:00:00Z", "ok");
+      await run(a, "2026-09-16T09:00:00Z", "failed");
+      await run(a, "2026-09-16T09:30:00Z", "failed");
+      await run(a, "2026-09-16T10:00:00Z", "failed");
+
+      expect(await healthOf("blocked-feed")).toMatchObject({
+        health: "FAILING",
+        consecutiveFailures: 3,
+      });
+      expect(await healthOf("working-feed")).toMatchObject({
+        health: "OK",
+        consecutiveFailures: 0,
+      });
+    });
+
+    it("does not treat another source's success as this source's", async () => {
+      // Catches the correlation on the inner "when did this source last
+      // succeed" lookup. B succeeds AFTER A's failures, so without
+      // `ok.source_id = s.id` the query believes A last succeeded at 11:00,
+      // counts no failures after it, and reports the blocked feed as OK.
+      const a = await source("never-succeeded");
+      const b = await source("healthy-neighbour");
+      await run(a, "2026-09-16T09:00:00Z", "failed");
+      await run(a, "2026-09-16T09:30:00Z", "failed");
+      await run(a, "2026-09-16T10:00:00Z", "failed");
+      await run(b, "2026-09-16T11:00:00Z", "ok");
+
+      expect(await healthOf("never-succeeded")).toMatchObject({
+        health: "FAILING",
+        consecutiveFailures: 3,
+      });
+      expect(await healthOf("healthy-neighbour")).toMatchObject({ health: "OK" });
+    });
+
+    it("keeps a source with no runs UNKNOWN while another source has many", async () => {
+      // Catches the correlation on the completed-run count. Without
+      // `r.source_id = s.id` the untouched source inherits its neighbour's
+      // three completed runs, stops being UNKNOWN, and reports OK — a source
+      // nobody has ever fetched described as working.
+      const a = await source("busy-feed");
+      await source("untouched-feed");
+      await run(a, "2026-09-16T09:00:00Z", "failed");
+      await run(a, "2026-09-16T09:30:00Z", "failed");
+      await run(a, "2026-09-16T10:00:00Z", "failed");
+
+      expect(await healthOf("untouched-feed")).toMatchObject({
+        health: "UNKNOWN",
+        consecutiveFailures: 0,
+      });
+      expect(await healthOf("busy-feed")).toMatchObject({ health: "FAILING" });
+    });
+
+    it("keeps a source whose only run is still in flight UNKNOWN", async () => {
+      // The case the pure classifier cannot express: in-flight is decided
+      // entirely in SQL. One row, no error and no finish time, so there are no
+      // completed runs and the source has not yet told us anything.
+      const id = await source("just-started");
+      await run(id, "2026-09-16T09:00:00Z", "in-flight");
+      expect(await healthOf("just-started")).toMatchObject({
+        health: "UNKNOWN",
+        consecutiveFailures: 0,
+      });
+    });
+
+    it("does not let a run that has only started clear the count", async () => {
+      // An in-flight row has no error and no finish time. Treating it as a
+      // success would mark a failing source healthy the moment the next pass
+      // began — and the next pass begins every thirty minutes.
+      const id = await source("mid-run");
+      await run(id, "2026-09-16T08:00:00Z", "failed");
+      await run(id, "2026-09-16T08:30:00Z", "failed");
+      await run(id, "2026-09-16T09:00:00Z", "failed");
+      await run(id, "2026-09-16T09:30:00Z", "in-flight");
+      expect(await healthOf("mid-run")).toMatchObject({
+        health: "FAILING",
+        consecutiveFailures: 3,
+      });
+    });
   });
 
   describe("PUT /api/sources/:key", () => {

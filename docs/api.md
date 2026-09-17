@@ -619,7 +619,9 @@ list is a few dozen rows.
       "enabled": true,
       "lastFetchedAt": "2026-09-16T11:30:00.000Z",
       "lastError": null,
-      "storyCount": 24
+      "storyCount": 24,
+      "health": "OK",
+      "consecutiveFailures": 0
     }
   ]
 }
@@ -628,6 +630,25 @@ list is a few dozen rows.
 `lastError` and `lastFetchedAt` are included because the developer view needs to
 show which sources are failing. `config` and the feed `url` are not exposed:
 they are operational settings, not display data. Not paginated.
+
+**`health` is one of `OK`, `FAILING` or `UNKNOWN` — three states, not two.** A
+source that has never completed a run is neither working nor broken, and
+reporting it as healthy would be the same defect this field exists to fix.
+
+`lastError` alone cannot answer "is this source working": a single stale error
+is indistinguishable from a feed refused on every run for a week. `health` is
+computed from `ingest_runs` history — `consecutiveFailures` counts failures
+since the source last succeeded, and a source crosses to `FAILING` at three.
+
+Three is a duration in disguise. The ingest schedule runs every thirty minutes,
+so three consecutive failures is ninety minutes of uninterrupted failure: long
+enough that no single transient 500 reaches it, short enough that a source
+which died overnight is already flagged when someone looks in the morning. The
+rationale lives beside the constant in `src/api/source-health.ts`.
+
+A run that has started but not finished is neither a success nor a failure, and
+does not clear the count — otherwise a failing source would read healthy for
+the duration of every pass.
 
 ### `PUT /api/sources/:key`
 
