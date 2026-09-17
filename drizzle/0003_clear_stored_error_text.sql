@@ -28,6 +28,19 @@
 -- changes, and it says what happened to it rather than pretending there was
 -- never an error.
 --
+-- AND THE `WHERE ... IS NOT NULL` PREDICATE IS LOAD-BEARING FOR THE OPPOSITE
+-- REASON. Drop it and the placeholder is written to every row, successes
+-- included. Because health reads this column's PRESENCE and not its content,
+-- the watermark subquery then finds no run with error IS NULL, coalesces to
+-- '-infinity', and counts EVERY run as a consecutive failure. Every source
+-- would report FAILING.
+--
+-- So this column has two opposite failure modes and one line guards both:
+--   writing NULL too widely     -> every failure reads as a success (all HEALTHY)
+--   writing the placeholder too widely -> every success reads as a failure (all FAILING)
+-- Whoever edits either statement should re-derive both directions rather than
+-- trusting that the surviving one was the only risk.
+--
 -- WHY BLANKET RATHER THAN TARGETED. We cannot tell from inside SQL which rows
 -- contain a fragment: the credential lives in DATABASE_URL, which the database
 -- does not know. The only alternative is matching on what a hostname LOOKS
