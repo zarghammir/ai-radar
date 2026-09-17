@@ -33,6 +33,8 @@ const MIN_SAVED = 2;
 
 /** Read from the running app, never typed here — see lib/fixture-ids.mjs. */
 const SEED_STORY_COUNT = 3;
+/** Marks a context as already seeded; see seededContext below for why. */
+const SEED_SENTINEL = "verify-saved-seeded";
 const MARKS_TEMPLATE = [
   { note: null, tags: ["ship"], savedAt: "2026-09-15T09:00:00.000Z" },
   { note: null, tags: ["read-later"], savedAt: "2026-09-14T09:00:00.000Z" },
@@ -49,22 +51,35 @@ const SEED_IDS = await collectStoryIds(browser, base, SEED_STORY_COUNT);
 const SEED_MARKS = Object.fromEntries(SEED_IDS.map((id, i) => [id, MARKS_TEMPLATE[i]]));
 out.seededIds = SEED_IDS;
 
-/** A browser whose reader has finished onboarding and has a full bin. */
+/**
+ * A browser whose reader has finished onboarding and has a full bin.
+ *
+ * SEEDED EXACTLY ONCE, behind a sentinel key. addInitScript runs on EVERY
+ * navigation, a reload included, so an unguarded seed writes the starting
+ * state back over the page each time — and then every "it survived a reload"
+ * assertion below measures the seed being re-applied rather than anything the
+ * app stored. That is worse than vacuous: the check destroys the evidence it
+ * exists to look for. The first run of this script failed exactly that way,
+ * and the note assertion was the one that would have hidden it, because a note
+ * silently re-seeded to null looks identical to one that was never written.
+ */
 async function seededContext() {
   const context = await browser.newContext({ viewport: { width: 390, height: 780 } });
   if (CONTROL !== "skip-seed") {
     await context.addInitScript(
-      ([ids, marks]) => {
+      ([ids, marks, sentinel]) => {
         try {
+          if (localStorage.getItem(sentinel) === "1") return;
           localStorage.setItem(
             "ai-radar-fixture-preferences",
             JSON.stringify({ onboardedAt: "2026-09-01T00:00:00.000Z" }),
           );
           localStorage.setItem("ai-radar-fixture-saved", JSON.stringify(ids));
           localStorage.setItem("ai-radar-fixture-marks", JSON.stringify(marks));
+          localStorage.setItem(sentinel, "1");
         } catch {}
       },
-      [SEED_IDS, SEED_MARKS],
+      [SEED_IDS, SEED_MARKS, SEED_SENTINEL],
     );
   }
   return context;
@@ -233,18 +248,44 @@ try {
     out.settings.briefLengthSurvivedReload = stillFive;
     if (!stillFive) floor.push("the brief length chosen in Settings was gone after a reload");
 
-    // The point of wiring it: Today with no ?length= must now use it. The
-    // 5-minute brief is shorter than the everything brief, and a Today that
-    // ignored the preference would show the same count for both.
+    /**
+     * WHAT THIS CAN AND CANNOT PROVE, said plainly rather than left to be
+     * assumed from a green run.
+     *
+     * Today resolves its default length on the SERVER. On fixtures the
+     * reader's preferences live in localStorage, which the server cannot see,
+     * so a length chosen in Settings here can never reach Today and there is
+     * no way from this script to vary what the server resolves. The first run
+     * of this script asserted it anyway and failed for exactly that reason —
+     * a true failure about the harness, not about the app.
+     *
+     * So what is asserted here is the half that IS observable: Today renders
+     * from a resolved length and ?length= overrides it. That the resolved
+     * length comes from the stored preference, and not from a constant, is
+     * covered in src/lib/api/brief-length.test.ts, which drives both the
+     * fixture and the live server path and has a control proving each reddens.
+     *
+     * The consequence for anyone DEMONSTRATING this build on fixtures: the
+     * brief length in Settings will not change Today. That is fixture mode,
+     * not the product, and it is raised as its own decision rather than
+     * papered over here.
+     */
     await page.goto(base + "/", { waitUntil: "networkidle" });
-    const atPreference = await page.locator("article h2 a").count();
+    const atDefault = await page.locator("article h2 a").count();
+    await page.goto(base + "/?length=5", { waitUntil: "networkidle" });
+    const atFive = await page.locator("article h2 a").count();
     await page.goto(base + "/?length=all", { waitUntil: "networkidle" });
     const atAll = await page.locator("article h2 a").count();
-    out.settings.today = { atPreference, atAll };
-    if (atPreference < 1) floor.push("Today rendered nothing at the saved length");
-    if (!(atPreference < atAll)) {
+    out.settings.today = {
+      atDefault,
+      atFive,
+      atAll,
+      note: "preference is server-side; see comment",
+    };
+    if (atDefault < 1) floor.push("Today rendered nothing at its resolved default length");
+    if (!(atFive < atAll)) {
       floor.push(
-        `Today showed ${atPreference} stories at the saved 5-minute length and ${atAll} at length=all — the preference is not being read`,
+        `Today showed ${atFive} stories at ?length=5 and ${atAll} at ?length=all — the length is not reaching the page at all`,
       );
     }
     await context.close();

@@ -262,6 +262,18 @@ const floorFailures = [];
  * name, would leave a sweep that scans clean and proves nothing — the shape of
  * a gated suite agreeing perfectly with itself because it ran nothing.
  */
+/**
+ * A floor on the seeding floor. The loop below iterates a map, and a map that
+ * came back EMPTY would satisfy every check in it without examining anything —
+ * the vacuous instrument, one level up from the thing it guards.
+ */
+const expectedSeedStates = ROUTES.length * THEMES.length * SIZES.length;
+if (Object.keys(report.seeded).length !== expectedSeedStates) {
+  floorFailures.push(
+    `recorded what ${Object.keys(report.seeded).length} states rendered, expected ${expectedSeedStates}`,
+  );
+}
+
 for (const [state, seen] of Object.entries(report.seeded)) {
   const route = state.slice(state.indexOf("/", state.indexOf("/") + 1));
   if (seen.path !== route) {
@@ -334,6 +346,35 @@ console.log(
           ? Math.min(...measuredBars.map((b) => b.shortestTapTarget))
           : null,
         sample: report.bottomBar["phone/dark/"] ?? null,
+      },
+      // Evidence that the sweep audited the screens it claims to have. Printed
+      // on SUCCESS as well as failure, so a future reader can see the
+      // instrument had something to measure rather than take it on trust.
+      seeding: {
+        statesRecorded: Object.keys(report.seeded).length,
+        expected: expectedSeedStates,
+        landedElsewhere: Object.entries(report.seeded).filter(
+          ([state, seen]) => seen.path !== state.slice(state.indexOf("/", state.indexOf("/") + 1)),
+        ).length,
+        savedStates: [
+          ...new Set(
+            Object.entries(report.seeded)
+              .filter(([state]) => state.endsWith("/saved"))
+              .map(([, seen]) => seen.savedState),
+          ),
+        ],
+        settingsStates: [
+          ...new Set(
+            Object.entries(report.seeded)
+              .filter(([state]) => state.endsWith("/settings"))
+              .map(([, seen]) => seen.settingsState),
+          ),
+        ],
+        fewestControlsScannedOnSaved: Math.min(
+          ...Object.entries(report.seeded)
+            .filter(([state]) => state.endsWith("/saved"))
+            .map(([, seen]) => seen.noteButtons),
+        ),
       },
       navSpotCheck: {
         "phone/light/": report.nav["phone/light/"],

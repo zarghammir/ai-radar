@@ -8,6 +8,19 @@ import { PreferenceSections } from "@/components/settings/preference-sections";
 
 export const metadata: Metadata = { title: "Settings" };
 
+/**
+ * Rendered per request, never prerendered.
+ *
+ * This page READS THE TOPIC CATALOGUE, which changes as the pipeline ingests.
+ * Without this Next prerenders it at build time: the subject list would be
+ * frozen at whatever the database held when the image was built, and on a
+ * build with no DATABASE_URL — which is how this project's CI builds — the
+ * read fails once and "the list of subjects could not be read" is baked into
+ * a static page forever. Nothing would look wrong; the page would simply
+ * always say that.
+ */
+export const dynamic = "force-dynamic";
+
 const GRADES = [
   { bars: 4, word: "Primary source", def: "The company, lab or author published it themselves." },
   { bars: 3, word: "Corroborated", def: "Two or more independent outlets report the same thing." },

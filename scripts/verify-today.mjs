@@ -12,6 +12,7 @@
  * card), and the whole run would sweep clean while the page was blank.
  */
 import { launchBrowser, requireServer } from "./lib/browser.mjs";
+import { markOnboarded } from "./lib/seed.mjs";
 
 const base = process.argv[2] || process.env.VERIFY_URL || "http://127.0.0.1:3210";
 await requireServer(base);
@@ -29,6 +30,10 @@ try {
   /* ---- 1. the reading-length switch actually shortens the list ---------- */
   {
     const ctx = await browser.newContext({ viewport: { width: 390, height: 780 } });
+    // The first-run gate is in the root layout, so an unseeded context asking
+    // for Today is sent to /welcome and every locator below waits on a page
+    // that is not there.
+    await markOnboarded(ctx);
     const page = await ctx.newPage();
 
     await page.goto(`${base}/?length=all`, { waitUntil: "networkidle" });
@@ -58,6 +63,10 @@ try {
   /* ---- 2. save toggles, and survives a reload -------------------------- */
   {
     const ctx = await browser.newContext({ viewport: { width: 390, height: 780 } });
+    // The first-run gate is in the root layout, so an unseeded context asking
+    // for Today is sent to /welcome and every locator below waits on a page
+    // that is not there.
+    await markOnboarded(ctx);
     const page = await ctx.newPage();
     await page.goto(`${base}/?length=all`, { waitUntil: "networkidle" });
 
@@ -86,6 +95,10 @@ try {
   /* ---- 3. hide removes the card, and it stays hidden ------------------- */
   {
     const ctx = await browser.newContext({ viewport: { width: 390, height: 780 } });
+    // The first-run gate is in the root layout, so an unseeded context asking
+    // for Today is sent to /welcome and every locator below waits on a page
+    // that is not there.
+    await markOnboarded(ctx);
     const page = await ctx.newPage();
     await page.goto(`${base}/?length=all`, { waitUntil: "networkidle" });
 
@@ -127,6 +140,7 @@ try {
           viewport: { width, height: 900 },
           colorScheme: theme,
         });
+        await markOnboarded(ctx);
         const page = await ctx.newPage();
         await page.addInitScript((t) => {
           try {
