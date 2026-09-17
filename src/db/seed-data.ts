@@ -236,6 +236,42 @@ export const SOURCE_SEEDS: SourceSeed[] = [
     defaultContentType: "NEWS",
     config: { list: "top", limit: 120, minPoints: 20 },
   },
+  {
+    key: "hackernews-show",
+    name: "Show HN",
+    kind: "hackernews",
+    tier: "COMMUNITY",
+    url: null,
+    homepage: "https://news.ycombinator.com/show",
+    /**
+     * RELEASE, and the imprecision is deliberate rather than overlooked.
+     *
+     * A Show HN post is a DEBUT — a person putting a thing in front of people
+     * for the first time — and "Release" connotes a version of a product that
+     * already exists. That is a real mismatch and it is smaller than either
+     * alternative's cost.
+     *
+     * Not DISCUSSION: it is what the adapter assigns to front-page self-posts,
+     * it carries ranking weight 0, and it would tell a reader that somebody
+     * shipping a thing is a conversation. Not a new content type either: an
+     * enum member costs a migration, a label, a badge colour, a ranking
+     * weight, a place in every exhaustiveness switch and a row on #66 — and
+     * the Signal model may replace the Story content-type axis entirely, in
+     * which case the second build is the one that has to migrate rows.
+     *
+     * The open question is carried by #78. If launches get their own kind,
+     * this line is where it changes.
+     */
+    defaultContentType: "RELEASE",
+    /**
+     * minPoints 3 is measured, not inherited. Against the live show list,
+     * scores run min 2 / p25 3 / MEDIAN 4 / p75 17 / max 2100. The front
+     * page's threshold of 20 keeps 23% of the list; 3 keeps 78% and still
+     * drops the submissions sitting at 2. A threshold calibrated for one list
+     * silently empties another.
+     */
+    config: { list: "show", limit: 120, minPoints: 3 },
+  },
 ];
 
 // ─── Topics ──────────────────────────────────────────────────────────────────

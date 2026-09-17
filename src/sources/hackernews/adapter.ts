@@ -5,7 +5,7 @@ import { fetchJson } from "../http";
 /**
  * Hacker News via the official Firebase API (no key needed).
  * Config options (sources.config):
- *   - list?: "top" | "best" | "new"   (default "top")
+ *   - list?: "top" | "best" | "new" | "show"   (default "top")
  *   - limit?: number                  (default 120 ids scanned)
  *   - minPoints?: number              (default 20)
  *   - keywords?: string[]             AI filter; defaults to a built-in list
@@ -77,6 +77,9 @@ export const hackerNewsAdapter: SourceAdapter = {
   description: "Hacker News front page / best stories filtered to AI topics (official API).",
   async fetch(source, ctx): Promise<FetchedItem[]> {
     const list = String(source.config.list ?? "top");
+    // Show HN is a launch list, not a news list, and that changes what a
+    // self-post means; see the contentType note below.
+    const isShowList = list === "show";
     const limit = Number(source.config.limit ?? 120);
     const minPoints = Number(source.config.minPoints ?? 20);
     const keywords = Array.isArray(source.config.keywords)
@@ -127,7 +130,11 @@ export const hackerNewsAdapter: SourceAdapter = {
         excerpt: it.text ?? null,
         author: it.by ?? null,
         publishedAt: it.time ? new Date(it.time * 1000) : null,
-        contentType: it.url ? undefined : "DISCUSSION",
+        // A self-post on the front page is a discussion: someone is asking
+        // or arguing. A self-post on Show HN is a person launching a thing
+        // and describing it rather than linking to it — a debut, not a
+        // conversation — so it falls through to the source default instead.
+        contentType: it.url || isShowList ? undefined : "DISCUSSION",
         metadata: {
           hnId: it.id,
           hnUrl,

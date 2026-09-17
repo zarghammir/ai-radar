@@ -27,7 +27,7 @@ function transport(ids: number[], items: Record<number, unknown>, failIds: numbe
   const fetchImpl = (async (input: string | URL | Request) => {
     const url = String(input);
     calls.push(url);
-    if (url.endsWith("topstories.json")) {
+    if (/\/v0\/[a-z]+stories\.json$/.test(url)) {
       return { ok: true, status: 200, text: async () => JSON.stringify(ids) } as Response;
     }
     const m = url.match(/\/item\/(\d+)\.json$/);
@@ -107,5 +107,78 @@ describe("hackerNewsAdapter", () => {
     const out = await hackerNewsAdapter.fetch(sourceWith({}), ctx);
     expect(out[0].contentType).toBe("DISCUSSION");
     expect(out[0].url).toBe("https://news.ycombinator.com/item?id=1");
+  });
+});
+
+describe("the Show HN list", () => {
+  const showSource = (over: Record<string, unknown> = {}) =>
+    ({
+      ...sourceWith({ list: "show", limit: 10, minPoints: 3, ...over }),
+      defaultContentType: "RELEASE",
+    }) as Source;
+
+  it("reads showstories, not topstories", async () => {
+    const { fetchImpl, calls } = transport([1], { 1: story(1) });
+    await hackerNewsAdapter.fetch(showSource(), contextFor(fetchImpl).ctx);
+    expect(calls.some((u) => u.endsWith("/v0/showstories.json"))).toBe(true);
+    expect(calls.some((u) => u.endsWith("/v0/topstories.json"))).toBe(false);
+  });
+
+  it("leaves a self-post's type to the source, because a debut is not a discussion", async () => {
+    // The front page assigns DISCUSSION to a post with no outbound link, and
+    // that is right there: someone is asking or arguing. On Show HN the same
+    // shape is a person launching a thing and describing it rather than
+    // linking to it. Undefined here means normalizeItem falls back to the
+    // source default, which the catalogue sets to RELEASE.
+    const selfPost = story(1, { url: undefined, text: "I built this over a year" });
+    const { fetchImpl } = transport([1], { 1: selfPost });
+    const [item] = await hackerNewsAdapter.fetch(showSource(), contextFor(fetchImpl).ctx);
+    expect(item.contentType).toBeUndefined();
+  });
+
+  it("still marks a front-page self-post as a discussion", async () => {
+    // The positive control for the line above: the change must be confined to
+    // the show list, or it silently retypes every Ask HN thread.
+    const selfPost = story(1, { url: undefined, text: "what does everyone think" });
+    const { fetchImpl } = transport([1], { 1: selfPost });
+    const src = sourceWith({ list: "top", limit: 10, minPoints: 3 });
+    const [item] = await hackerNewsAdapter.fetch(src, contextFor(fetchImpl).ctx);
+    expect(item.contentType).toBe("DISCUSSION");
+  });
+
+  it("keeps the thread url and the engagement counts, and invents no velocity", async () => {
+    const { fetchImpl } = transport([1], { 1: story(1, { score: 7, descendants: 2 }) });
+    const [item] = await hackerNewsAdapter.fetch(showSource(), contextFor(fetchImpl).ctx);
+    expect(item.metadata).toMatchObject({
+      hnId: 1,
+      hnUrl: "https://news.ycombinator.com/item?id=1",
+      points: 7,
+      comments: 2,
+    });
+    // Nothing that looks like a rate. An item arrives with a score; whether it
+    // is rising needs history this repo does not keep, and a delta against
+    // nothing is a number that looks measured and is not.
+    const keys = Object.keys(item.metadata ?? {});
+    expect(keys.filter((k) => /velocity|rate|rising|trend|delta|perHour/i.test(k))).toEqual([]);
+  });
+
+  it("applies the configured points floor rather than the front page's", async () => {
+    const items = { 1: story(1, { score: 4 }), 2: story(2, { score: 2 }) };
+    const { fetchImpl } = transport([1, 2], items);
+    const out = await hackerNewsAdapter.fetch(showSource(), contextFor(fetchImpl).ctx);
+    expect(out.map((i) => i.externalId)).toEqual(["1"]);
+  });
+
+  it("reports zero for an empty list rather than succeeding quietly", async () => {
+    // The ticket's control. Asserted before anything else can throw, because a
+    // diagnostic that only runs when the rest survives is not a diagnostic for
+    // the case it exists to catch.
+    const { fetchImpl, calls } = transport([], {});
+    const out = await hackerNewsAdapter.fetch(showSource(), contextFor(fetchImpl).ctx);
+    expect(out).toEqual([]);
+    // Floor on the control itself: it must have actually asked for the list.
+    // An empty result because no request was made would pass the line above
+    // while proving nothing.
+    expect(calls.filter((u) => u.endsWith("/v0/showstories.json")).length).toBe(1);
   });
 });
