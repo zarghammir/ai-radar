@@ -59,6 +59,9 @@ export const DEFAULT_AI_KEYWORDS = [
  * more: it says what a title said, never whether the thing is true, good, or
  * worth reading. It must not become a second verification signal.
  */
-export function matchedAiVocabulary(title: string, keywords: string[] = DEFAULT_AI_KEYWORDS): boolean {
+export function matchedAiVocabulary(
+  title: string,
+  keywords: string[] = DEFAULT_AI_KEYWORDS,
+): boolean {
   return matchesAnyKeyword(title, keywords);
 }
