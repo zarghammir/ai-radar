@@ -39,6 +39,9 @@ const MARKS_TEMPLATE = [
   { note: null, tags: [], savedAt: "2026-09-13T09:00:00.000Z" },
 ];
 
+/** Thrown to leave a block early without pretending the rest of it ran. */
+class SkipRest extends Error {}
+
 const out = { control: CONTROL };
 const floor = [];
 const browser = await launchBrowser();
@@ -124,9 +127,16 @@ try {
     const context = await seededContext();
     const page = await context.newPage();
     await page.goto(base + "/saved", { waitUntil: "networkidle" });
-    await page.waitForSelector("[data-screen-state]", { timeout: 5000 });
+    // Tolerant on purpose. Under VERIFY_CONTROL=skip-seed nothing is seeded,
+    // the first-run gate sends this to /welcome, and there is no screen-state
+    // marker at all. A hard wait would THROW here, and the control would then
+    // exit 1 for a crash rather than for the floor it exists to redden — which
+    // proves nothing about the floor.
+    await page.waitForSelector("[data-screen-state]", { timeout: 5000 }).catch(() => {});
 
-    const state = await page.getAttribute("[data-screen-state]", "data-screen-state");
+    const state = await page
+      .getAttribute("[data-screen-state]", "data-screen-state")
+      .catch(() => null);
     const count = await cards(page).count();
     out.saved = { state, count };
     // THE FLOOR. Everything below is about a list; this is the list existing.
@@ -201,14 +211,26 @@ try {
     const context = await seededContext();
     const page = await context.newPage();
     await page.goto(base + "/settings", { waitUntil: "networkidle" });
-    await page.waitForSelector("[data-settings-state='ready']", { timeout: 5000 });
+    // Tolerant for the same reason as above: the control run has no settings
+    // panel to wait for, and a throw here would be a crash wearing a floor's
+    // exit code.
+    const ready = await page
+      .waitForSelector("[data-settings-state='ready']", { timeout: 5000 })
+      .then(() => true)
+      .catch(() => false);
+    out.settings = { ready };
+    if (!ready) {
+      floor.push('Settings never reached "ready", so none of its writes were exercised');
+      await context.close();
+      throw new SkipRest();
+    }
 
     await page.getByRole("radio", { name: /Five minutes/i }).check();
     await page.waitForTimeout(250);
     await page.reload({ waitUntil: "networkidle" });
     await page.waitForSelector("[data-settings-state='ready']", { timeout: 5000 });
     const stillFive = await page.getByRole("radio", { name: /Five minutes/i }).isChecked();
-    out.settings = { briefLengthSurvivedReload: stillFive };
+    out.settings.briefLengthSurvivedReload = stillFive;
     if (!stillFive) floor.push("the brief length chosen in Settings was gone after a reload");
 
     // The point of wiring it: Today with no ?length= must now use it. The
@@ -227,6 +249,8 @@ try {
     }
     await context.close();
   }
+} catch (error) {
+  if (!(error instanceof SkipRest)) throw error;
 } finally {
   await browser.close();
 }
