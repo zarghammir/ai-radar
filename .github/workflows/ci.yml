@@ -5,13 +5,30 @@ on:
   push:
     branches: [main]
 
-# One run per ref. On a pull request a new push cancels the previous run rather
-# than paying for two answers to the same question. On main nothing is ever
-# cancelled: two merges landing inside a run's ~70 seconds share the ref
-# refs/heads/main, and cancelling there would leave the first commit with no
-# verdict and no way to tell which merge broke a later red.
+# On a pull request, one run per ref: a new push cancels the previous run rather
+# than paying for two answers to the same question.
+#
+# On main, one run per COMMIT. The sha is in the group deliberately, so a merge
+# commit is alone in its group and can never be superseded. `cancel-in-progress:
+# false` is not enough on its own and the previous version of this comment was
+# wrong about that: it stops a RUNNING run being cancelled, but GitHub keeps
+# only one PENDING run per group and cancels the older one when a new arrival
+# queues behind it. On 2026-09-16 three pull requests merged inside two minutes
+# and main@59a8714 was cancelled before a single job started — no verdict at
+# all, which is precisely what this comment used to promise could not happen.
+#
+# The condition is written as "not a pull request" rather than "is a push" on
+# purpose. Naming the event that GETS isolation means any event added later —
+# workflow_dispatch, merge_group — silently opts out of it: those runs would
+# share ci-<ref> with cancel-in-progress false, which is this same bug
+# reintroduced by an edit that never touches this line. Inverted, a new event
+# inherits isolation and has to be deliberately excluded to lose it.
+#
+# The cost is that two merges landing together both run instead of one. That is
+# the price of the guarantee, and a merge commit with no verdict is the thing
+# you cannot buy back later — you can re-run it, but only if someone notices.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.ref }}-${{ github.event_name != 'pull_request' && github.sha || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -107,8 +124,11 @@ jobs:
   # have to guess which files can change a rendered page, and the honest answer
   # is most of them: a utility, a token, a layout, a dependency bump. A browser
   # check that runs only sometimes is the problem this job exists to fix. It
-  # costs roughly 3-4 runner minutes a run; the schedule in ingest.yml is where
-  # the minutes conversation actually belongs (see docs/cost-protection.md).
+  # costs 118 seconds, measured on run 35166985867 rather than estimated —
+  # containers 21s, install 17s, build 21s, the sweep 34s, the shell checks 8s.
+  # (An earlier version of this comment said 3-4 minutes, which was a guess and
+  # was nearly double.) The schedule in ingest.yml is where the minutes
+  # conversation actually belongs (see docs/cost-protection.md).
   #
   # `needs: ci` so a pull request that already fails lint, types, tests or the
   # build does not also pay for a browser.
