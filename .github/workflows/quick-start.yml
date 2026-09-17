@@ -1,0 +1,195 @@
+name: Quick start
+
+# The README's own instructions, followed literally, on a machine that has never
+# seen this repository. The whole promise of an open-source project is that a
+# stranger can clone it and run it, and until this existed nobody ever had:
+# every green on this project is on a tree that already had node_modules, a
+# database, or a warm cache somewhere.
+#
+# THE EDITING RULE FOR THIS FILE: it may only run commands the README gives, in
+# the order the README gives them. When a job here needs a step the document
+# does not contain, that is not a fix to this workflow — it is a gap in the
+# README, and the README is what changes. A job that quietly learns our habits
+# would pass forever and prove nothing.
+#
+# Its own workflow rather than a job in ci.yml so the path filter below can stop
+# it running at all. A job-level filter still costs a billed minute to check out
+# and decide; a workflow that does not trigger costs nothing.
+#
+# The filter is safe here in a way it would not be on the browser job. That one
+# would have to guess which files can change a rendered page, and the honest
+# answer is most of them. This one enumerates the files that can break THE
+# DOCUMENTED INSTRUCTIONS, which is a small closed set — and anything else that
+# breaks the image is caught by compose-smoke in ci.yml on every pull request.
+on:
+  pull_request:
+    paths:
+      - README.md
+      - Dockerfile
+      - docker-compose.yml
+      - docker/**
+      - .env.example
+      - package.json
+      - .github/workflows/quick-start.yml
+  push:
+    branches: [main]
+    paths:
+      - README.md
+      - Dockerfile
+      - docker-compose.yml
+      - docker/**
+      - .env.example
+      - package.json
+      - .github/workflows/quick-start.yml
+
+# One run per commit on main, one per ref on a pull request. Written as "not a
+# pull request" rather than naming push, so an event added later inherits the
+# isolation instead of silently opting out of it — see ci.yml for the incident
+# that rule comes from.
+concurrency:
+  group: quick-start-${{ github.ref }}-${{ github.event_name != 'pull_request' && github.sha || '' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  # ── "Quick start (self-host)" ───────────────────────────────────────────────
+  self-host:
+    name: self-host, the README verbatim
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      # Stands in for `git clone`. Cloning would fetch MAIN, so a pull request
+      # that fixes the quick start would be graded against the unfixed copy —
+      # the job would pass or fail on the wrong document, and would look
+      # perfectly faithful doing it.
+      #
+      # The literal clone becomes right under one condition, and issue #59
+      # carries it: today the repository is PRIVATE, so the README's first
+      # command cannot work for a stranger at all. When #59 flips it public,
+      # restoring `git clone` proves the first command by the same instrument
+      # that proves the rest — and the grading problem has to be solved then,
+      # not ignored.
+      - name: Stand in for `git clone` (see the note above)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # No Node setup step on purpose: the README says the Node toolchain is not
+      # needed to self-host because Docker builds it all, and this is here to
+      # find out whether that is true.
+      - name: Show what this machine has before we start
+        run: |
+          echo "docker:  $(docker --version 2>/dev/null || echo 'absent')"
+          echo "node:    $(node --version 2>/dev/null || echo 'absent')"
+          echo "openssl: $(openssl version 2>/dev/null || echo 'absent')"
+
+      - name: cp .env.example .env
+        run: cp .env.example .env
+
+      # The README says `openssl rand -hex 32`, then "paste the result into
+      # INTERNAL_API_SECRET in .env". A human opens an editor here; this sed is
+      # the pasting, and it is the one place this cannot be literal. Worth
+      # knowing, because a manual edit in the middle of a copy-paste block is
+      # the step a stranger is most likely to skip.
+      - name: openssl rand -hex 32, pasted into INTERNAL_API_SECRET
+        run: |
+          SECRET="$(openssl rand -hex 32)"
+          sed -i "s|^INTERNAL_API_SECRET=.*|INTERNAL_API_SECRET=${SECRET}|" .env
+          grep -qE '^INTERNAL_API_SECRET=[0-9a-f]{64}$' .env \
+            || { echo "the secret was not pasted; the rest of this job would test the wrong thing" >&2; exit 1; }
+
+      # In the foreground, as written. A reader following this literally now has
+      # a terminal that never returns, and the next instruction says to open a
+      # browser — so they need a second terminal the document never mentions.
+      # That is a finding, not a reason to write `-d` here.
+      - name: docker compose up
+        run: |
+          docker compose up > /tmp/compose.log 2>&1 &
+          echo $! > /tmp/compose.pid
+
+      - name: Then open http://localhost:3000
+        run: |
+          for i in $(seq 1 300); do
+            CODE="$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/ || true)"
+            if [ "$CODE" = "200" ]; then
+              echo "http://localhost:3000 answered 200 after ${i}s"
+              echo "SECONDS_TO_FIRST_200=${i}" >> "$GITHUB_ENV"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "the app never answered 200 — the quick start does not work as written" >&2
+          tail -80 /tmp/compose.log >&2
+          exit 1
+
+      # The README's own promise for that first start: it "creates the database
+      # schema and loads the shipped catalogue of sources, so the app has
+      # something to show". Asserted through the command the README itself
+      # documents for reaching Postgres, not one of ours.
+      - name: "...so the app has something to show"
+        run: |
+          COUNT="$(docker compose exec -T postgres psql -U ai_radar ai_radar -tAc 'select count(*) from sources')"
+          echo "sources loaded by the first start: $COUNT"
+          [ "${COUNT:-0}" -gt 0 ] \
+            || { echo "the catalogue is empty: the quick start started the app but gave it nothing to show" >&2; exit 1; }
+          echo "RESULT: the self-host quick start works on a machine that had nothing. First 200 after ${SECONDS_TO_FIRST_200}s."
+
+      - name: The compose log, if anything above failed
+        if: failure()
+        run: tail -200 /tmp/compose.log || true
+
+      - name: docker compose down
+        if: always()
+        run: docker compose down -v || true
+
+  # ── "It is needed to work on the code" ──────────────────────────────────────
+  # The README's other path, followed with the same rule. There is deliberately
+  # NO database service on this runner: a stranger's laptop does not have one
+  # either, and whether the document tells them to get one is precisely what is
+  # under test. If this job goes red at db:migrate, the finding is the README's,
+  # not the runner's.
+  contributor:
+    name: work on the code, the README verbatim
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Stand in for `git clone` (see the note above)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The README's stated prerequisites for this path, and nothing else.
+      - name: Node 22.13+ and npm 11+, as the README requires
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+
+      - name: npm install -g npm@11
+        run: |
+          npm install -g npm@11
+          npm --version
+
+      - name: cp .env.example .env
+        run: cp .env.example .env
+
+      - name: npm ci
+        run: npm ci
+
+      - name: npm run db:migrate
+        run: npm run db:migrate
+
+      - name: npm run dev
+        run: |
+          npm run dev > /tmp/dev.log 2>&1 &
+          for i in $(seq 1 120); do
+            CODE="$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/ || true)"
+            if [ "$CODE" = "200" ]; then echo "dev server answered 200 after ${i}s"; exit 0; fi
+            sleep 1
+          done
+          echo "the dev server never answered 200" >&2
+          tail -80 /tmp/dev.log >&2
+          exit 1
+
+      - name: The dev log, if anything above failed
+        if: failure()
+        run: tail -200 /tmp/dev.log || true
