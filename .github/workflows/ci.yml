@@ -168,6 +168,18 @@ jobs:
         run: |
           google-chrome --version || echo "no google-chrome on PATH"
 
+      # CONTROL, THROWAWAY BRANCH, NEVER MERGE. Removes the browser the runner
+      # ships so scripts/lib/browser.mjs cannot resolve one and exits 2. The
+      # server is still started below, so the exit 2 comes from the no-browser
+      # path rather than the nothing-serving path — both produce the same code
+      # and the job's message names both, but this control exercises the first.
+      - name: CONTROL — remove the browser
+        run: |
+          sudo rm -f /opt/google/chrome/chrome /opt/google/chrome/google-chrome \
+                     /usr/bin/google-chrome /usr/bin/google-chrome-stable \
+                     /usr/bin/chromium /usr/bin/chromium-browser || true
+          google-chrome --version 2>/dev/null || echo "chrome is gone, as intended"
+
       - name: Build
         run: npm run build
         env:
