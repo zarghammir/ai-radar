@@ -193,11 +193,12 @@ jobs:
       # machine, a warm cache is precisely the thing that would make it prove
       # nothing. Do not add it as a speed-up.
       #
-      # Known gap, recorded rather than hidden: the README states the floor as
-      # 22.13 and explains why, but `.nvmrc` is `22`, so this installs the latest
-      # 22.x and the documented floor is never exercised. A contributor on
-      # exactly 22.13 — the version the README tells them is enough — is the one
-      # case this job cannot speak to.
+      # Known gap, carried by issue #81: the README states the floor as 22.13 and
+      # explains why, but `.nvmrc` is `22`, so this installs the latest 22.x and
+      # the documented floor is never exercised. A contributor on exactly 22.13 —
+      # the version the README tells them is enough — is the one case this job
+      # cannot speak to. #81 holds the decision: pin .nvmrc, add a matrix leg, or
+      # change the README's claim to match what is tested.
       - name: Node 22.13+ and npm 11+, as the README requires
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
