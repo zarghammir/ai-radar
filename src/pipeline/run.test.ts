@@ -6,6 +6,7 @@ import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { eq } from "drizzle-orm";
 import type { Db } from "@/db/client";
 import * as schema from "@/db/schema";
+import { matchedAiVocabulary } from "@/pipeline/normalize/ai-vocabulary";
 import { TRUNCATE_ALL } from "@/db/tables";
 import { rawItems, sources, stories, storyTopics, topics, ingestRuns } from "@/db/schema";
 import { deriveVerification } from "./clustering/verification";
@@ -891,6 +892,7 @@ withDb("pipeline orchestration", () => {
     expect(result.bySource.map((s) => s.sourceKey)).toEqual(["openai-blog"]);
   });
 
+<<<<<<< HEAD
   // ── #99 ────────────────────────────────────────────────────────────────────
   // Asserted at the point the value is WRITTEN, not at the API that serves it.
   // GET /api/sources is one consumer; #86's health reads the same row, and the
@@ -940,5 +942,79 @@ withDb("pipeline orchestration", () => {
     for (const run of runs) {
       for (const fragment of fragments) expect(run.error ?? "").not.toContain(fragment);
     }
+=======
+  // ── Adjacent tech: kept, not shown by default (#71) ────────────────────────
+
+  describe("a source that labels instead of gating", () => {
+    const TITLE = "Show HN: A tiny Postgres migration runner";
+
+    it("STORES a non-AI item and marks its story adjacent tech", async () => {
+      // The half of the acceptance that gets skipped. Testing only that the
+      // filter hides it cannot tell a working filter from an item that was
+      // never stored at all — which is the bug this ticket exists to fix.
+      expect(matchedAiVocabulary(TITLE), "fixture must genuinely not match").toBe(false);
+
+      await addSource({
+        key: "hn-discovery",
+        name: "Show HN",
+        kind: "hackernews",
+        tier: "COMMUNITY",
+        url: null,
+        config: { list: "top", minPoints: 3, keywordPolicy: "label" },
+      });
+      await runIngest(db, undefined, {
+        now: NOW,
+        fetchImpl: fakeNetwork(hnRoutes([{ id: 1, title: TITLE, url: "https://example.com/pg" }])),
+        sink: () => {},
+      });
+
+      const items = await db.select().from(schema.rawItems);
+      expect(items).toHaveLength(1);
+      expect(items[0].matchedAiVocabulary).toBe(false);
+
+      const [story] = await db.select().from(schema.stories);
+      expect(story.adjacentTech).toBe(true);
+    });
+
+    it("still discards the same item when the source gates", async () => {
+      // The control that the POLICY is doing the work. Without it the test
+      // above would pass just as well if the gate had been removed outright,
+      // which would empty the front door instead of widening the back one.
+      await hackerNews();
+      await runIngest(db, undefined, {
+        now: NOW,
+        fetchImpl: fakeNetwork(hnRoutes([{ id: 1, title: TITLE, url: "https://example.com/pg" }])),
+        sink: () => {},
+      });
+      expect(await db.select().from(schema.rawItems)).toHaveLength(0);
+    });
+
+    it("keeps a story out of adjacent tech when one item does match", async () => {
+      // One matching item is enough. A launch nobody described in AI words is
+      // adjacent; the same launch written up by a source that did is not.
+      await addSource({
+        key: "hn-discovery",
+        name: "Show HN",
+        kind: "hackernews",
+        tier: "COMMUNITY",
+        url: null,
+        config: { list: "top", minPoints: 3, keywordPolicy: "label" },
+      });
+      await runIngest(db, undefined, {
+        now: NOW,
+        fetchImpl: fakeNetwork(
+          hnRoutes([
+            { id: 1, title: TITLE, url: "https://example.com/pg" },
+            { id: 2, title: "An AI agent that writes migrations", url: "https://example.com/pg" },
+          ]),
+        ),
+        sink: () => {},
+      });
+      // Same canonical url, so both items land on one story.
+      const rows = await db.select().from(schema.stories);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].adjacentTech).toBe(false);
+    });
+>>>>>>> 3ebeb60 (Keep what the AI gate used to discard, and label it instead (#71))
   });
 });

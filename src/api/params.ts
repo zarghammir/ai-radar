@@ -57,6 +57,11 @@ export interface RadarFilters {
   verification: (typeof VERIFICATION_LEVELS)[number][];
   since: Date;
   sinceRaw: string;
+  /**
+   * Whether to include adjacent tech — stories kept deliberately that never
+   * used AI vocabulary. False is the front door: the app is an AI radar.
+   */
+  includeAdjacent: boolean;
 }
 
 export function parseFilters(
@@ -88,6 +93,10 @@ export function parseFilters(
     verification: enumList(VERIFICATION_LEVELS, params.getAll("verification"), "verification"),
     since: parseSince(params.get("since"), defaultSince, now),
     sinceRaw,
+    // ?view=everything widens it. Anything else, including absent, is the
+    // default AI-only view — an unrecognised value must not silently widen
+    // what a reader sees.
+    includeAdjacent: params.get("view") === "everything",
   };
 }
 

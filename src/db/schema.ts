@@ -134,6 +134,14 @@ export const rawItems = pgTable(
     contentType: contentTypeEnum("content_type").notNull(),
     /** Where contentType came from; see CONTENT_TYPE_SOURCES. */
     contentTypeSource: contentTypeSourceEnum("content_type_source").notNull().default("default"),
+    /**
+     * Whether this item's title used AI vocabulary. NULLABLE on purpose: a row
+     * written before #71 was never evaluated, and "not evaluated" is not the
+     * same answer as "did not match". The backfill fills them in.
+     *
+     * A fact about words. Never a quality signal — see ai-vocabulary.ts.
+     */
+    matchedAiVocabulary: boolean("matched_ai_vocabulary"),
     /** Anything adapter-specific: HN points, arXiv authors/categories, stars … */
     metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
     /**
@@ -171,6 +179,18 @@ export const stories = pgTable(
     keyPoints: jsonb("key_points").$type<string[]>().notNull().default([]),
     contentType: contentTypeEnum("content_type").notNull(),
     verification: verificationEnum("verification").notNull().default("UNVERIFIED"),
+    /**
+     * Adjacent tech: kept deliberately, not shown by default.
+     *
+     * True only when a story reached us through a source that carries more
+     * than AI AND none of its items used AI vocabulary. The owner's ruling is
+     * that a growing developer tool which never says "AI" should be findable
+     * rather than discarded, so these are stored and filtered at read time.
+     *
+     * Defaults false, which is what makes this change add nothing to the
+     * default view: every story that existed before it stays visible.
+     */
+    adjacentTech: boolean("adjacent_tech").notNull().default(false),
     /** Plain-language reason for the verification level (provenance). */
     verificationNote: text("verification_note"),
     primaryItemId: integer("primary_item_id"),

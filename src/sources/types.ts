@@ -15,6 +15,12 @@ export interface FetchedItem {
   publishedAt: Date | null;
   /** Override the source default (e.g. an arXiv adapter always says PAPER). */
   contentType?: ContentType;
+  /**
+   * Whether the adapter's own AI vocabulary matched this title. Set by
+   * adapters that evaluate it; normalizeItem computes it from the shared
+   * vocabulary when they do not, so every stored item carries the answer.
+   */
+  matchedAiVocabulary?: boolean;
   /** Anything else worth keeping: points, comments, categories, stars … */
   metadata?: Record<string, unknown>;
 }

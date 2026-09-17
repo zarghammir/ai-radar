@@ -39,6 +39,20 @@ export function notHidden(): SQL {
   )`;
 }
 
+/**
+ * Adjacent tech is kept and not shown by default (#71). Expressed once, beside
+ * notHidden(), because the brief and Radar must not drift about what the front
+ * door contains.
+ *
+ * This is a FILTER and never a ranking input. Inside the default view every
+ * story is AI, so a score boost would be constant across the whole set — a
+ * no-op with maintenance cost. In the widened view it would systematically
+ * bury the adjacent tech the widening exists to surface.
+ */
+export function notAdjacentTech(): SQL {
+  return sql`${stories.adjacentTech} = false`;
+}
+
 function filterConditions(filters: RadarFilters): SQL[] {
   const conditions: SQL[] = [gte(stories.lastActivityAt, filters.since)];
 
@@ -61,6 +75,7 @@ function filterConditions(filters: RadarFilters): SQL[] {
   }
 
   conditions.push(notHidden());
+  if (!filters.includeAdjacent) conditions.push(notAdjacentTech());
 
   return conditions;
 }

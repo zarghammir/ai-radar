@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { NewRawItem, Source } from "@/db/schema";
 import type { FetchedItem } from "@/sources/types";
 import { decideContentType } from "./content-type";
+import { matchedAiVocabulary } from "./ai-vocabulary";
 import { canonicalizeUrl } from "./url";
 import { cleanTitle, stripHtml, truncate } from "./text";
 
@@ -49,6 +50,10 @@ export function normalizeItem(
     fetchedAt: now,
     contentType: decided.type,
     contentTypeSource: decided.source,
+    // Computed here for the sources that do not evaluate it themselves, so the
+    // column is never silently absent. An RSS feed has no gate, but its items
+    // still deserve an honest answer about their own words.
+    matchedAiVocabulary: item.matchedAiVocabulary ?? matchedAiVocabulary(title),
     metadata: item.metadata ?? {},
     fingerprint: fingerprintFor(source.key, canonicalUrl),
   };

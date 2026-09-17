@@ -4,7 +4,7 @@ import { stories } from "@/db/schema";
 import { ApiError } from "./http";
 import type { BriefLength } from "./reading-budget";
 import { BRIEF_LENGTHS } from "./reading-budget";
-import { notHidden } from "./radar";
+import { notAdjacentTech, notHidden } from "./radar";
 import { buildCards, type StoryCard } from "./stories";
 
 // One implementation, in a module with no database imports so the fixtures can
@@ -147,11 +147,21 @@ export const BRIEF_CANDIDATE_LIMIT = 200;
  * scores 0 and this falls back to newest-first by id — which is the same
  * degenerate behaviour the radar's importance sort documents.
  */
-export async function storiesInWindow(db: Db, window: BriefWindow): Promise<StoryCard[]> {
+export async function storiesInWindow(
+  db: Db,
+  window: BriefWindow,
+  includeAdjacent = false,
+): Promise<StoryCard[]> {
   const rows = await db
     .select()
     .from(stories)
-    .where(and(gte(stories.lastActivityAt, window.from), notHidden()))
+    .where(
+      and(
+        gte(stories.lastActivityAt, window.from),
+        notHidden(),
+        ...(includeAdjacent ? [] : [notAdjacentTech()]),
+      ),
+    )
     .orderBy(desc(stories.score), desc(stories.id))
     .limit(BRIEF_CANDIDATE_LIMIT);
   return buildCards(db, rows);
