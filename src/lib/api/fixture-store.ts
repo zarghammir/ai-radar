@@ -2,13 +2,19 @@ import { FIXTURE_STORIES } from "@/lib/api/fixtures";
 import type { Preferences, StoryCard, TopicSummary } from "@/lib/api/types";
 
 /**
- * The reader's own state while the app runs on fixtures.
+ * The reader's own state, and the fixture catalogue helpers beside it.
  *
- * It lives here rather than spreading through the client so that what is
- * pretend stays visible in one file: when NEXT_PUBLIC_USE_FIXTURES is off,
- * nothing in this module is reached. Every function is a NO-OP SHAPE on the
- * server, where there is no localStorage, and every read is wrapped — a
- * browser in private mode throws on access rather than returning null.
+ * THE NAME IS NOW HALF RIGHT, which is worth saying rather than leaving a
+ * reader to work out. This began as "what is pretend, in one file, unreachable
+ * when NEXT_PUBLIC_USE_FIXTURES is off". Since #91 and #94 the saves, the read
+ * marks and the device-held preferences in here are the REAL thing on every
+ * build; only `fixtureTopics` and `FIXTURE_PREFERENCE_DEFAULTS` are still about
+ * fixtures. Splitting the file in two is the tidy fix and is not worth a rename
+ * mid-review — an accurate description is, and this is it.
+ *
+ * Every function is a NO-OP SHAPE on the server, where there is no
+ * localStorage, and every read is wrapped — a browser in private mode throws on
+ * access rather than returning null.
  *
  * Unreadable storage answers "I do not know", and the answer is never written
  * back over whatever is there. Writes only ever persist a value the caller
@@ -118,30 +124,32 @@ export function localPreferences(): Preferences {
 }
 
 /**
- * The ONE cookie this app sets, and only on a build running fixtures (#75).
+ * The ONE cookie this app sets. On EVERY build since #94, not just fixtures.
  *
- * Today resolves its brief length on the SERVER, and on fixtures the reader's
- * preferences live in localStorage, which the server cannot see — so without
- * this, choosing a length in Settings changes nothing about Today.
+ * Today resolves its brief length on the SERVER, and since #94 that length is
+ * the reader's and lives on their device. A cookie is the only thing that
+ * carries a device-held value to a page rendered on the server BEFORE that
+ * device runs any JavaScript — so this is the general mechanism now, and it is
+ * load-bearing for live builds rather than a fixtures workaround.
  *
- * The REASON for it has changed and the mechanism has not. It was written when
- * fixtures were the default and therefore the only mode anyone could see the
- * app in; since #62 the app reads the live API by default and fixtures are
- * opt-in, so this is no longer the path most readers take. It is still the
- * right behaviour for the path they DO take when they take it: working on a
- * screen without a database, where a Settings control that changes nothing
- * would look broken rather than absent.
+ * Its history, because this comment said the opposite until now: it was written
+ * for #75, when fixtures were the default and the length sat in localStorage
+ * where the server could not see it. #62 made live the default, and #94 moved
+ * the length onto the device for good. The mechanism never changed; every
+ * reason given for it has.
  *
- * IT CARRIES THE LENGTH AND NOTHING ELSE. Not the preferences object: that row
- * holds the reader's EMAIL ADDRESS, and a cookie is the wrong place for it.
- * A preference, never an identifier, and nothing in it that could act as one.
+ * IT CARRIES THE LENGTH AND NOTHING ELSE, and that rule outlived its own
+ * example. It used to say "not the preferences object, because that row holds
+ * the reader's EMAIL ADDRESS" — #94 deleted that column, so the example is gone
+ * and the rule stands without it: a preference, never an identifier, and
+ * nothing in it that could act as one.
  *
  * On the promise. "Self-hosted, nothing is sent anywhere" is about a THIRD
  * PARTY learning something. A cookie the app sets and the app's own server
- * reads adds no third party and nothing leaves this machine. Settings says so
- * in the reader's own words, and says it ONLY on a fixture build, because a
- * build with a database sets no cookie and the sentence would be false there —
- * which, since #62, is the ordinary case rather than the exception.
+ * reads adds no third party, and nothing leaves this machine. Settings says so
+ * in the reader's own words, on every build — because the cookie is set on
+ * every build, and a sentence that hides itself in the ordinary case explains
+ * nothing.
  */
 export const BRIEF_LENGTH_COOKIE = "ai-radar-fixture-brief-length";
 const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;

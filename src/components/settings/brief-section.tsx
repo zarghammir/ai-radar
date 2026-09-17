@@ -4,7 +4,6 @@ import { useId, useMemo, useState } from "react";
 import { SaveStatusText, Section, useSaveStatus } from "@/components/settings/section";
 import { TimezonePicker } from "@/components/settings/timezone-picker";
 import { brand } from "@/config/brand";
-import { USING_FIXTURES } from "@/lib/api/client";
 import { savePreferences } from "@/lib/api/preferences-store";
 import { BRIEF_LENGTH_OPTIONS, detectTimezone, formatBriefTime } from "@/lib/api/preferences";
 import type { Preferences } from "@/lib/api/types";
@@ -175,18 +174,20 @@ function BriefLengthField({
         The default. Today has the same switch for changing it on the day.
       </p>
       {/*
-        Only on a build running fixtures, because only there does the cookie
-        exist — saying it in a build with a database would be false. This app
-        promises "nothing is sent anywhere", so it owes an explanation for the
-        one exception. See BRIEF_LENGTH_COOKIE in fixture-store.ts and #75.
+        ON BOTH PATHS SINCE #94, and this was a real defect for one commit. The
+        length moved onto the device, so the cookie is set on a live build too —
+        and this sentence was still gated on fixture mode, which meant the app
+        set a cookie and said nothing about it. This app promises "nothing is
+        sent anywhere", so it owes an explanation for every exception, and a
+        sentence that hides itself in the ordinary case explains nothing.
+        See BRIEF_LENGTH_COOKIE in fixture-store.ts.
       */}
-      {USING_FIXTURES ? (
-        <p className="text-meta mt-1 text-[12.5px] leading-relaxed">
-          This build has no database, so your choice here is kept in one small cookie on this device
-          — that is the only cookie {brand.name} sets. It holds the length and nothing else: no
-          name, no address, nothing that says who you are. It never leaves this machine.
-        </p>
-      ) : null}
+      <p className="text-meta mt-1 text-[12.5px] leading-relaxed">
+        Your choice is kept on this device, and one small cookie carries it so the page knows your
+        length before it loads — that is the only cookie {brand.name} sets. It holds the length and
+        nothing else: no name, no address, nothing that says who you are. It never leaves this
+        machine.
+      </p>
       <div className="mt-2 flex flex-col gap-2">
         {BRIEF_LENGTH_OPTIONS.map((option) => (
           <label
