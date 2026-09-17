@@ -147,11 +147,30 @@ export const BRIEF_CANDIDATE_LIMIT = 200;
  * scores 0 and this falls back to newest-first by id — which is the same
  * degenerate behaviour the radar's importance sort documents.
  */
+/**
+ * Narrowing options for the brief.
+ *
+ * An object rather than positional arguments because two lanes are adding an
+ * axis to this function from different bases (#105 and #102), and two optional
+ * positionals of different types in an order nobody agreed is how the third
+ * person passes them the wrong way round. A third axis is another key here, not
+ * another argument.
+ *
+ * Every key defaults NARROW, and omitting the object entirely is exactly the
+ * behaviour this function had before any of them existed.
+ */
+export interface BriefOptions {
+  /** Include adjacent tech — stories kept deliberately that never used AI
+   *  vocabulary. False is the front door: the app is an AI radar. */
+  includeAdjacent?: boolean;
+}
+
 export async function storiesInWindow(
   db: Db,
   window: BriefWindow,
-  includeAdjacent = false,
+  options: BriefOptions = {},
 ): Promise<StoryCard[]> {
+  const { includeAdjacent = false } = options;
   const rows = await db
     .select()
     .from(stories)

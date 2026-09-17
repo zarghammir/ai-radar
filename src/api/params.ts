@@ -93,11 +93,33 @@ export function parseFilters(
     verification: enumList(VERIFICATION_LEVELS, params.getAll("verification"), "verification"),
     since: parseSince(params.get("since"), defaultSince, now),
     sinceRaw,
-    // ?view=everything widens it. Anything else, including absent, is the
-    // default AI-only view — an unrecognised value must not silently widen
-    // what a reader sees.
-    includeAdjacent: params.get("view") === "everything",
+    includeAdjacent: parseView(params.get("view")),
   };
+}
+
+const VIEWS = ["ai", "everything"] as const;
+
+/**
+ * Which view the reader asked for, as a boolean the query can use.
+ *
+ * ABSENT and UNRECOGNISED are different answers and are treated differently,
+ * which is the same distinction enumList makes two functions above: no ?view=
+ * means the caller expressed no preference and gets the front door, while
+ * ?view=evrything is a typo and is told so rather than silently served
+ * something it did not ask for.
+ *
+ * Refusing is the strict form of "an unknown value must never widen": nothing
+ * is opened at all. An earlier version of this narrowed silently, which was
+ * safe and was still the odd one out — every other enum parameter in this file
+ * throws VALIDATION_ERROR, and a new convention two lines from an existing one
+ * is how the next reader learns the wrong rule.
+ */
+function parseView(raw: string | null): boolean {
+  if (raw === null) return false;
+  if (!(VIEWS as readonly string[]).includes(raw)) {
+    throw new ApiError("VALIDATION_ERROR", `view must be one of ${VIEWS.join(", ")}`);
+  }
+  return raw === "everything";
 }
 
 export function parseSort(params: URLSearchParams): Sort {

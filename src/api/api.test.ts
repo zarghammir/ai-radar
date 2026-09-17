@@ -624,12 +624,26 @@ withDb("API routes", () => {
       expect(everySlug).toContain("an-ai-story");
     });
 
-    it("treats an unrecognised view as the default rather than widening", async () => {
-      // An unknown value must not silently open the front door.
+    it("refuses an unrecognised view rather than guessing", async () => {
+      // Ruled for the project: an unknown value never widens — the API refuses
+      // it, the page narrows. Refusing is the strict form, and it is what
+      // every other enum parameter in params.ts already does.
       await twoStories();
       const { GET } = await import("@/app/api/radar/route");
-      const data = await body(await GET(req("/api/radar?view=banana")));
-      expect((data.stories as { slug: string }[]).map((s) => s.slug)).toEqual(["an-ai-story"]);
+      const res = await GET(req("/api/radar?view=evrything"));
+      expect(res.status).toBe(400);
+      expect((await body(res)).error).toMatchObject({ code: "VALIDATION_ERROR" });
+    });
+
+    it("treats an ABSENT view as no preference, not as an error", async () => {
+      // Absent and unrecognised are different answers. Silence is the case
+      // that has to stay backwards compatible: a caller from before any of
+      // this gets what the route answered then.
+      await twoStories();
+      const { GET } = await import("@/app/api/radar/route");
+      const res = await GET(req("/api/radar"));
+      expect(res.status).toBe(200);
+      expect((await body(res)).stories).toHaveLength(1);
     });
   });
 
