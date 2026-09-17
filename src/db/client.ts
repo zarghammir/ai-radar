@@ -20,26 +20,109 @@ import * as schema from "./schema";
  * and has no trap semantics to get subtly wrong.
  */
 /**
- * A database failure, without the coordinates.
+ * Turn a database error into a line that is safe to print in a PUBLIC CI log.
  *
- * postgres.js attaches `address` and `port` to a connection error and puts them
- * in the cause's message too, so `console.error(err)` prints the host. That goes
- * straight into an Actions log, and this repository is public — GitHub masks
- * registered secret VALUES, so the password inside DATABASE_URL is covered, but
- * the host is a substring of that value and is not masked.
+ * WHY THIS EXISTS. This repository is public, so its Actions logs are readable
+ * by anyone. GitHub masks the VALUE of a registered secret; it does not mask
+ * the PARTS of one. `DATABASE_URL` is registered as a whole string, so the
+ * host, port, user, password and database name inside it are each unmasked the
+ * moment something prints them on their own — and drivers print parts, not URLs.
  *
- * What diagnoses a failure is the query and the error code, not the address it
- * was dialling. Deliberately dropped: the stack, and the cause's free text.
- * Kept: `Failed query: …` and `[ECONNREFUSED]`, `[ENOTFOUND]`, `[28P01]`.
+ * WHAT postgres.js ACTUALLY PRINTS, captured from a real run rather than
+ * assumed (see the shapes asserted in describe-db-error.test.ts):
+ *   getaddrinfo ENOTFOUND db.example.com          <- host, in the MESSAGE
+ *   write CONNECT_TIMEOUT 10.0.0.1:5432           <- host and port, in the MESSAGE
+ *   role "someuser" does not exist                <- user, in the MESSAGE
+ * An earlier version of this function only dropped the error's `cause`, which
+ * is where a QUERY-shaped error carries `address`/`port`. That left every
+ * CONNECTION-shaped error untouched, because postgres.js builds those
+ * coordinates into the message itself (node_modules/postgres/src/errors.js).
+ *
+ * SO THE REDACTION IS BY VALUE, NOT BY SHAPE. We parsed the URL, so we know
+ * each part; anything that matches one is replaced wherever it appears. That
+ * holds for message shapes this driver has not produced yet, which a pattern
+ * written against today's messages could not.
+ *
+ * What survives on purpose: the sentence that says what went wrong and the
+ * error code. `write CONNECT_TIMEOUT [host]:[port] [CONNECT_TIMEOUT]` still
+ * tells you the server never answered. A log hardened into uselessness gets
+ * reverted at 2am by someone who needs it.
  */
 export function describeDbError(error: unknown): string {
-  if (!(error instanceof Error)) return String(error);
+  if (!(error instanceof Error)) return redactConnectionParts(String(error));
+  const code = errorCode(error);
+  return redactConnectionParts(code ? `${error.message} [${code}]` : error.message);
+}
+
+/**
+ * The code can sit on the error itself (ENOTFOUND, CONNECT_TIMEOUT, and every
+ * PostgresError's SQLSTATE) or on its cause (a query wrapping a socket error).
+ * Reading only the cause, as this once did, silently dropped the code for the
+ * connection failures that matter most on a first run.
+ */
+function errorCode(error: Error): string | null {
+  const own = (error as { code?: unknown }).code;
+  if (own !== undefined && own !== null && own !== "") return String(own);
   const cause: unknown = (error as { cause?: unknown }).cause;
-  const code =
-    cause && typeof cause === "object" && "code" in cause
-      ? String((cause as { code?: unknown }).code)
-      : null;
-  return code ? `${error.message} [${code}]` : error.message;
+  if (cause && typeof cause === "object" && "code" in cause) {
+    const fromCause = (cause as { code?: unknown }).code;
+    if (fromCause !== undefined && fromCause !== null && fromCause !== "") {
+      return String(fromCause);
+    }
+  }
+  return null;
+}
+
+/**
+ * Replace every fragment of DATABASE_URL with a label naming what was removed.
+ *
+ * Longest match first, so `host:port` and the full URL are consumed before the
+ * shorter parts inside them. Fragments under three characters are left alone:
+ * substituting a one- or two-character value would corrupt unrelated words, and
+ * a credential that short is not what this is defending.
+ */
+function redactConnectionParts(text: string): string {
+  const url = process.env.DATABASE_URL;
+  if (!url) return text;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    // The URL is set but unparseable, so its parts are unknown and nothing can
+    // be checked against them. Refusing to print is the only safe answer.
+    return "[redacted: DATABASE_URL is set but could not be parsed, so the parts that would need removing are unknown]";
+  }
+
+  const user = safeDecode(parsed.username);
+  const password = safeDecode(parsed.password);
+  const database = safeDecode(parsed.pathname.replace(/^\//, ""));
+  const candidates: Array<[string, string]> = [
+    [url, "[connection string]"],
+    [`${parsed.hostname}:${parsed.port}`, "[host]:[port]"],
+    [password, "[password]"],
+    [parsed.hostname, "[host]"],
+    [user, "[user]"],
+    [parsed.username, "[user]"],
+    [database, "[database]"],
+    [parsed.port, "[port]"],
+  ];
+
+  let out = text;
+  for (const [value, label] of candidates
+    .filter(([value]) => value.length >= 3)
+    .sort((a, b) => b[0].length - a[0].length)) {
+    out = out.split(value).join(label);
+  }
+  return out;
+}
+
+function safeDecode(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }
 
 function connect() {
