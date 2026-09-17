@@ -23,7 +23,8 @@
  */
 import { launchBrowser, requireServer } from "./lib/browser.mjs";
 import { collectStoryIds } from "./lib/fixture-ids.mjs";
-import { bailIfBroken, isFloorBail } from "./lib/floor.mjs";
+import { bailIfBroken, isFloorBail, sectionStart } from "./lib/floor.mjs";
+import { markOnboarded } from "./lib/seed.mjs";
 
 const base = process.argv[2] || process.env.VERIFY_URL || "http://127.0.0.1:3210";
 await requireServer(base);
@@ -43,6 +44,8 @@ const MARKS_TEMPLATE = [
 ];
 
 const out = { control: CONTROL };
+/** Whether the LIVE half of the onboarding seed applied; reported, not assumed. */
+let onboardedOnServer = false;
 const floor = [];
 const browser = await launchBrowser();
 const SEED_IDS = await collectStoryIds(browser, base, SEED_STORY_COUNT);
@@ -64,6 +67,14 @@ out.seededIds = SEED_IDS;
 async function seededContext() {
   const context = await browser.newContext({ viewport: { width: 390, height: 780 } });
   if (CONTROL !== "skip-seed") {
+    // BOTH sides of the onboarding fact. This script seeded only localStorage,
+    // which is inert against a database — and it is the script whose entire
+    // subject is Saved and Settings, so when #65 flips the default to live it
+    // would have been the one sent to /welcome on every navigation. It was
+    // missed because it seeds inline for its own marks and so had no reason to
+    // call the helper the other three used. Sweep by dependency, not by the
+    // files already open.
+    onboardedOnServer = await markOnboarded(context, base);
     await context.addInitScript(
       ([ids, marks, sentinel]) => {
         try {
@@ -227,6 +238,7 @@ try {
     // Tolerant for the same reason as above: the control run has no settings
     // panel to wait for, and a throw here would be a crash wearing a floor's
     // exit code.
+    const mark = sectionStart(floor);
     const ready = await page
       .waitForSelector("[data-settings-state='ready']", { timeout: 5000 })
       .then(() => true)
@@ -235,7 +247,11 @@ try {
     if (!ready) {
       floor.push('Settings never reached "ready", so none of its writes were exercised');
       await context.close();
-      bailIfBroken(floor);
+      // The push above is what makes this throw. bailIfBroken only fires on
+      // entries added since `mark`, so moving this call ABOVE its push would
+      // silently turn it into a no-op — the check would still be here and
+      // would stop checking. Kept adjacent on purpose.
+      bailIfBroken(floor, mark);
     }
 
     await page.getByRole("radio", { name: /Five minutes/i }).check();
@@ -287,6 +303,7 @@ try {
   await browser.close();
 }
 
+out.onboardedOnServer = onboardedOnServer;
 out.floor = { passed: floor.length === 0, failures: floor, minSaved: MIN_SAVED };
 console.log(JSON.stringify(out, null, 2));
 if (floor.length > 0) process.exit(1);

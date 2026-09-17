@@ -12,26 +12,20 @@
  * would report "Today offered 0 stories" for a reason that has nothing to do
  * with Today.
  *
- * These scripts drive the app on FIXTURES, where the reader's state lives in
- * localStorage. Against a real database the seeding below does nothing and the
- * state has to be put in the database instead.
+ * It seeds both sides through markOnboarded, so it works whichever mode the
+ * build was compiled in.
  */
+import { markOnboarded } from "./seed.mjs";
+
 export async function collectStoryIds(browser, base, howMany) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   try {
-    // Write-once, like markOnboarded in ./seed.mjs. addInitScript runs on
-    // EVERY navigation, so an unguarded write puts the starting preferences
-    // back over whatever the page has stored. It is harmless HERE — this
-    // context does one goto and is closed in a finally — but it is the
-    // identical pattern the sibling fixed, and the day someone adds a reload
-    // it goes quiet in exactly the same way.
-    await context.addInitScript(() => {
-      try {
-        const key = "ai-radar-fixture-preferences";
-        if (localStorage.getItem(key) !== null) return;
-        localStorage.setItem(key, JSON.stringify({ onboardedAt: "2026-09-01T00:00:00.000Z" }));
-      } catch {}
-    });
+    // The shared helper rather than an inline copy: it writes the onboarding
+    // fact on BOTH sides, and this file is the fifth place that needed it. Its
+    // own localStorage copy was write-once but live-inert, so against a
+    // database this navigation would have landed on /welcome and the error
+    // below would have blamed Today for offering no stories.
+    await markOnboarded(context, base);
     const page = await context.newPage();
     // ?length=all so the ids come from the whole brief rather than whatever
     // fits the default budget.

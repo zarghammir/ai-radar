@@ -16,8 +16,8 @@
  * with the reading rather than having to write a fifth version of the probe.
  */
 import { launchBrowser, requireServer } from "./lib/browser.mjs";
-import { bailIfBroken, isFloorBail } from "./lib/floor.mjs";
-import { markOnboarded, markOnboardedOnServer } from "./lib/seed.mjs";
+import { bailIfBroken, isFloorBail, sectionStart } from "./lib/floor.mjs";
+import { markOnboarded } from "./lib/seed.mjs";
 
 const base = process.argv[2] || process.env.VERIFY_URL || "http://127.0.0.1:3210";
 await requireServer(base);
@@ -26,10 +26,10 @@ const out = {};
 const floor = []; // an empty measurement is a FAILURE, not a pass
 
 const browser = await launchBrowser();
-// Onboarding, written where a LIVE build keeps it. The localStorage seeding in
-// each context covers fixture builds; this covers the other mode, which is the
-// one CI switches to when #65 lands. Neither is required to succeed.
-const onboardedOnServer = await markOnboardedOnServer(base);
+// Whether the LIVE half of the seeding applied. markOnboarded writes both
+// sides in one call, so a context cannot end up half-seeded by a forgotten
+// line — which is exactly how verify-saved-settings was missed.
+let onboardedOnServer = false;
 
 try {
   /* ---- A. finding 5: the radio group must BE a radio group ------------- */
@@ -38,7 +38,8 @@ try {
     // The first-run gate is in the ROOT LAYOUT, so it applies to every route.
     // Without this, /settings is sent to /welcome, there are no radios, and the
     // focus call below waits thirty seconds for a control on another page.
-    await markOnboarded(ctx);
+    onboardedOnServer = await markOnboarded(ctx, base);
+    const mark = sectionStart(floor);
     const page = await ctx.newPage();
     await page.goto(base + "/settings", { waitUntil: "networkidle" });
     const radios = page.locator('[role="radio"]');
@@ -53,7 +54,7 @@ try {
     // BEFORE the first interaction. Everything below assumes those three
     // exist; the first call that does not find them throws a timeout that
     // buries the line above and sends the reader to Playwright.
-    bailIfBroken(floor);
+    bailIfBroken(floor, mark);
     const tabindexes = await radios.evaluateAll((els) =>
       els.map((e) => e.getAttribute("tabindex")),
     );
@@ -92,13 +93,14 @@ try {
       colorScheme: "dark",
       viewport: { width: 1440, height: 900 },
     });
-    await markOnboarded(ctx);
+    onboardedOnServer = await markOnboarded(ctx, base);
+    const mark = sectionStart(floor);
     const page = await ctx.newPage();
     await page.goto(base + "/settings", { waitUntil: "networkidle" });
     const landed = new URL(page.url()).pathname;
     if (landed !== "/settings")
       floor.push(`theme check asked for /settings and landed on ${landed}`);
-    bailIfBroken(floor);
+    bailIfBroken(floor, mark);
     await page.getByRole("radio", { name: "Light" }).click();
     await page.waitForTimeout(250);
     out.themeColor = await page.evaluate(() => {
@@ -135,12 +137,13 @@ try {
     // missed: an unseeded context asking for "/" is sent to /welcome, the
     // worker precaches THAT shell, and every assertion below still passes
     // while measuring the wrong page. A loud failure would have been kinder.
-    await markOnboarded(ctx);
+    onboardedOnServer = await markOnboarded(ctx, base);
+    const mark = sectionStart(floor);
     const page = await ctx.newPage();
     await page.goto(base + "/", { waitUntil: "networkidle" });
     const shellPath = new URL(page.url()).pathname;
     if (shellPath !== "/") floor.push(`the cache checks asked for / and landed on ${shellPath}`);
-    bailIfBroken(floor);
+    bailIfBroken(floor, mark);
     await page.waitForTimeout(1800); // let the worker take control and precache
     const controlling = await page.evaluate(
       async () =>

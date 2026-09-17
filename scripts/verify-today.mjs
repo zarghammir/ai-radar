@@ -12,8 +12,8 @@
  * card), and the whole run would sweep clean while the page was blank.
  */
 import { launchBrowser, requireServer } from "./lib/browser.mjs";
-import { bailIfBroken, isFloorBail } from "./lib/floor.mjs";
-import { markOnboarded, markOnboardedOnServer } from "./lib/seed.mjs";
+import { bailIfBroken, isFloorBail, sectionStart } from "./lib/floor.mjs";
+import { markOnboarded } from "./lib/seed.mjs";
 
 const base = process.argv[2] || process.env.VERIFY_URL || "http://127.0.0.1:3210";
 await requireServer(base);
@@ -24,10 +24,10 @@ const MIN_STORIES = 2;
 const out = {};
 const floor = [];
 const browser = await launchBrowser();
-// Onboarding, written where a LIVE build keeps it. The localStorage seeding in
-// each context covers fixture builds; this covers the other mode, which is the
-// one CI switches to when #65 lands. Neither is required to succeed.
-const onboardedOnServer = await markOnboardedOnServer(base);
+// Whether the LIVE half of the seeding applied. markOnboarded writes both
+// sides in one call, so a context cannot end up half-seeded by a forgotten
+// line — which is exactly how verify-saved-settings was missed.
+let onboardedOnServer = false;
 
 const cards = (page) => page.locator("article h2 a");
 
@@ -38,7 +38,7 @@ try {
     // The first-run gate is in the root layout, so an unseeded context asking
     // for Today is sent to /welcome and every locator below waits on a page
     // that is not there.
-    await markOnboarded(ctx);
+    onboardedOnServer = await markOnboarded(ctx, base);
     const page = await ctx.newPage();
 
     await page.goto(`${base}/?length=all`, { waitUntil: "networkidle" });
@@ -71,7 +71,8 @@ try {
     // The first-run gate is in the root layout, so an unseeded context asking
     // for Today is sent to /welcome and every locator below waits on a page
     // that is not there.
-    await markOnboarded(ctx);
+    onboardedOnServer = await markOnboarded(ctx, base);
+    const mark = sectionStart(floor);
     const page = await ctx.newPage();
     await page.goto(`${base}/?length=all`, { waitUntil: "networkidle" });
 
@@ -81,7 +82,7 @@ try {
     // Before the click. With zero buttons the click throws a timeout and the
     // line above never prints — the same ordering defect the reviewer found in
     // verify-shell.mjs, one file over.
-    bailIfBroken(floor);
+    bailIfBroken(floor, mark);
 
     await saveButtons.first().click();
     await page.waitForTimeout(250);
@@ -107,7 +108,8 @@ try {
     // The first-run gate is in the root layout, so an unseeded context asking
     // for Today is sent to /welcome and every locator below waits on a page
     // that is not there.
-    await markOnboarded(ctx);
+    onboardedOnServer = await markOnboarded(ctx, base);
+    const mark = sectionStart(floor);
     const page = await ctx.newPage();
     await page.goto(`${base}/?length=all`, { waitUntil: "networkidle" });
 
@@ -115,7 +117,7 @@ try {
     if (before < MIN_STORIES)
       floor.push(`only ${before} stories before hiding; too few to prove removal`);
     // Before the Hide click, for the same reason as the Save one above.
-    bailIfBroken(floor);
+    bailIfBroken(floor, mark);
     const firstTitle = before > 0 ? await cards(page).first().innerText() : null;
 
     await page
@@ -151,7 +153,7 @@ try {
           viewport: { width, height: 900 },
           colorScheme: theme,
         });
-        await markOnboarded(ctx);
+        onboardedOnServer = await markOnboarded(ctx, base);
         const page = await ctx.newPage();
         await page.addInitScript((t) => {
           try {

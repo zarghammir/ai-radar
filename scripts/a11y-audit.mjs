@@ -356,6 +356,12 @@ console.log(
       // on SUCCESS as well as failure, so a future reader can see the
       // instrument had something to measure rather than take it on trust.
       seeding: {
+        // seed.mjs says of this value: "Returns whether it applied, so a
+        // caller can report it rather than assume it." This script computed it
+        // and discarded it — a value correct, connected to nothing, and
+        // invisible to the reader of a green run. That is the very shape the
+        // floor.mjs docstring was written about, one file over.
+        onboardedOnServer,
         statesRecorded: Object.keys(report.seeded).length,
         expected: expectedSeedStates,
         landedElsewhere: Object.entries(report.seeded).filter(

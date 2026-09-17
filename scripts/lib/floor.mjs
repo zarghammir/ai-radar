@@ -19,12 +19,30 @@
 export class FloorBroken extends Error {}
 
 /**
- * Throws if anything is already on the floor. Call it after a count or a
- * state check and BEFORE the first click, focus, fill or keypress that
+ * Throws if THIS SECTION has put something on the floor. Call it after a count
+ * or a state check and BEFORE the first click, focus, fill or keypress that
  * assumes that count.
+ *
+ * `since` is the floor's length when the section began, and it is the whole
+ * point. The first version bailed on a non-empty array, which meant a failure
+ * in an EARLIER, UNRELATED block ended the entire script: one synthetic
+ * failure in verify-today's first block abandoned Save, Hide and the
+ * four-viewport sweep, and the report then named a single failure, which reads
+ * as one thing being wrong. It could never produce a false green — the floor
+ * was still non-empty and the run still exited 1 — but it cost exactly the
+ * diagnostic yield this helper exists to protect.
+ *
+ * The rationale holds only for its own case: once THIS check has failed, the
+ * interactions below it are measuring something else. A failure three blocks
+ * ago says nothing about this one.
  */
-export function bailIfBroken(floor) {
-  if (floor.length > 0) throw new FloorBroken(floor[floor.length - 1]);
+export function bailIfBroken(floor, since = 0) {
+  if (floor.length > since) throw new FloorBroken(floor[floor.length - 1]);
+}
+
+/** The mark to pass back as `since`. Read it at the top of a section. */
+export function sectionStart(floor) {
+  return floor.length;
 }
 
 /**
