@@ -324,49 +324,60 @@ describe("a title that announces its own launch", () => {
    * Each case below is one of those branches, named for it, with the type it
    * would have been given.
    */
-  const branches: Array<{ branch: string; title: string; wouldHaveBeen: ContentType }> = [
+  const branches: Array<{ branch: string; bare: string; wouldHaveBeen: ContentType }> = [
     {
       branch: "MODEL 2 — parameter count beside a model noun",
-      title: "Show HN: I fine-tuned a 7B model for SQL generation",
+      bare: "I fine-tuned a 7B model for SQL generation",
       wouldHaveBeen: "MODEL",
     },
     {
       branch: "MODEL 3 — a launch verb beside a model noun",
-      title: "Show HN: Introducing a small language model that runs offline",
+      bare: "Introducing a small language model that runs offline",
       wouldHaveBeen: "MODEL",
     },
     {
       branch: "MODEL 1 — a model family beside a launch verb",
-      title: "Show HN: Announcing Gemma 4 fine-tuning on a laptop",
+      bare: "Announcing Gemma 4 fine-tuning on a laptop",
       wouldHaveBeen: "MODEL",
     },
     {
       branch: "TOOL — a launch verb beside a tool word",
-      title: "Show HN: Launching an open-source SDK",
+      bare: "Launching an open-source SDK",
       wouldHaveBeen: "TOOL",
     },
     {
       branch: "REGULATION — a single phrase",
-      title: "Show HN: an EU AI Act compliance checker",
+      bare: "an EU AI Act compliance checker",
       wouldHaveBeen: "REGULATION",
     },
     {
       branch: "BUSINESS — a single phrase",
-      title: "Show HN: I raised a seed round for my side project",
+      bare: "I raised a seed round for my side project",
       wouldHaveBeen: "BUSINESS",
     },
   ];
 
   for (const c of branches) {
     it(`keeps a launch as RELEASE: ${c.branch}`, () => {
-      // The would-have-been is asserted too, against a source default that is
-      // not RELEASE. Without it this test would still pass if the rule it
-      // names had stopped firing for some unrelated reason, and it would then
-      // be guarding nothing.
-      expect(classifyContentType(c.title, "NEWS")).toBe(c.wouldHaveBeen);
-      expect(classifyContentType(c.title, "RELEASE")).toBe("RELEASE");
+      // Two assertions over the SAME words, differing only by the prefix, so
+      // the prefix is isolated as the cause.
+      //
+      // The first is not decoration: it proves the branch this case is named
+      // for is live and would have typed these words. Without it the second
+      // assertion would keep passing if the rule stopped firing for some
+      // unrelated reason, and would then be guarding nothing.
+      expect(classifyContentType(c.bare, "NEWS")).toBe(c.wouldHaveBeen);
+      expect(classifyContentType(`Show HN: ${c.bare}`, "RELEASE")).toBe("RELEASE");
     });
   }
+
+  it("returns whatever was declared, not RELEASE specifically", () => {
+    // The guard reads the TITLE, so it applies whatever the source said. This
+    // is why the case above cannot assert the would-have-been against the
+    // prefixed title: the guard answers NEWS there, not MODEL. An earlier
+    // version of this file asserted exactly that and CI caught it.
+    expect(classifyContentType("Show HN: I fine-tuned a 7B model", "NEWS")).toBe("NEWS");
+  });
 
   it("covers every branch that can type a title", () => {
     // A floor on the list above: RULES has four entries and MODEL has three
