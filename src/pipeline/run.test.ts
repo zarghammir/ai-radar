@@ -6,6 +6,7 @@ import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { eq } from "drizzle-orm";
 import type { Db } from "@/db/client";
 import * as schema from "@/db/schema";
+import { TRUNCATE_ALL } from "@/db/tables";
 import { rawItems, sources, stories, storyTopics, topics, ingestRuns } from "@/db/schema";
 import { deriveVerification } from "./clustering/verification";
 import { rankStory } from "./ranking/score";
@@ -143,9 +144,7 @@ withDb("pipeline orchestration", () => {
   });
 
   beforeEach(async () => {
-    await sql.unsafe(
-      `TRUNCATE story_topics, raw_items, stories, topics, ingest_runs, sources RESTART IDENTITY CASCADE`,
-    );
+    await sql.unsafe(TRUNCATE_ALL);
   });
 
   async function addSource(over: Partial<typeof sources.$inferInsert> & { key: string }) {

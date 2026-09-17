@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
+import { TRUNCATE_ALL } from "@/db/tables";
 
 /**
  * Route-level tests: the real handlers, called the way Next calls them.
@@ -60,9 +61,7 @@ withDb("API routes", () => {
   }, 30_000);
 
   beforeEach(async () => {
-    await sql.unsafe(
-      `TRUNCATE story_topics, raw_items, stories, topics, ingest_runs, saved_items, read_state, sources, user_preferences RESTART IDENTITY CASCADE`,
-    );
+    await sql.unsafe(TRUNCATE_ALL);
   }, 30_000);
 
   // ── Fixtures, written straight to the database ────────────────────────────

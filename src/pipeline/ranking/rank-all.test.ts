@@ -6,6 +6,7 @@ import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { eq } from "drizzle-orm";
 import type { Db } from "@/db/client";
 import * as schema from "@/db/schema";
+import { TRUNCATE_ALL } from "@/db/tables";
 import { rawItems, sources, stories, storyTopics, topics, userPreferences } from "@/db/schema";
 import { COMPONENT_LABELS, WEIGHTS } from "./score";
 import { RANKING_WINDOW_HOURS, rankAllStories, scoreComponentList } from "./rank-all";
@@ -55,9 +56,7 @@ withDb("rankAllStories", () => {
   });
 
   beforeEach(async () => {
-    await sql.unsafe(
-      `TRUNCATE story_topics, raw_items, stories, topics, ingest_runs, sources, user_preferences RESTART IDENTITY CASCADE`,
-    );
+    await sql.unsafe(TRUNCATE_ALL);
   });
 
   async function addSource(over: Partial<typeof sources.$inferInsert> & { key: string }) {
