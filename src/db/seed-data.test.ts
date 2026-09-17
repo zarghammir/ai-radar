@@ -76,12 +76,41 @@ describe("source catalogue", () => {
     }
   });
 
-  it("marks Hacker News so that a linked article is not labelled a discussion", () => {
+  it("marks every Hacker News source so a linked article is not labelled a discussion", () => {
     // The adapter sets DISCUSSION itself for self-posts; a DISCUSSION default
     // would mislabel every story that links out.
-    const hn = SOURCE_SEEDS.find((s) => s.kind === "hackernews");
-    expect(hn).toBeDefined();
-    expect(hn!.defaultContentType).not.toBe("DISCUSSION");
+    //
+    // Checks all of them rather than the first. There are two now — the front
+    // page and Show HN — and a `find` would have gone on asserting this about
+    // one source while the name claimed it about the feed.
+    const hn = SOURCE_SEEDS.filter((s) => s.kind === "hackernews");
+    expect(hn.length).toBeGreaterThanOrEqual(2);
+    for (const s of hn) expect(s.defaultContentType, s.key).not.toBe("DISCUSSION");
+  });
+
+  it("points the two Hacker News sources at different lists", () => {
+    // Same kind, same adapter, same API. The only thing that stops them being
+    // two rows fetching one list is the config, so it is worth asserting:
+    // identical lists would double every front-page story rather than fail.
+    const lists = SOURCE_SEEDS.filter((s) => s.kind === "hackernews").map((s) => s.config?.list);
+    expect(lists).toContain("top");
+    expect(lists).toContain("show");
+    expect(new Set(lists).size).toBe(lists.length);
+  });
+
+  it("files a Show HN launch as RELEASE, with a points floor measured for that list", () => {
+    const show = SOURCE_SEEDS.find((s) => s.config?.list === "show");
+    expect(show).toBeDefined();
+    // RELEASE rather than DISCUSSION or a new content type: see the reasoning
+    // recorded beside the seed. A debut is not a version bump, and that
+    // imprecision is deliberate and cheaper than either alternative.
+    expect(show!.defaultContentType).toBe("RELEASE");
+    // Not the front page's 20. The live show list runs at a median of 4, so
+    // inheriting 20 keeps under a quarter of it — a threshold calibrated for
+    // one list silently empties another.
+    expect(show!.config?.minPoints).toBe(3);
+    const top = SOURCE_SEEDS.find((s) => s.config?.list === "top");
+    expect(show!.config?.minPoints).not.toBe(top!.config?.minPoints);
   });
 
   it("gives first-party sources a default topic that resolves to a real topic", () => {
