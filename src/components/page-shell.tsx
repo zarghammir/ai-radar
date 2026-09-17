@@ -9,11 +9,15 @@ export function PageShell({
   eyebrow,
   title,
   summary,
+  controls,
   children,
 }: {
   eyebrow: ReactNode;
   title: string;
-  summary: string;
+  /** A node rather than a string so a page can put structure in it. */
+  summary?: ReactNode;
+  /** Optional controls under the heading, e.g. the reading-length switch. */
+  controls?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -31,7 +35,8 @@ export function PageShell({
         <h1 className="text-ash-hi mt-1 text-[27px] leading-tight font-bold tracking-tight text-balance lg:text-[34px]">
           {title}
         </h1>
-        <p className="text-ash mt-2 text-[13.5px]">{summary}</p>
+        {summary ? <div className="text-ash mt-2 text-[13.5px]">{summary}</div> : null}
+        {controls}
       </header>
       <div className="mt-6">{children}</div>
     </div>
