@@ -84,7 +84,11 @@ function BriefTimeField({
           onChange={(event) => setDraft(event.target.value)}
           className="border-faint-2 bg-paper text-ink focus-visible:ring-org border px-2 py-1.5 text-[14px] tabular-nums focus-visible:ring-2 focus-visible:outline-none"
         />
-        <span className="text-meta text-[12.5px]">Currently {formatBriefTime(briefTime)}</span>
+        {/* Only while the two differ. Beside an untouched field it repeated
+            the value already in the box. */}
+        {changed ? (
+          <span className="text-meta text-[12.5px]">Saved: {formatBriefTime(briefTime)}</span>
+        ) : null}
         {changed ? (
           <button
             type="button"

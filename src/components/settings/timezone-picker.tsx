@@ -27,6 +27,17 @@ export function TimezonePicker({
   const [typed, setTyped] = useState(value);
   const [problem, setProblem] = useState<string | null>(null);
 
+  /** Does this platform accept the stored zone at all? Different question
+   *  from whether it will list it. */
+  const accepted = useMemo(() => {
+    try {
+      new Intl.DateTimeFormat("en-US", { timeZone: value });
+      return true;
+    } catch {
+      return false;
+    }
+  }, [value]);
+
   const zones = useMemo(() => {
     const intl = Intl as typeof Intl & { supportedValuesOf?: (key: string) => string[] };
     if (typeof intl.supportedValuesOf !== "function") return null;
@@ -56,13 +67,24 @@ export function TimezonePicker({
       {zones ? (
         <select
           id={id}
-          value={zones.includes(value) ? value : ""}
+          value={value}
           onChange={(event) => commit(event.target.value)}
           className="border-faint-2 bg-paper text-ink focus-visible:ring-org max-w-full border px-2 py-1.5 text-[14px] focus-visible:ring-2 focus-visible:outline-none"
         >
           {/* A stored zone this browser does not list still has to be visible,
-              or the reader sees a picker claiming they chose something else. */}
-          {zones.includes(value) ? null : <option value="">{value} (not in this list)</option>}
+              or the reader sees a picker claiming they chose something else.
+              But "not in this list" is only the right thing to say when the
+              zone is genuinely unknown. UTC is the app's OWN DEFAULT and is
+              missing from supportedValuesOf here, so a fresh reader was being
+              shown "UTC (not in this list)" — the default value reading as an
+              anomaly about a choice they never made. If the platform ACCEPTS
+              the zone, it is a real zone that simply is not enumerated, and it
+              is shown plainly. */}
+          {zones.includes(value) ? null : (
+            <option value={value}>
+              {accepted ? value : `${value} — not a zone this browser knows`}
+            </option>
+          )}
           {zones.map((zone) => (
             <option key={zone} value={zone}>
               {zone}

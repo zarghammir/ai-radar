@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { EmptyState, PageShell } from "@/components/page-shell";
-import { SavedCardView } from "@/components/saved/saved-card";
+import { ARCHIVE_NOTE_ID, SavedCardView } from "@/components/saved/saved-card";
 import {
   getSavedSnapshot,
   getServerSavedSnapshot,
@@ -111,6 +111,16 @@ export function SavedScreen() {
             title={`Nothing tagged \u201C${tag}\u201D`}
             body="Every story carrying that tag has since been removed. Clear the filter to see the rest of what you have saved."
           />
+        ) : null}
+
+        {/* Said ONCE for the whole list, and every Archive button points at it
+            through aria-describedby. It used to be repeated inside every card,
+            which is the same sentence twenty times on a full bin. */}
+        {state === "list" ? (
+          <p id={ARCHIVE_NOTE_ID} className="text-ash mb-3 text-[12.5px]">
+            Archiving is not built yet, so that button is off. Remove takes a story off this list
+            for good.
+          </p>
         ) : null}
 
         {state === "list"

@@ -11,6 +11,9 @@ import { cn } from "@/lib/utils";
 type Status =
   { kind: "idle" } | { kind: "saving" } | { kind: "saved" } | { kind: "failed"; message: string };
 
+/** The one place the archive explanation lives; see SavedScreen. */
+export const ARCHIVE_NOTE_ID = "archive-not-built";
+
 export function SavedCardView({
   story,
   rank,
@@ -103,7 +106,10 @@ export function SavedCardView({
             the server the moment they open this on a second device. A button
             that lies quietly is worse than one that arrives a week late.
           */}
-          <CardButton disabled aria-describedby={`archive-note-${story.id}`}>
+          {/* Described by the ONE sentence on the page, not a copy per card.
+              An id can be referenced by any number of elements, and a reader
+              with twenty saved stories should not be told twenty times. */}
+          <CardButton disabled aria-describedby={ARCHIVE_NOTE_ID}>
             <Archive aria-hidden className="size-4" />
             Archive
           </CardButton>
@@ -124,9 +130,6 @@ export function SavedCardView({
       }
       footer={
         <div className="border-faint border-t pt-3">
-          <p id={`archive-note-${story.id}`} className="text-meta mb-3 text-[12.5px]">
-            Archiving is not built yet. Remove takes a story off this list for good.
-          </p>
           <NoteEditor
             note={story.note}
             onSave={(note) => saveMarks({ note, tags: story.tags }, "Could not save that note.")}
@@ -169,9 +172,18 @@ function CardButton({
       className={cn(
         "focus-visible:ring-org border-faint-2 flex items-center gap-1.5 rounded-xs border px-2.5 py-1.5 text-[13px] font-semibold focus-visible:ring-2 focus-visible:outline-none",
         pressed ? "bg-ink text-paper border-ink" : "text-soft hover:bg-faint",
-        // Disabled stays legible: a control the reader cannot use still has to
-        // be readable, or the explanation attached to it is unreachable.
-        disabled ? "border-faint text-meta cursor-not-allowed hover:bg-transparent" : null,
+        // A dashed border, which is how this design already draws "not built
+        // yet" — the empty states and the unwired panels in Settings all use
+        // it. Solid-bordered buttons beside it are the ones that do something.
+        //
+        // Looking at the first screenshots, the disabled Archive was
+        // indistinguishable from Mark read and Remove. A control that is
+        // disabled but does not LOOK disabled is worse than a hidden one: the
+        // reader clicks it, nothing happens, and the sentence explaining why
+        // is never the thing they blame. Legible, and visibly inert.
+        disabled
+          ? "border-faint-2 text-meta cursor-not-allowed border-dashed hover:bg-transparent"
+          : null,
       )}
       {...rest}
     >
@@ -334,7 +346,9 @@ function TagEditor({ tags, onChange }: { tags: string[]; onChange: (tags: string
             event.preventDefault();
             add();
           }}
-          className="border-faint-2 bg-paper text-ink focus-visible:ring-org min-w-0 flex-1 border px-2 py-1.5 text-[13px] focus-visible:ring-2 focus-visible:outline-none"
+          // Not flex-1: a full-card-width box for a one-word tag reads as the
+          // most important control on the card, which it is not.
+          className="border-faint-2 bg-paper text-ink focus-visible:ring-org w-full max-w-56 min-w-0 border px-2 py-1.5 text-[13px] focus-visible:ring-2 focus-visible:outline-none"
         />
         <button
           type="button"

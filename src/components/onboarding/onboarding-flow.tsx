@@ -107,17 +107,27 @@ export function OnboardingFlow({ topics }: { topics: TopicSummary[] | null }) {
 
   return (
     <div>
-      <ol className="text-meta mb-6 flex gap-2 font-mono text-[10.5px] tracking-[0.12em] uppercase">
+      {/* The numerals only. Each item used to carry the whole phrase, so the
+          row read "1 OF 3  2 OF 3  3 OF 3" — three sentences that look like a
+          fault rather than a position. The phrase is said once, to everyone. */}
+      <p className="text-meta font-label mb-2 text-[10.5px] tracking-[0.18em] uppercase">
+        Step {STEPS.indexOf(step) + 1} of {STEPS.length}
+      </p>
+      <ol className="text-meta mb-6 flex gap-2 font-mono text-[11px]">
         {STEPS.map((name, index) => (
           <li
             key={name}
             aria-current={name === step ? "step" : undefined}
             className={cn(
-              "border-b-2 pb-1",
-              name === step ? "border-org text-ink" : "border-faint-2",
+              "w-10 border-b-2 pb-1 text-center",
+              name === step
+                ? "border-org text-ink font-bold"
+                : index < STEPS.indexOf(step)
+                  ? "border-ink text-soft"
+                  : "border-faint-2",
             )}
           >
-            {index + 1} of {STEPS.length}
+            {index + 1}
             <span className="sr-only">
               {name === step
                 ? " — this step"
