@@ -7,6 +7,7 @@ import { createFetchContext, type FetchContextOptions } from "./context";
 import { isSameStory, titleSimilarity } from "./clustering/similarity";
 import { deriveVerification } from "./clustering/verification";
 import { normalizeItem } from "./normalize";
+import { contentFamily } from "./normalize/content-type";
 import { matchesAnyKeyword } from "./normalize/keywords";
 import { slugify } from "./normalize/text";
 
@@ -68,11 +69,6 @@ export function describeError(error: unknown): string {
     current = current.cause;
   }
   return seen.join("\n") || String(error);
-}
-
-/** Papers cluster only with papers unless the canonical URL already tied them. */
-function contentFamily(type: ContentType): "paper" | "general" {
-  return type === "PAPER" ? "paper" : "general";
 }
 
 /** Primary for a first-party source, discussion for a forum, report otherwise. */
