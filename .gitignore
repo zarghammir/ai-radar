@@ -43,3 +43,6 @@ next-env.d.ts
 
 # Impeccable design-tool session state (decision pages, local answers)
 .impeccable/
+
+# Playwright CLI scratch output from the a11y tooling
+.playwright-cli/
