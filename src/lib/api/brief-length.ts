@@ -1,17 +1,44 @@
-import { getPreferences } from "@/lib/api/client";
+import { getPreferences, USING_FIXTURES } from "@/lib/api/client";
 import { asBriefLength } from "@/lib/api/preferences";
-import type { BriefLengthParam } from "@/lib/api/types";
+import type { BriefLengthParam, Preferences } from "@/lib/api/types";
+
+/**
+ * SERVER ONLY. Nothing with "use client" may import this module: the live path
+ * below pulls in the database client, and the dynamic import is what keeps it
+ * out of a browser bundle — it is not a guard against being imported from one.
+ * There is no `server-only` package in this repository to enforce it, so this
+ * comment and the single call site in src/app/page.tsx are the enforcement.
+ */
 
 /** What Today falls back to when preferences cannot be read. */
 export const FALLBACK_BRIEF_LENGTH: BriefLengthParam = "10";
+
+/**
+ * Reads preferences the way a SERVER component must.
+ *
+ * Against the real API it calls the same function the route calls, through a
+ * dynamic import so no database code reaches a browser bundle. It does NOT
+ * fetch /api/preferences: a server component asking its own app for a relative
+ * URL has no origin to resolve it against, so the request throws on every
+ * load. Today already shipped that defect once, and it was invisible — the
+ * catch below would have swallowed it and quietly used ten minutes forever,
+ * which is the dead control this function exists to remove.
+ *
+ * On fixtures there is no database, and the client's own path is right.
+ */
+async function readPreferences(): Promise<Preferences> {
+  if (USING_FIXTURES) return getPreferences();
+  const [{ getDb }, reader] = await Promise.all([import("@/db/client"), import("@/api/reader")]);
+  return reader.getPreferences(getDb());
+}
 
 /**
  * How long Today runs when the reader has not said otherwise in the URL.
  *
  * The stored preference is the DEFAULT and `?length=` is the override for one
  * visit — the split ReadingMode's own comment described before the endpoint
- * existed. Until this, the length chosen in Settings was written and read by
- * nobody: a control that moves and changes nothing.
+ * existed. Until this, the length chosen in Settings was written by the reader
+ * and read by nobody.
  *
  * A failed read falls back to ten minutes rather than throwing. This is the
  * one place in the app where guessing is right: the alternative is no brief at
@@ -21,7 +48,7 @@ export const FALLBACK_BRIEF_LENGTH: BriefLengthParam = "10";
  */
 export async function defaultBriefLength(): Promise<BriefLengthParam> {
   try {
-    const preferences = await getPreferences();
+    const preferences = await readPreferences();
     return asBriefLength(preferences.briefLength).length;
   } catch (error) {
     console.error("today: could not read the preferred brief length", error);
