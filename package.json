@@ -21,6 +21,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
     "db:seed": "tsx src/db/seed.ts",
+    "db:seed:stories": "tsx scripts/seed-e2e-stories.ts",
     "db:studio": "drizzle-kit studio",
     "sources:check": "tsx scripts/sources-check.ts",
     "routes:check": "tsx scripts/check-route-cost.ts",

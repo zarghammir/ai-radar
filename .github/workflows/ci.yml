@@ -215,6 +215,42 @@ jobs:
           cat /tmp/next-server.log >&2
           exit 1
 
+      # THE REACHABLE-BUT-EMPTY STATE, EXERCISED HERE AND NOWHERE ELSE.
+      #
+      # Today has three states and two of them must never look alike: a quiet
+      # morning (the database answered and nothing arrived) and an unreachable
+      # database (we do not know what happened). The browser checks below need
+      # stories, so the step after this one seeds them — which means this is the
+      # only moment in the whole run when the database is reachable and empty.
+      #
+      # So the empty case is asserted HERE, before the seed, with curl rather
+      # than a browser: the state names itself in the DOM, so no interaction is
+      # needed to read it. Without this step, seeding would quietly retire a
+      # state the product deliberately distinguishes.
+      - name: A reachable, empty database is a quiet morning
+        run: |
+          HTML="$(curl -s http://127.0.0.1:3210/)"
+          STATE="$(printf '%s' "$HTML" | grep -o 'data-screen-state="[a-z]*"' | head -1)"
+          echo "state before seeding: ${STATE:-<none>}"
+          if [ "$STATE" != 'data-screen-state="quiet"' ]; then
+            echo "an empty database rendered ${STATE:-no state at all}, not the quiet morning" >&2
+            printf '%s' "$HTML" | grep -oiE "cannot reach your stories|quiet morning" >&2 || true
+            exit 1
+          fi
+          # And the words, not only the marker: a reader never sees the marker.
+          printf '%s' "$HTML" | grep -qi "quiet morning" || {
+            echo "state=quiet but the screen does not say it is a quiet morning" >&2
+            exit 1
+          }
+
+      # Stories, through the REAL pipeline rather than inserted rows, because a
+      # story that never went through it has no sources, no clustering and no
+      # score — the browser checks would exercise the SELECT and nothing else.
+      # The script carries its own floor and fails if it seeds too few, so an
+      # empty seed cannot be discovered later by whatever runs next.
+      - name: Seed stories for the browser checks
+        run: npm run db:seed:stories
+
       # Both checks go through one wrapper, which owns the exit-code contract:
       # 0 passed, 1 the checks ran and failed, 2 the instrument could not run.
       # Its reasoning lives in the file. Two callers, one copy — a control can
