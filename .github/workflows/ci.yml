@@ -181,11 +181,22 @@ jobs:
       - name: Confirm static assets and the manifest are served
         run: |
           set -eu
+          # Every path is checked and reported before the step decides, rather
+          # than exiting on the first 404. When this fails it is a diagnosis:
+          # public/ missing shows the two static files red and the generated
+          # manifest still green, which is the difference between "the image
+          # lost public/" and "the server is broken". Exiting early would hide
+          # exactly the comparison that tells them apart.
+          BAD=""
           for path in /icons/icon-192.png /offline.html /manifest.webmanifest; do
             CODE="$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:3000$path" || true)"
             echo "GET $path -> $CODE"
-            [ "$CODE" = "200" ] || { echo "expected 200 for $path" >&2; exit 1; }
+            [ "$CODE" = "200" ] || BAD="$BAD $path"
           done
+          if [ -n "$BAD" ]; then
+            echo "expected 200 for:$BAD" >&2
+            exit 1
+          fi
 
       # Accepts exactly two outcomes and nothing else: a real pass once issue #5
       # lands, or today's explicit refusal. Silence, a crash or an empty exit 0
