@@ -127,9 +127,19 @@ const LAUNCH_VERBS = [
  * a launch verb removed the dates and kept the rest.
  *
  * The cost of keeping the family list is that a new lab's first model is
- * unclassified until someone adds the name. That is the cheaper mistake: an
- * item labelled NEWS is merely unhelpful, while an item labelled MODEL carries
- * the joint-heaviest ranking weight onto a newsletter.
+ * unclassified until someone adds the name. That is the cheaper mistake, and
+ * the ranking says by how much: MODEL carries the joint-heaviest weight, and
+ * reconstructing the corpus ranking without the classifier put one retyped
+ * story at rank 104 where it now sits at rank 14. A single badge is worth
+ * about ninety places.
+ *
+ * So precision here is worth roughly an order of magnitude more than recall.
+ * A missed model launch is one story lower down a list; a false MODEL is a
+ * newsletter in the reader's top ten. Weigh any change to these rules that
+ * way, and measure it against stored titles before believing it.
+ *
+ * What would actually raise recall is a maintained model-name list or a
+ * summariser that reads the item, not a cleverer regex. That was tried.
  */
 
 const MODEL_NOUNS = [
