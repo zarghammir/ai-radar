@@ -98,6 +98,155 @@ jobs:
       - name: Format check
         run: npm run format:check
 
+  # The browser evidence. Three scripts in this repo measure things no other
+  # check can see — and until this job existed, all of them ran only when a
+  # person remembered, which means they were absent exactly when nobody was
+  # looking.
+  #
+  # Runs on every pull request rather than on a path filter. A path filter would
+  # have to guess which files can change a rendered page, and the honest answer
+  # is most of them: a utility, a token, a layout, a dependency bump. A browser
+  # check that runs only sometimes is the problem this job exists to fix. It
+  # costs roughly 3-4 runner minutes a run; the schedule in ingest.yml is where
+  # the minutes conversation actually belongs (see docs/cost-protection.md).
+  #
+  # `needs: ci` so a pull request that already fails lint, types, tests or the
+  # build does not also pay for a browser.
+  e2e:
+    name: browser checks
+    runs-on: ubuntu-latest
+    needs: ci
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: ai_radar
+          POSTGRES_PASSWORD: ai_radar
+          POSTGRES_DB: ai_radar_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ai_radar -d ai_radar_e2e"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://ai_radar:ai_radar@localhost:5432/ai_radar_e2e
+      NEXT_TELEMETRY_DISABLED: "1"
+      # Both scripts default to this and take it as argv[2]; naming it once here
+      # keeps the server and the scripts from drifting apart.
+      VERIFY_URL: http://127.0.0.1:3210
+
+    steps:
+      - name: Check out the branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node and the npm cache
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Pin npm to the version in packageManager
+        run: |
+          NPM_VERSION="$(node -p "require('./package.json').packageManager.split('@')[1]")"
+          npm install -g "npm@${NPM_VERSION}"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # No browser download. `playwright-core` ships none by design, and the
+      # runner image already carries Google Chrome, which is what
+      # scripts/lib/browser.mjs resolves through Playwright's "chrome" channel.
+      # Printed rather than assumed: if this ever prints nothing, the scripts
+      # below exit 2 and this job goes red saying the instrument could not run,
+      # which is the correct outcome and not a skip.
+      - name: Show the browser the scripts will drive
+        run: |
+          google-chrome --version || echo "no google-chrome on PATH"
+
+      - name: Build
+        run: npm run build
+        env:
+          DATABASE_URL: ""
+
+      - name: Create the schema and load the catalogue
+        run: |
+          npm run db:migrate
+          npm run db:seed
+
+      # A production server, because that is what the scripts measure: the
+      # service worker, the theme-colour meta and the bundled CSS all behave
+      # differently under `next dev`.
+      - name: Start the production server
+        run: |
+          npx next start -p 3210 > /tmp/next-server.log 2>&1 &
+          echo $! > /tmp/next-server.pid
+          for i in $(seq 1 60); do
+            CODE="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3210/ || true)"
+            if [ "$CODE" = "200" ]; then echo "server answered 200 after ${i}s"; exit 0; fi
+            sleep 1
+          done
+          echo "the server never answered 200; last code was '${CODE:-none}'" >&2
+          cat /tmp/next-server.log >&2
+          exit 1
+
+      # Exit 2 from these scripts means THE INSTRUMENT COULD NOT RUN — no
+      # browser, or nothing serving. That is a different state from "the checks
+      # failed" (1) and from "the checks passed" (0), and it must never be
+      # treated as a skip: a green tick for a run that measured nothing is the
+      # failure this repository has catalogued more than any other.
+      #
+      # Both cases are red. They are separated only so the log says which
+      # happened, because the fix is completely different.
+      - name: Accessibility, overflow and bottom-bar sweep
+        run: |
+          set +e
+          npm run a11y
+          CODE=$?
+          set -e
+          case "$CODE" in
+            0) echo "RESULT: the sweep ran and passed." ;;
+            2)
+              echo "::error::The accessibility sweep could NOT RUN — no browser could be resolved, or nothing was serving. This is not a pass and not a skip." >&2
+              exit 1
+              ;;
+            *)
+              echo "::error::The accessibility sweep RAN and FAILED (exit $CODE)." >&2
+              exit "$CODE"
+              ;;
+          esac
+
+      - name: The four checks axe cannot see
+        run: |
+          set +e
+          npm run verify:shell
+          CODE=$?
+          set -e
+          case "$CODE" in
+            0) echo "RESULT: the shell verification ran and passed." ;;
+            2)
+              echo "::error::The shell verification could NOT RUN — no browser could be resolved, or nothing was serving. This is not a pass and not a skip." >&2
+              exit 1
+              ;;
+            *)
+              echo "::error::The shell verification RAN and FAILED (exit $CODE)." >&2
+              exit "$CODE"
+              ;;
+          esac
+
+      - name: Server log, if anything above failed
+        if: failure()
+        run: cat /tmp/next-server.log || true
+
+      - name: Stop the server
+        if: always()
+        run: |
+          [ -f /tmp/next-server.pid ] && kill "$(cat /tmp/next-server.pid)" 2>/dev/null || true
+
   # Proves the self-host path the README promises. The owner's Mac has no
   # Docker, so this job is the only place the image and the stack are ever
   # actually run.
