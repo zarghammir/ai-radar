@@ -11,7 +11,7 @@ import {
   topics,
 } from "@/db/schema";
 import { readingMinutes } from "@/pipeline/normalize/text";
-import { scoreComponentList } from "@/pipeline/ranking/rank-all";
+import { scoreComponentList } from "@/pipeline/ranking/score";
 
 export interface SourceRef {
   key: string;

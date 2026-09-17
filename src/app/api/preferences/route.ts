@@ -1,9 +1,9 @@
-import { db } from "@/db/client";
+import { getDb } from "@/db/client";
 import { getPreferences, preferencesPatchSchema, updatePreferences } from "@/api/reader";
 import { ApiError, handle, json, readOptionalJson } from "@/api/http";
 
 export async function GET(): Promise<Response> {
-  return handle(async () => json(await getPreferences(db)));
+  return handle(async () => json(await getPreferences(getDb())));
 }
 
 export async function PUT(request: Request): Promise<Response> {
@@ -14,6 +14,6 @@ export async function PUT(request: Request): Promise<Response> {
       // a silently dropped field is a preference the reader believes they set.
       throw new ApiError("VALIDATION_ERROR", parsed.error.issues[0]?.message ?? "invalid body");
     }
-    return json(await updatePreferences(db, parsed.data));
+    return json(await updatePreferences(getDb(), parsed.data));
   });
 }

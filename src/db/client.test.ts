@@ -18,14 +18,15 @@ describe("the database client", () => {
 
   it("imports without a connection string", async () => {
     const mod = await import("@/db/client");
-    expect(mod.db).toBeDefined();
+    expect(typeof mod.getDb).toBe("function");
+    expect(typeof mod.getSql).toBe("function");
   });
 
   it("still fails clearly when something actually asks for the database", async () => {
     // Deferring the error must not lose it: a missing connection string is a
     // real problem at the moment a query is attempted, and the message has to
     // keep naming the fix.
-    const { db } = await import("@/db/client");
-    expect(() => db.select()).toThrow(/DATABASE_URL is not set/);
+    const { getDb } = await import("@/db/client");
+    expect(() => getDb()).toThrow(/DATABASE_URL is not set/);
   });
 });

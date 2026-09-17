@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { db, sql } from "@/db/client";
+import { getDb, getSql } from "@/db/client";
 import { ingestOnce } from "./ingest";
 import { exitCodeFor, formatSourceLine, formatTotalLine, readIntervalMinutes } from "./report";
 import { readInternalSecret } from "./secret";
@@ -45,7 +45,7 @@ function sleep(ms: number): Promise<void> {
 
 async function runPass(): Promise<number> {
   const started = Date.now();
-  const outcome = await ingestOnce(db, sql);
+  const outcome = await ingestOnce(getDb(), getSql());
 
   if (!outcome.ran) {
     // Skipped, not failed: another worker or the HTTP trigger holds the lock.
@@ -93,5 +93,7 @@ main()
     process.exitCode = 1;
   })
   .finally(async () => {
-    await sql.end({ timeout: 5 }).catch(() => {});
+    await getSql()
+      .end({ timeout: 5 })
+      .catch(() => {});
   });

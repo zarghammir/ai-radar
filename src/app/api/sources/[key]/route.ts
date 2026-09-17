@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { db } from "@/db/client";
+import { getDb } from "@/db/client";
 import { setSourceEnabled } from "@/api/catalogue";
 import { ApiError, handle, json } from "@/api/http";
 
@@ -24,7 +24,7 @@ export async function PUT(
       throw new ApiError("VALIDATION_ERROR", "body must be { enabled: boolean }");
     }
 
-    const updated = await setSourceEnabled(db, key, parsed.data.enabled, new Date());
+    const updated = await setSourceEnabled(getDb(), key, parsed.data.enabled, new Date());
     if (!updated) throw new ApiError("NOT_FOUND", `no source with key "${key}"`);
     return json(updated);
   });

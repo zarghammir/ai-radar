@@ -1,4 +1,4 @@
-import { db } from "@/db/client";
+import { getDb } from "@/db/client";
 import { parseFilters } from "@/api/params";
 import { radarHistogram, unknownKeys } from "@/api/radar";
 import { ApiError, handle, json } from "@/api/http";
@@ -11,12 +11,12 @@ export async function GET(request: Request): Promise<Response> {
     const filters = parseFilters(params, now, "24h");
 
     for (const kind of ["topic", "source"] as const) {
-      const missing = await unknownKeys(db, kind, filters[kind]);
+      const missing = await unknownKeys(getDb(), kind, filters[kind]);
       if (missing.length) {
         throw new ApiError("VALIDATION_ERROR", `unknown ${kind}: ${missing.join(", ")}`);
       }
     }
 
-    return json(await radarHistogram(db, filters, now));
+    return json(await radarHistogram(getDb(), filters, now));
   });
 }

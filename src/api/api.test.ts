@@ -361,7 +361,8 @@ withDb("API routes", () => {
 
     it("explains the score with server-supplied labels once ranked", async () => {
       const { rankAllStories } = await import("@/pipeline/ranking/rank-all");
-      const { db } = await import("@/db/client");
+      const { getDb } = await import("@/db/client");
+      const db = getDb();
       const { COMPONENT_LABELS } = await import("@/pipeline/ranking/score");
 
       const lab = await source("openai-blog", { name: "OpenAI", tier: "PRIMARY" });
@@ -554,7 +555,8 @@ withDb("API routes", () => {
       // actually populate the column rather than against a fixture — and the
       // two orders differ, so it cannot pass by coinciding with newest.
       const { rankAllStories } = await import("@/pipeline/ranking/rank-all");
-      const { db } = await import("@/db/client");
+      const { getDb } = await import("@/db/client");
+      const db = getDb();
 
       const lab = await source("openai-blog", { name: "OpenAI", tier: "PRIMARY" });
       const forum = await source("hackernews-ai", {

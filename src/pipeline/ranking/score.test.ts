@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { COMPONENT_LABELS, labelFor, rankStory, WEIGHTS } from "./score";
+import { COMPONENT_LABELS, labelFor, rankStory, scoreComponentList, WEIGHTS } from "./score";
 import { deriveVerification } from "../clustering/verification";
 
 const now = new Date("2026-09-16T12:00:00Z");
@@ -324,5 +324,27 @@ describe("every component the ranker can emit has a label", () => {
     for (const key of emitted()) expect(labelFor(key)).toBe(COMPONENT_LABELS[key as never]);
     // The net under the compiler: never reached in production, never blank.
     expect(labelFor("somethingNobodyLabelled")).toBe("somethingNobodyLabelled");
+  });
+});
+
+describe("scoreComponentList", () => {
+  it("labels every component and keeps the values", () => {
+    const list = scoreComponentList({ recency: 13.1, primarySource: 20, unverifiedPenalty: -6 });
+    expect(list).toEqual([
+      { key: "recency", label: COMPONENT_LABELS.recency, value: 13.1 },
+      { key: "primarySource", label: COMPONENT_LABELS.primarySource, value: 20 },
+      { key: "unverifiedPenalty", label: "Unverified claim", value: -6 },
+    ]);
+  });
+
+  it("falls back to the key when a component has no label", () => {
+    // A component added to the model without a label must still render, and
+    // must be visibly unlabelled rather than silently dropped.
+    const list = scoreComponentList({ somethingNew: 3 });
+    expect(list).toEqual([{ key: "somethingNew", label: "somethingNew", value: 3 }]);
+  });
+
+  it("returns an empty list for a story that has not been ranked", () => {
+    expect(scoreComponentList({})).toEqual([]);
   });
 });

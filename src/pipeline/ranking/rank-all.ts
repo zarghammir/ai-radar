@@ -3,7 +3,7 @@ import type { Db } from "@/db/client";
 import type { ScoreComponents } from "@/db/schema";
 import { rawItems, stories, storyTopics, topics, userPreferences } from "@/db/schema";
 import { storySources } from "../run";
-import { labelFor, rankStory } from "./score";
+import { rankStory } from "./score";
 
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
@@ -13,30 +13,6 @@ export const RANKING_WINDOW_HOURS = 7 * 24;
 export interface RankAllResult {
   /** Stories inside the window that were scored. */
   ranked: number;
-}
-
-/** One component of a score, ready to render. */
-export interface LabelledComponent {
-  key: string;
-  label: string;
-  value: number;
-}
-
-/**
- * The persisted components turned into the shape the API returns.
- *
- * The label comes from the pipeline's own map, so the wording a reader sees
- * cannot drift from the weights that produced the number. A component with no
- * label falls back to its key rather than being dropped: an unlabelled bar is a
- * visible gap someone will fix, a missing one silently stops the parts adding
- * up to the whole.
- */
-export function scoreComponentList(components: ScoreComponents): LabelledComponent[] {
-  return Object.entries(components).map(([key, value]) => ({
-    key,
-    label: labelFor(key),
-    value,
-  }));
 }
 
 /** The strongest community signal on a story, or nothing if none was recorded. */

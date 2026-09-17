@@ -213,3 +213,27 @@ export const COMPONENT_LABELS = {
 export function labelFor(key: string): string {
   return (COMPONENT_LABELS as Record<string, string>)[key] ?? key;
 }
+
+/** One component of a score, ready to render. */
+export interface LabelledComponent {
+  key: string;
+  label: string;
+  value: number;
+}
+
+/**
+ * The persisted components turned into the shape the API returns.
+ *
+ * The label comes from the pipeline's own map, so the wording a reader sees
+ * cannot drift from the weights that produced the number. A component with no
+ * label falls back to its key rather than being dropped: an unlabelled bar is a
+ * visible gap someone will fix, a missing one silently stops the parts adding
+ * up to the whole.
+ */
+export function scoreComponentList(components: ScoreComponents): LabelledComponent[] {
+  return Object.entries(components).map(([key, value]) => ({
+    key,
+    label: labelFor(key),
+    value,
+  }));
+}
