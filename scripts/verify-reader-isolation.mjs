@@ -180,6 +180,27 @@ try {
 
   // The floor: both browsers actually reached Settings and stored something.
   if (!lengthA || !lengthB) floor.push("one of the two browsers could not set a brief length");
+  // AND THE READ-BACK NEEDS ITS OWN FLOOR, with its own words.
+  //
+  // readLength answers null when Settings never reaches "ready" — so a failed
+  // READ would fall through to the leak assertion below, where
+  // `null !== "Five minutes"` is true, and be reported as "the second browser's
+  // choice moved the first browser's brief length to null". A failed read
+  // announced as a leak.
+  //
+  // This is a cost of splitting the read out of setLength rather than a
+  // pre-existing gap: while the third step was itself a setLength it failed the
+  // same way as the first two and the floor above covered it. The refactor gave
+  // it a new way to fail and the floor had to follow.
+  //
+  // Folded into the message above it would say "could not set a brief length",
+  // which is false — nothing was being set. A floor that misdescribes its own
+  // trip sends the first reader of a red looking for the wrong thing, and that
+  // first red is likelier than usual here because this assertion has still
+  // never been watched failing.
+  if (!lengthAAfter) {
+    floor.push("could not READ the first browser's brief length back; this is not a leak");
+  }
   bailIfBroken(floor, settingMark);
   if (lengthB !== "Everything")
     floor.push(`the second browser chose Everything and has ${lengthB}`);
