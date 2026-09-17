@@ -2,6 +2,7 @@
 
 import { useId, useMemo, useState } from "react";
 import { SaveStatusText, Section, useSaveStatus } from "@/components/settings/section";
+import { TimezonePicker } from "@/components/settings/timezone-picker";
 import { savePreferences } from "@/lib/api/preferences-store";
 import { BRIEF_LENGTH_OPTIONS, detectTimezone, formatBriefTime } from "@/lib/api/preferences";
 import type { Preferences } from "@/lib/api/types";
@@ -81,9 +82,7 @@ function BriefTimeField({
           onChange={(event) => setDraft(event.target.value)}
           className="border-faint-2 bg-paper text-ink focus-visible:ring-org border px-2 py-1.5 text-[14px] tabular-nums focus-visible:ring-2 focus-visible:outline-none"
         />
-        <span className="text-meta text-[12.5px]">
-          Currently {formatBriefTime(briefTime)}
-        </span>
+        <span className="text-meta text-[12.5px]">Currently {formatBriefTime(briefTime)}</span>
         {changed ? (
           <button
             type="button"
@@ -97,9 +96,7 @@ function BriefTimeField({
         {/* An emptied time input reads as "" on every browser. Saying so beats
             a Save button that is disabled for reasons the reader cannot see. */}
         {changed && !valid ? (
-          <span className="text-destructive text-[12.5px] font-semibold">
-            Pick a time first.
-          </span>
+          <span className="text-destructive text-[12.5px] font-semibold">Pick a time first.</span>
         ) : null}
       </div>
     </div>
@@ -111,85 +108,33 @@ function BriefTimeField({
  *
  * The browser's guess is OFFERED, never applied behind the reader's back: a
  * wrong guess stored silently is a brief arriving at the wrong hour with
- * nothing on screen to explain why. Where the browser can list the zones, this
- * is a real list; where it cannot, it falls back to typing one — an empty list
- * would leave the setting unreachable rather than merely plainer.
+ * nothing on screen to explain why.
  */
-function TimezoneField({ timezone, onSave }: { timezone: string; onSave: (value: string) => void }) {
+function TimezoneField({
+  timezone,
+  onSave,
+}: {
+  timezone: string;
+  onSave: (value: string) => void;
+}) {
   const id = useId();
-  const [draft, setDraft] = useState(timezone);
-  const [problem, setProblem] = useState<string | null>(null);
   const detected = useMemo(() => detectTimezone(), []);
-
-  const zones = useMemo(() => {
-    const supported = Intl as typeof Intl & { supportedValuesOf?: (key: string) => string[] };
-    if (typeof supported.supportedValuesOf !== "function") return null;
-    try {
-      const list = supported.supportedValuesOf("timeZone");
-      return list.length > 0 ? list : null;
-    } catch {
-      return null;
-    }
-  }, []);
-
-  function commit(value: string) {
-    setProblem(null);
-    try {
-      new Intl.DateTimeFormat("en-US", { timeZone: value });
-    } catch {
-      // The same check the route makes, made here so the reason is attached to
-      // the field rather than arriving as a rejected write.
-      setProblem(`“${value}” is not a time zone name. They look like Europe/Lisbon.`);
-      return;
-    }
-    setDraft(value);
-    onSave(value);
-  }
 
   return (
     <div>
       <FieldLabel htmlFor={id}>Your time zone</FieldLabel>
-      <div className="mt-1 flex flex-wrap items-center gap-2">
-        {zones ? (
-          <select
-            id={id}
-            value={zones.includes(draft) ? draft : ""}
-            onChange={(event) => commit(event.target.value)}
-            className="border-faint-2 bg-paper text-ink focus-visible:ring-org max-w-full border px-2 py-1.5 text-[14px] focus-visible:ring-2 focus-visible:outline-none"
-          >
-            {/* A stored zone this browser does not list still has to be
-                visible, or the reader sees a picker claiming they chose
-                something else. */}
-            {zones.includes(draft) ? null : <option value="">{draft} (not in this list)</option>}
-            {zones.map((zone) => (
-              <option key={zone} value={zone}>
-                {zone}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <input
-            id={id}
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onBlur={(event) => commit(event.target.value)}
-            className="border-faint-2 bg-paper text-ink focus-visible:ring-org border px-2 py-1.5 text-[14px] focus-visible:ring-2 focus-visible:outline-none"
-          />
-        )}
-
+      <div className="mt-1 flex flex-wrap items-start gap-2">
+        <TimezonePicker id={id} value={timezone} onChange={onSave} />
         {detected && detected !== timezone ? (
           <button
             type="button"
-            onClick={() => commit(detected)}
+            onClick={() => onSave(detected)}
             className="focus-visible:ring-org border-faint-2 text-soft hover:bg-faint rounded-xs border px-2.5 py-1.5 text-[13px] font-semibold focus-visible:ring-2 focus-visible:outline-none"
           >
             Use {detected}
           </button>
         ) : null}
       </div>
-      {problem ? (
-        <p className="text-destructive mt-2 text-[12.5px] font-semibold">{problem}</p>
-      ) : null}
       {detected === null ? (
         <p className="text-meta mt-2 text-[12.5px]">
           This browser will not say which zone it is in, so nothing is guessed for you.

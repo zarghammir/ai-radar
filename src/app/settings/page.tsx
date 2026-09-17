@@ -72,6 +72,18 @@ export default async function SettingsPage() {
         </Section>
 
         <Section
+          title="Starting over"
+          hint="The three questions this app asks when it first opens. Nothing you have saved is touched by going through them again."
+        >
+          <a
+            href="/welcome"
+            className="focus-visible:ring-org border-faint-2 text-soft hover:bg-faint inline-block rounded-xs border px-3 py-1.5 text-[13px] font-semibold focus-visible:ring-2 focus-visible:outline-none"
+          >
+            Run the welcome again
+          </a>
+        </Section>
+
+        <Section
           title="What the grades mean"
           hint="Every story carries one, kept separate from what kind of thing the story is, so a rumour about a model release is labelled as both."
         >
@@ -111,8 +123,7 @@ export default async function SettingsPage() {
               and bench colours on paper fail AA in dark. */}
           <p className="border-faint-2 text-soft border border-dashed p-4 text-[14px] leading-relaxed">
             Every source the app reads is listed in the repository and each story names the one it
-            came from. Choosing which to follow arrives with the endpoint that can store the
-            choice.
+            came from. Choosing which to follow arrives with the endpoint that can store the choice.
           </p>
         </Section>
       </div>

@@ -1,5 +1,10 @@
 import { BRIEF_LENGTHS, NOTIFICATION_CHANNELS } from "@/db/schema";
-import type { BriefLength, BriefLengthParam, NotificationChannel } from "@/lib/api/types";
+import type {
+  BriefLength,
+  BriefLengthParam,
+  NotificationChannel,
+  TopicSummary,
+} from "@/lib/api/types";
 
 /**
  * Total Records, like CONTENT_TYPE_LABELS: adding a value to the database
@@ -112,3 +117,25 @@ export const TOPIC_GROUPS = [
 
 /** Anything whose group this build does not recognise. Shown, never dropped. */
 export const OTHER_TOPIC_GROUP = { key: "other", heading: "Everything else" } as const;
+
+/**
+ * Buckets the catalogue for display.
+ *
+ * A topic whose group this build does not recognise goes into "Everything
+ * else" rather than being dropped: a subject that exists and is not shown is a
+ * subject the reader cannot choose or unchoose, and they would have no way of
+ * knowing it was there. Empty buckets are omitted — a heading over nothing
+ * says less than no heading.
+ */
+export function groupTopics(topics: TopicSummary[]) {
+  const known = new Set<string>(TOPIC_GROUPS.map((g) => g.key));
+  return [...TOPIC_GROUPS, OTHER_TOPIC_GROUP]
+    .map((group) => ({
+      key: group.key as string,
+      heading: group.heading as string,
+      topics: topics.filter((t) =>
+        group.key === OTHER_TOPIC_GROUP.key ? !known.has(t.group) : t.group === group.key,
+      ),
+    }))
+    .filter((bucket) => bucket.topics.length > 0);
+}

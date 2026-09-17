@@ -69,8 +69,8 @@ export function NotificationsSection({ preferences }: { preferences: Preferences
           every radio unchecked — which reads as "not chosen" and is false. */}
       {NOTIFICATION_OPTIONS.some((option) => option.value === channel) ? null : (
         <p className="text-destructive mt-2 text-[12.5px] font-semibold">
-          Your saved choice is “{channel}”, which this version does not recognise. Picking one
-          above replaces it.
+          Your saved choice is “{channel}”, which this version does not recognise. Picking one above
+          replaces it.
         </p>
       )}
 

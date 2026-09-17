@@ -14,9 +14,7 @@ import type { Preferences } from "@/lib/api/types";
  * silently overwrite what they actually chose.
  */
 export type PreferencesState =
-  | { kind: "loading" }
-  | { kind: "ready"; preferences: Preferences }
-  | { kind: "failed" };
+  { kind: "loading" } | { kind: "ready"; preferences: Preferences } | { kind: "failed" };
 
 const SERVER_SNAPSHOT: PreferencesState = { kind: "loading" };
 

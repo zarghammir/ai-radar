@@ -4,6 +4,7 @@ import { brand } from "@/config/brand";
 import { ThemeScript } from "@/components/theme-script";
 import { BottomNav, Sidebar } from "@/components/app-nav";
 import { ServiceWorkerRegistrar } from "@/components/service-worker";
+import { FirstRunGate } from "@/components/onboarding/first-run-gate";
 import "./globals.css";
 
 /**
@@ -95,6 +96,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         </div>
         <BottomNav />
         <ServiceWorkerRegistrar />
+        {/* Renders nothing. Sends a reader who has never been here to the
+            welcome screen — from any page, and never on a failed read. */}
+        <FirstRunGate />
       </body>
     </html>
   );

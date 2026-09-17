@@ -16,9 +16,7 @@ import type { SavedCard } from "@/lib/api/types";
  * render as a reader who has saved nothing.
  */
 export type SavedState =
-  | { kind: "loading" }
-  | { kind: "ready"; stories: SavedCard[] }
-  | { kind: "failed" };
+  { kind: "loading" } | { kind: "ready"; stories: SavedCard[] } | { kind: "failed" };
 
 /** The same object every time, so the server render and the first client
  *  render agree and useSyncExternalStore cannot loop. */

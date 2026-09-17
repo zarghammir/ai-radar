@@ -4,21 +4,12 @@ import { useId, useState } from "react";
 import { Archive, BookOpen, BookOpenCheck, Plus, Trash2, X } from "lucide-react";
 import { StoryCardView } from "@/components/story/story-card";
 import { setRead, setSaved, setSavedMarks } from "@/lib/api/client";
+import { NOTE_MAX, TAG_MAX_LENGTH, TAGS_MAX } from "@/lib/api/saved-limits";
 import type { SavedCard } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
 
-/**
- * The route's own limits, restated so the reader is stopped HERE with an
- * explanation rather than by a validation error that arrives after they have
- * typed. They mirror saveBodySchema in src/api/reader.ts; the test asserts the
- * two agree, because a client limit that drifts looser is a rejected write and
- * one that drifts tighter is a capability quietly withdrawn.
- */
-export const NOTE_MAX = 2000;
-export const TAG_MAX_LENGTH = 60;
-export const TAGS_MAX = 20;
-
-type Status = { kind: "idle" } | { kind: "saving" } | { kind: "saved" } | { kind: "failed"; message: string };
+type Status =
+  { kind: "idle" } | { kind: "saving" } | { kind: "saved" } | { kind: "failed"; message: string };
 
 export function SavedCardView({
   story,
@@ -213,7 +204,10 @@ function NoteEditor({
 
   return (
     <div>
-      <label htmlFor={id} className="font-label text-soft block text-[10.5px] font-bold tracking-[0.18em] uppercase">
+      <label
+        htmlFor={id}
+        className="font-label text-soft block text-[10.5px] font-bold tracking-[0.18em] uppercase"
+      >
         Your note
       </label>
       <textarea

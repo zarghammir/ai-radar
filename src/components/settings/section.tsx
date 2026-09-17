@@ -38,10 +38,7 @@ export function Section({
 }
 
 export type SaveStatus =
-  | { kind: "idle" }
-  | { kind: "saving" }
-  | { kind: "saved" }
-  | { kind: "failed" };
+  { kind: "idle" } | { kind: "saving" } | { kind: "saved" } | { kind: "failed" };
 
 /**
  * Runs a write and reports honestly what happened to it.
