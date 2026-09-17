@@ -113,6 +113,19 @@ jobs:
           chmod +x /tmp/no-node/node
           echo "/tmp/no-node" >> "$GITHUB_PATH"
 
+      # The stub's own guarantee is NEGATIVE without this: a green run would be
+      # equally consistent with "the documented path never invoked node" and
+      # "/tmp/no-node never made it onto PATH". One of those is the claim; the
+      # other is the guard silently doing nothing.
+      #
+      # It lives in its own step because `GITHUB_PATH` takes effect in the NEXT
+      # step, so the step that writes it cannot check it.
+      - name: Confirm the stub really is the node on PATH
+        run: |
+          echo "node resolves to: $(command -v node || echo 'nothing')"
+          command -v node | grep -qx /tmp/no-node/node \
+            || { echo "the stub is not first on PATH — this job's Node-free claim would be unfalsifiable" >&2; exit 1; }
+
       - name: cp .env.example .env
         run: cp .env.example .env
 
