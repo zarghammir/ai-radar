@@ -1,0 +1,176 @@
+name: Set up the database
+
+# Prepares a fresh database: migrate, seed the source catalogue, then one
+# ingestion pass. Run it by hand from the Actions tab after the two repository
+# secrets are set.
+#
+# WHY A WORKFLOW RATHER THAN SOMEBODY RUNNING THIS LOCALLY. The database
+# credential then lives only in the repository's secret store. Nobody pulls it
+# to a laptop, nothing lands in a file on anyone's machine, and the run is
+# auditable and repeatable by whoever comes next. The alternative — a person
+# exporting DATABASE_URL into a shell — puts a production credential on a
+# developer machine to do a job that a runner can do once and forget.
+#
+# SAFE TO RUN TWICE, and that was checked rather than assumed:
+#   * migrations are idempotent by their journal;
+#   * the seed UPSERTS — src/db/seed.ts uses onConflictDoUpdate on sources.key
+#     and topics.key, so a second run updates the catalogue rather than adding
+#     a second copy of it, and it deliberately never touches `enabled`;
+#   * the ingest is idempotent by raw_items' unique constraint, which is what
+#     makes a second worker pass report "0 new".
+# So this needs no guard against re-running. If the seed ever stops upserting,
+# that changes and this comment is the place to say so.
+on:
+  workflow_dispatch:
+
+# One setup at a time. Two of these against one database would race on the
+# migration journal.
+concurrency:
+  group: setup-database
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  setup:
+    name: migrate, seed, fetch once
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      INTERNAL_API_SECRET: ${{ secrets.INTERNAL_API_SECRET }}
+      NEXT_TELEMETRY_DISABLED: "1"
+
+    steps:
+      - name: Check out the branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node and the npm cache
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Pin npm to the version in packageManager
+        run: |
+          NPM_VERSION="$(node -p "require('./package.json').packageManager.split('@')[1]")"
+          npm install -g "npm@${NPM_VERSION}"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Copied verbatim from ingest.yml rather than rewritten. It is the part of
+      # that workflow that has behaved correctly since the day it landed — every
+      # scheduled run has stopped here and said exactly which secret was absent,
+      # which is how we know the secrets were never set rather than guessing at
+      # why the schedule produced nothing.
+      - name: Check the secrets this job needs are set
+        run: |
+          missing=""
+          [ -n "${DATABASE_URL:-}" ] || missing="$missing DATABASE_URL"
+          [ -n "${INTERNAL_API_SECRET:-}" ] || missing="$missing INTERNAL_API_SECRET"
+          if [ -n "$missing" ]; then
+            echo "Missing repository secret(s):$missing" >&2
+            echo "Set them under Settings → Secrets and variables → Actions." >&2
+            exit 1
+          fi
+
+      # Every number this job reports comes from the database, not from what a
+      # script says about itself. A count a step reports about its own work is
+      # worth nothing unless the table agrees with it.
+      #
+      # It prints counts and nothing else: no connection string, no host, no
+      # user. The URL is read from the environment and never echoed.
+      - name: Write the counter this job measures with
+        run: |
+          cat > "$GITHUB_WORKSPACE/counts.mjs" <<'EOF'
+          import postgres from "postgres";
+          const sql = postgres(process.env.DATABASE_URL, { max: 1, onnotice: () => {} });
+          // Every fallback is "unknown", never 0. A dropped connection or a cold
+          // start returning 0 is indistinguishable from a genuinely empty
+          // database, and the step below would report "the schema was not
+          // created" when the truth is that nothing could be read. Absence and
+          // unreadable are different values.
+          const one = async (q) => { try { return (await q)[0].n; } catch { return "unknown"; } };
+          const tables = await one(
+            sql`select count(*)::int as n from information_schema.tables where table_schema = 'public'`);
+          const migrations = await one(
+            sql`select count(*)::int as n from drizzle.__drizzle_migrations`);
+          const count = async (t) => tables === 0 ? 0 : await one(sql.unsafe(`select count(*)::int as n from ${t}`));
+          console.log(`tables=${tables}`);
+          console.log(`migrations=${migrations}`);
+          console.log(`sources=${await count("sources")}`);
+          console.log(`raw_items=${await count("raw_items")}`);
+          console.log(`stories=${await count("stories")}`);
+          await sql.end();
+          EOF
+          # One floor, three callers. Each distinguishes three states, because
+          # they need three different answers: unreadable, malformed, and a
+          # real zero.
+          cat > "$GITHUB_WORKSPACE/floor.sh" <<'EOF'
+          set -u
+          NAME="$1"; VALUE="$2"; ZERO_MSG="$3"
+          case "$VALUE" in
+            unknown)
+              echo "::error::$NAME could not be READ — the counter did not reach the database. That is not the same as $NAME being zero, and this run stops rather than guess which it was." >&2
+              exit 1 ;;
+            ''|*[!0-9]*)
+              echo "::error::$NAME came back as '$VALUE', which is not a number: the counter's output changed shape." >&2
+              exit 1 ;;
+          esac
+          [ "$VALUE" -gt 0 ] || { echo "::error::$ZERO_MSG" >&2; exit 1; }
+          echo "$NAME = $VALUE"
+          EOF
+          echo "counter and floor written"
+
+      - name: Before — what is in the database now
+        run: |
+          node "$GITHUB_WORKSPACE/counts.mjs" | tee /tmp/before.txt
+
+      - name: Create the schema
+        run: |
+          npm run db:migrate
+          node "$GITHUB_WORKSPACE/counts.mjs" | tee /tmp/after-migrate.txt
+          TABLES="$(awk -F= '$1=="tables"{print $2}' /tmp/after-migrate.txt)"
+          MIGRATIONS="$(awk -F= '$1=="migrations"{print $2}' /tmp/after-migrate.txt)"
+          echo "RESULT: $TABLES tables present, $MIGRATIONS migrations in the journal."
+          # The floor. A migrate that applied nothing to an empty database exits
+          # 0 and prints "Migrations applied." just as loudly as one that worked.
+          bash "$GITHUB_WORKSPACE/floor.sh" tables "$TABLES" "no tables exist after migrating: the schema was not created"
+
+      - name: Load the source catalogue
+        run: |
+          npm run db:seed
+          node "$GITHUB_WORKSPACE/counts.mjs" | tee /tmp/after-seed.txt
+          BEFORE="$(awk -F= '$1=="sources"{print $2}' /tmp/after-migrate.txt)"
+          AFTER="$(awk -F= '$1=="sources"{print $2}' /tmp/after-seed.txt)"
+          echo "RESULT: $AFTER sources in the catalogue (was $BEFORE before this step)."
+          bash "$GITHUB_WORKSPACE/floor.sh" sources "$AFTER" "the sources table is empty after seeding: the catalogue did not load"
+
+      # One pass, with a floor on what it fetched. `npm run worker:once` already
+      # exits non-zero when EVERY source failed; this adds the case that exit
+      # code cannot see — a pass where every source answered and none of them
+      # had anything, which is indistinguishable from a working run by exit
+      # status alone.
+      #
+      # The rule is the one scripts/sources-check.ts already uses for a single
+      # source, `items.length > 0 && bad.length === 0`, applied to the pass:
+      # items must have arrived, and the pass must not have ended in failure.
+      - name: Fetch once
+        run: |
+          npm run worker:once
+          node "$GITHUB_WORKSPACE/counts.mjs" | tee /tmp/after-ingest.txt
+          ITEMS="$(awk -F= '$1=="raw_items"{print $2}' /tmp/after-ingest.txt)"
+          STORIES="$(awk -F= '$1=="stories"{print $2}' /tmp/after-ingest.txt)"
+          echo "RESULT: $ITEMS items stored, $STORIES stories written."
+          bash "$GITHUB_WORKSPACE/floor.sh" items "$ITEMS" "the pass stored no items: a green run that fetched nothing is not a working one"
+
+      - name: What this run did
+        if: always()
+        run: |
+          echo "before:        $(tr '\n' ' ' < /tmp/before.txt 2>/dev/null || echo 'not reached')"
+          echo "after migrate: $(tr '\n' ' ' < /tmp/after-migrate.txt 2>/dev/null || echo 'not reached')"
+          echo "after seed:    $(tr '\n' ' ' < /tmp/after-seed.txt 2>/dev/null || echo 'not reached')"
+          echo "after ingest:  $(tr '\n' ' ' < /tmp/after-ingest.txt 2>/dev/null || echo 'not reached')"

@@ -2,6 +2,7 @@ import "dotenv/config";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
+import { describeDbError } from "./client";
 
 async function main() {
   const url = process.env.DATABASE_URL;
@@ -14,6 +15,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error(err);
+  console.error(describeDbError(err));
   process.exit(1);
 });

@@ -92,7 +92,7 @@ CI jobs, so the schedule is the largest line in the budget by a wide margin.
 × 30`; minutes per month = runs × 1 (rounded up) or runs × 31 ÷ 60 (actual). At hourly
 instead of half-hourly, every figure above halves.
 
-**And the other side of the same schedule:** 1,440 runs × 18 sources ≈ **26,000 requests
+**And the other side of the same schedule:** 1,440 runs × 17 sources ≈ **24,000 requests
 a month to other people's feeds**, plus one round of 18 on every pull request from
 `compose-smoke`. None of it is paid, so it is not a billing risk — but it is the kind of
 thing a publisher rate-limits or blocks, and this is where a self-hoster would look for

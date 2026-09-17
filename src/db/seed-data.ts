@@ -205,15 +205,14 @@ export const SOURCE_SEEDS: SourceSeed[] = [
     homepage: "https://simonwillison.net",
     defaultContentType: "NEWS",
   },
-  {
-    key: "import-ai",
-    name: "Import AI",
-    kind: "rss",
-    tier: "ANALYST",
-    url: "https://importai.substack.com/feed",
-    homepage: "https://importai.substack.com",
-    defaultContentType: "NEWS",
-  },
+  // import-ai (importai.substack.com) was removed on 2026-09-17. Substack
+  // returns 403 to datacenter IPs, so it failed on every hosted ingestion run
+  // while working perfectly from a laptop — see #38. The owner's ruling was to
+  // drop it rather than carry a source that is red by design, because a red
+  // that is always there teaches everyone to stop reading reds.
+  //
+  // If it is ever re-added, it needs the HTML listing adapter from #26 or a
+  // fetch path that Substack accepts; putting the feed URL back will not work.
   {
     key: "interconnects",
     name: "Interconnects",

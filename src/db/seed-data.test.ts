@@ -34,7 +34,12 @@ describe("source catalogue", () => {
     const analysts = SOURCE_SEEDS.filter((s) => s.tier === "ANALYST")
       .map((s) => s.key)
       .sort();
-    expect(analysts).toEqual(["import-ai", "interconnects", "simon-willison"]);
+    // import-ai was removed on 2026-09-17 (#38): Substack refuses datacenter
+    // IPs, so it failed every hosted run. Two analysts is the floor for the
+    // "two expert newsletters agreeing" case below to be writable at all — if
+    // this list ever drops to one, that test cannot exist and the tier stops
+    // being able to produce EMERGING on its own.
+    expect(analysts).toEqual(["interconnects", "simon-willison"]);
   });
 
   it("keeps enough newsrooms for corroboration to stay reachable", () => {
@@ -186,10 +191,10 @@ describe("the shipped catalogue produces the badges the product promises", () =>
   };
 
   it("two expert newsletters agreeing is emerging, and names them", () => {
-    const r = deriveVerification([item("simon-willison"), item("import-ai")]);
+    const r = deriveVerification([item("simon-willison"), item("interconnects")]);
     expect(r.level).toBe("EMERGING");
     expect(r.note).toContain("Simon Willison");
-    expect(r.note).toContain("Import AI");
+    expect(r.note).toContain("Interconnects");
   });
 
   it("a newsroom plus an expert newsletter is corroborated", () => {
