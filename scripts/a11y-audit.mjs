@@ -74,13 +74,14 @@ const THEMES = ["light", "dark"];
 
 import { launchBrowser, requireServer } from "./lib/browser.mjs";
 import { collectStoryIds } from "./lib/fixture-ids.mjs";
+import { saveThroughUi } from "./lib/save-through-ui.mjs";
 
 await requireServer(base);
 const browser = await launchBrowser();
-const SEEDED_SAVED_IDS = await collectStoryIds(browser, base, SEEDED_STORY_COUNT);
-const SEEDED_MARKS = Object.fromEntries(
-  SEEDED_SAVED_IDS.map((id, index) => [id, MARKS_TEMPLATE[index]]),
-);
+// Kept as an early floor rather than as seeding: it fails fast, with a sentence
+// naming the cause, if Today has nothing to save. That is the check that caught
+// CI's empty database.
+await collectStoryIds(browser, base, SEEDED_STORY_COUNT);
 const report = {
   states: 0,
   serious: [],
@@ -89,6 +90,7 @@ const report = {
   nav: {},
   bottomBar: {},
   seeded: {},
+  filledBins: {},
 };
 
 try {
@@ -98,25 +100,32 @@ try {
         viewport: { width: size.width, height: size.height },
         colorScheme: theme,
       });
-      const page = await context.newPage();
-      // Pin the stored preference so the audit tests the explicit choice, not
-      // whatever the OS happens to be set to.
-      await page.addInitScript(
-        ([t, ids, marks]) => {
-          try {
-            localStorage.setItem("ai-radar-theme", t);
-            // An onboarded reader with a full bin — see SEEDED_SAVED_IDS above
-            // for why an audit of the default empty state would prove less.
+      // On the CONTEXT, not the page: the bin is filled below through a second
+      // page, and an init script attached to one page would not reach it.
+      // Theme is written every navigation on purpose; onboarding is write-once,
+      // so a reload cannot put the starting state back over what the app stored.
+      await context.addInitScript((t) => {
+        try {
+          localStorage.setItem("ai-radar-theme", t);
+          const key = "ai-radar-fixture-preferences";
+          if (localStorage.getItem(key) === null) {
             localStorage.setItem(
-              "ai-radar-fixture-preferences",
+              key,
               JSON.stringify({ onboardedAt: "2026-09-01T00:00:00.000Z", topicKeys: ["agents"] }),
             );
-            localStorage.setItem("ai-radar-fixture-saved", JSON.stringify(ids));
-            localStorage.setItem("ai-radar-fixture-marks", JSON.stringify(marks));
-          } catch {}
-        },
-        [theme, SEEDED_SAVED_IDS, SEEDED_MARKS],
-      );
+          }
+        } catch {}
+      }, theme);
+
+      // THE BIN IS FILLED BY CLICKING SAVE, not by planting storage. Since #91
+      // a saved story is an id AND a snapshot of the card, so ids written
+      // without one resolve to nothing and Saved renders empty — which is
+      // exactly how this sweep passed locally against fixtures and failed in
+      // CI against a live database. Same code, different data.
+      const filled = await saveThroughUi(context, base, MARKS_TEMPLATE);
+      report.filledBins[`${size.name}/${theme}`] = filled;
+
+      const page = await context.newPage();
 
       for (const route of ROUTES) {
         await page.goto(base + route, { waitUntil: "networkidle" });
@@ -274,6 +283,20 @@ if (Object.keys(report.seeded).length !== expectedSeedStates) {
   );
 }
 
+// A floor on the FILLING, not only on what the sweep saw afterwards. Clicking
+// Save through the UI can fail quietly — a button that moved, a page that
+// landed elsewhere — and the next thing to notice would be four routes
+// reporting an empty bin, which points at Saved rather than at the seeding.
+for (const [state, filled] of Object.entries(report.filledBins)) {
+  if (filled.landed !== "/") {
+    floorFailures.push(`${state}: filling the bin asked for Today and landed on ${filled.landed}`);
+  } else if (filled.saved.length < MARKS_TEMPLATE.length) {
+    floorFailures.push(
+      `${state}: saved ${filled.saved.length} of ${MARKS_TEMPLATE.length} stories through the UI`,
+    );
+  }
+}
+
 for (const [state, seen] of Object.entries(report.seeded)) {
   const route = state.slice(state.indexOf("/", state.indexOf("/") + 1));
   if (seen.path !== route) {
@@ -350,6 +373,7 @@ console.log(
       // Evidence that the sweep audited the screens it claims to have. Printed
       // on SUCCESS as well as failure, so a future reader can see the
       // instrument had something to measure rather than take it on trust.
+      filledBins: report.filledBins,
       seeding: {
         // seed.mjs says of this value: "Returns whether it applied, so a
         // caller can report it rather than assume it." This script computed it

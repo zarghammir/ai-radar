@@ -83,7 +83,6 @@ function rssFeed(now: Date, items: typeof ITEMS): string {
 
 async function main() {
   const db = getDb();
-  const sql = getSql();
   // The REAL clock, not a pinned one: the brief window is computed per request
   // against the server's own now, so items dated relative to a frozen time
   // would seed a database whose stories are outside the window Today asks for.
