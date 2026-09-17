@@ -97,6 +97,45 @@ export function localPreferences(): Preferences {
   return { ...FIXTURE_PREFERENCE_DEFAULTS, ...stored };
 }
 
+/**
+ * The ONE cookie this app sets, and only on a build running fixtures (#75).
+ *
+ * Today resolves its brief length on the SERVER, and on fixtures the reader's
+ * preferences live in localStorage, which the server cannot see — so without
+ * this, choosing a length in Settings changes nothing about Today. That is the
+ * only mode the owner can see this build in, so a feature that looks broken
+ * there is a real cost.
+ *
+ * IT CARRIES THE LENGTH AND NOTHING ELSE. Not the preferences object: that row
+ * holds the reader's EMAIL ADDRESS, and a cookie is the wrong place for it.
+ * A preference, never an identifier, and nothing in it that could act as one.
+ *
+ * On the promise. "Self-hosted, nothing is sent anywhere" is about a THIRD
+ * PARTY learning something. A cookie the app sets and the app's own server
+ * reads adds no third party and nothing leaves this machine. Settings says so
+ * in the reader's own words, and says it only here, because on a build with a
+ * database there is no cookie and the sentence would be false.
+ */
+export const BRIEF_LENGTH_COOKIE = "ai-radar-fixture-brief-length";
+const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
+
+/**
+ * The exact cookie string, as its own function so a test can read WHAT IS IN
+ * IT rather than trust the sentence above that it is only the length.
+ *
+ * No Secure: fixture builds are served over http on a laptop. Not HttpOnly:
+ * the page itself has to write it. Lax is enough — nothing here is a
+ * credential, and there is no cross-site request that could use it.
+ */
+export function briefLengthCookieString(length: string): string {
+  return `${BRIEF_LENGTH_COOKIE}=${encodeURIComponent(length)}; path=/; max-age=${ONE_YEAR_SECONDS}; samesite=lax`;
+}
+
+function writeBriefLengthCookie(length: string): void {
+  if (typeof document === "undefined") return;
+  document.cookie = briefLengthCookieString(length);
+}
+
 export function patchLocalPreferences(patch: Partial<Preferences>): Preferences {
   const next: Preferences = {
     ...localPreferences(),
@@ -104,6 +143,9 @@ export function patchLocalPreferences(patch: Partial<Preferences>): Preferences 
     updatedAt: new Date().toISOString(),
   };
   writeJson(PREFERENCES_KEY, next);
+  // Only when it actually changed, so an unrelated save does not keep
+  // rewriting a cookie nobody asked about.
+  if (patch.briefLength !== undefined) writeBriefLengthCookie(next.briefLength);
   return next;
 }
 

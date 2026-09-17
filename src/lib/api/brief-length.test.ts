@@ -24,6 +24,13 @@ vi.mock("@/lib/api/client", () => ({
   putPreferences: (patch: unknown) => putPreferences(patch),
 }));
 vi.mock("@/db/client", () => ({ getDb: () => getDb() }));
+let cookieValue: string | undefined;
+const cookieGet = vi.fn((name: string) =>
+  name === "ai-radar-fixture-brief-length" && cookieValue !== undefined
+    ? { value: cookieValue }
+    : undefined,
+);
+vi.mock("next/headers", () => ({ cookies: async () => ({ get: cookieGet }) }));
 vi.mock("@/api/reader", () => ({ getPreferences: (db: unknown) => readerGetPreferences(db) }));
 
 const { FALLBACK_BRIEF_LENGTH, defaultBriefLength } = await import("@/lib/api/brief-length");
@@ -44,10 +51,12 @@ function preferences(briefLength: string) {
 
 beforeEach(() => {
   usingFixtures = true;
+  cookieValue = undefined;
   clientGetPreferences.mockReset();
   putPreferences.mockReset();
   readerGetPreferences.mockReset();
   getDb.mockClear();
+  cookieGet.mockClear();
 });
 
 describe("how long Today runs when the URL says nothing", () => {
@@ -107,5 +116,50 @@ describe("against the real API, on the server", () => {
     readerGetPreferences.mockRejectedValue(new Error("ECONNREFUSED"));
     await expect(defaultBriefLength()).resolves.toBe(FALLBACK_BRIEF_LENGTH);
     expect(readerGetPreferences).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * Issue #75. On fixtures the preferences live in localStorage, which the
+ * server cannot read, so the chosen length is mirrored into ONE cookie. This
+ * is the only reason Settings changes Today on a build with no database —
+ * which is the only kind of build the owner can currently see.
+ */
+describe("the fixture brief-length cookie", () => {
+  it("lets a length chosen in the browser reach the server", async () => {
+    clientGetPreferences.mockResolvedValue(preferences("10"));
+    cookieValue = "5";
+    await expect(defaultBriefLength()).resolves.toBe("5");
+    // The positive beside it: the cookie was actually consulted, so a green
+    // here cannot come from the client happening to return "5" as well.
+    expect(cookieGet).toHaveBeenCalledWith("ai-radar-fixture-brief-length");
+  });
+
+  it("falls back to the client's answer when there is no cookie yet", async () => {
+    clientGetPreferences.mockResolvedValue(preferences("all"));
+    await expect(defaultBriefLength()).resolves.toBe("all");
+  });
+
+  it("falls back when the cookie holds something this build cannot render", async () => {
+    // A cookie is reader-writable, so its contents are untrusted input like
+    // any other. It must not be able to put Today into a state it cannot draw.
+    clientGetPreferences.mockResolvedValue(preferences("all"));
+    for (const nonsense of ["42", "", "<script>", "ALL"]) {
+      cookieValue = nonsense;
+      await expect(defaultBriefLength(), `accepted ${JSON.stringify(nonsense)}`).resolves.toBe(
+        nonsense === "" ? "all" : FALLBACK_BRIEF_LENGTH,
+      );
+    }
+  });
+
+  it("IS NOT READ AT ALL against a real database", async () => {
+    // The cookie exists for fixture mode and must not leak into a build that
+    // has a database to ask. Positive beside negative: the reader WAS called.
+    usingFixtures = false;
+    cookieValue = "5";
+    readerGetPreferences.mockResolvedValue(preferences("all"));
+    await expect(defaultBriefLength()).resolves.toBe("all");
+    expect(readerGetPreferences).toHaveBeenCalledTimes(1);
+    expect(cookieGet).not.toHaveBeenCalled();
   });
 });

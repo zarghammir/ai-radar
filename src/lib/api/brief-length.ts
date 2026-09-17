@@ -1,4 +1,5 @@
 import { getPreferences, USING_FIXTURES } from "@/lib/api/client";
+import { BRIEF_LENGTH_COOKIE } from "@/lib/api/fixture-store";
 import { asBriefLength } from "@/lib/api/preferences";
 import type { BriefLengthParam, Preferences } from "@/lib/api/types";
 
@@ -27,7 +28,18 @@ export const FALLBACK_BRIEF_LENGTH: BriefLengthParam = "10";
  * On fixtures there is no database, and the client's own path is right.
  */
 async function readPreferences(): Promise<Preferences> {
-  if (USING_FIXTURES) return getPreferences();
+  if (USING_FIXTURES) {
+    // On fixtures the preferences are in localStorage, which the server cannot
+    // read. The chosen length is mirrored into one cookie for exactly this —
+    // see BRIEF_LENGTH_COOKIE in fixture-store.ts and issue #75. Everything
+    // else still comes from the client-side defaults, because nothing else on
+    // this page needs it.
+    const { cookies } = await import("next/headers");
+    const jar = await cookies();
+    const stored = jar.get(BRIEF_LENGTH_COOKIE)?.value;
+    const base = await getPreferences();
+    return stored ? { ...base, briefLength: decodeURIComponent(stored) } : base;
+  }
   const [{ getDb }, reader] = await Promise.all([import("@/db/client"), import("@/api/reader")]);
   return reader.getPreferences(getDb());
 }

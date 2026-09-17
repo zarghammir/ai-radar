@@ -3,6 +3,8 @@
 import { useId, useMemo, useState } from "react";
 import { SaveStatusText, Section, useSaveStatus } from "@/components/settings/section";
 import { TimezonePicker } from "@/components/settings/timezone-picker";
+import { brand } from "@/config/brand";
+import { USING_FIXTURES } from "@/lib/api/client";
 import { savePreferences } from "@/lib/api/preferences-store";
 import { BRIEF_LENGTH_OPTIONS, detectTimezone, formatBriefTime } from "@/lib/api/preferences";
 import type { Preferences } from "@/lib/api/types";
@@ -168,6 +170,19 @@ function BriefLengthField({
       <p className="text-meta mt-1 text-[12.5px]">
         The default. Today has the same switch for changing it on the day.
       </p>
+      {/*
+        Only on a build running fixtures, because only there does the cookie
+        exist — saying it in a build with a database would be false. This app
+        promises "nothing is sent anywhere", so it owes an explanation for the
+        one exception. See BRIEF_LENGTH_COOKIE in fixture-store.ts and #75.
+      */}
+      {USING_FIXTURES ? (
+        <p className="text-meta mt-1 text-[12.5px] leading-relaxed">
+          This build has no database, so your choice here is kept in one small cookie on this device
+          — that is the only cookie {brand.name} sets. It holds the length and nothing else: no
+          name, no address, nothing that says who you are. It never leaves this machine.
+        </p>
+      ) : null}
       <div className="mt-2 flex flex-col gap-2">
         {BRIEF_LENGTH_OPTIONS.map((option) => (
           <label

@@ -249,45 +249,38 @@ try {
     if (!stillFive) floor.push("the brief length chosen in Settings was gone after a reload");
 
     /**
-     * WHAT THIS CAN AND CANNOT PROVE, said plainly rather than left to be
-     * assumed from a green run.
+     * THE POINT OF WIRING IT, assertable again since #75.
      *
      * Today resolves its default length on the SERVER. On fixtures the
-     * reader's preferences live in localStorage, which the server cannot see,
-     * so a length chosen in Settings here can never reach Today and there is
-     * no way from this script to vary what the server resolves. The first run
-     * of this script asserted it anyway and failed for exactly that reason —
-     * a true failure about the harness, not about the app.
+     * preferences live in localStorage, which the server cannot see, so this
+     * assertion was RETIRED in #74 — it was a true failure about the harness
+     * rather than about the app. #75 mirrors the chosen length into one cookie
+     * the server can read, which is the only reason Settings changes Today on
+     * a build with no database, and that is the only kind of build the owner
+     * can currently see.
      *
-     * So what is asserted here is the half that IS observable: Today renders
-     * from a resolved length and ?length= overrides it. That the resolved
-     * length comes from the stored preference, and not from a constant, is
-     * covered in src/lib/api/brief-length.test.ts, which drives both the
-     * fixture and the live server path and has a control proving each reddens.
-     *
-     * The consequence for anyone DEMONSTRATING this build on fixtures: the
-     * brief length in Settings will not change Today. That is fixture mode,
-     * not the product, and it is raised as its own decision rather than
-     * papered over here.
+     * Five minutes is provably shorter than everything, so a Today that
+     * ignored the preference would show the same count for both.
      */
     await page.goto(base + "/", { waitUntil: "networkidle" });
-    const atDefault = await page.locator("article h2 a").count();
-    await page.goto(base + "/?length=5", { waitUntil: "networkidle" });
-    const atFive = await page.locator("article h2 a").count();
+    const atPreference = await page.locator("article h2 a").count();
     await page.goto(base + "/?length=all", { waitUntil: "networkidle" });
     const atAll = await page.locator("article h2 a").count();
-    out.settings.today = {
-      atDefault,
-      atFive,
-      atAll,
-      note: "preference is server-side; see comment",
-    };
-    if (atDefault < 1) floor.push("Today rendered nothing at its resolved default length");
-    if (!(atFive < atAll)) {
+    out.settings.today = { atPreference, atAll };
+    if (atPreference < 1) floor.push("Today rendered nothing at the saved length");
+    if (!(atPreference < atAll)) {
       floor.push(
-        `Today showed ${atFive} stories at ?length=5 and ${atAll} at ?length=all — the length is not reaching the page at all`,
+        `Today showed ${atPreference} stories at the saved 5-minute length and ${atAll} at ?length=all — the preference is not reaching the server`,
       );
     }
+
+    // And the override still wins for one visit, so the cookie has not turned
+    // the URL into a suggestion.
+    await page.goto(base + "/?length=all", { waitUntil: "networkidle" });
+    const overrideWins = (await page.locator("article h2 a").count()) === atAll;
+    out.settings.urlStillOverrides = overrideWins;
+    if (!overrideWins) floor.push("?length= no longer overrides the saved preference");
+
     await context.close();
   }
 } catch (error) {
