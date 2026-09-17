@@ -226,6 +226,96 @@ withDb("API routes", () => {
       expect(list[0]).not.toHaveProperty("url");
       expect(JSON.stringify(list[0])).not.toContain("must not be exposed");
     });
+
+    /**
+     * Health over run history. These exist because the pure classifier cannot
+     * check the query that feeds it: the consecutive-failure count is computed
+     * in SQL, and every interesting case is about which rows it counts.
+     */
+    async function run(
+      sourceId: number,
+      at: string,
+      outcome: "ok" | "failed" | "in-flight",
+    ): Promise<void> {
+      await sql.unsafe(
+        `insert into ingest_runs (source_id, started_at, finished_at, error)
+         values ($1, $2::timestamptz, $3, $4)`,
+        [
+          sourceId,
+          at,
+          outcome === "in-flight" ? null : at,
+          outcome === "failed" ? "HTTP 403" : null,
+        ],
+      );
+    }
+
+    async function healthOf(key: string) {
+      const { GET } = await import("@/app/api/sources/route");
+      const data = await body(await GET());
+      const list = data.sources as unknown as Record<string, unknown>[];
+      const row = list.find((s) => s.key === key);
+      expect(row, `no source ${key} in the response`).toBeDefined();
+      return row as { health: string; consecutiveFailures: number };
+    }
+
+    it("reports a source that has never run as UNKNOWN, not healthy", async () => {
+      await source("never-run");
+      expect(await healthOf("never-run")).toMatchObject({
+        health: "UNKNOWN",
+        consecutiveFailures: 0,
+      });
+    });
+
+    it("reports a source that has never once succeeded as FAILING", async () => {
+      // This is import-ai on a hosted runner: refused by IP on every run since
+      // the source existed, so there is no last success to count from. The
+      // query bounds on negative infinity rather than guarding on null, and
+      // without that this source counts zero failures and reads as healthy.
+      const id = await source("import-ai");
+      await run(id, "2026-09-16T09:00:00Z", "failed");
+      await run(id, "2026-09-16T09:30:00Z", "failed");
+      await run(id, "2026-09-16T10:00:00Z", "failed");
+      expect(await healthOf("import-ai")).toMatchObject({
+        health: "FAILING",
+        consecutiveFailures: 3,
+      });
+    });
+
+    it("counts only the failures since the last success", async () => {
+      const id = await source("flaky");
+      await run(id, "2026-09-16T08:00:00Z", "failed");
+      await run(id, "2026-09-16T08:30:00Z", "failed");
+      await run(id, "2026-09-16T09:00:00Z", "ok");
+      await run(id, "2026-09-16T09:30:00Z", "failed");
+      await run(id, "2026-09-16T10:00:00Z", "failed");
+      // Five runs, four of them failures, but only two since it last worked —
+      // so it is below the threshold and reported OK rather than FAILING.
+      expect(await healthOf("flaky")).toMatchObject({ health: "OK", consecutiveFailures: 2 });
+    });
+
+    it("clears the count when the most recent run succeeded", async () => {
+      const id = await source("recovered");
+      await run(id, "2026-09-16T08:00:00Z", "failed");
+      await run(id, "2026-09-16T08:30:00Z", "failed");
+      await run(id, "2026-09-16T09:00:00Z", "failed");
+      await run(id, "2026-09-16T09:30:00Z", "ok");
+      expect(await healthOf("recovered")).toMatchObject({ health: "OK", consecutiveFailures: 0 });
+    });
+
+    it("does not let a run that has only started clear the count", async () => {
+      // An in-flight row has no error and no finish time. Treating it as a
+      // success would mark a failing source healthy the moment the next pass
+      // began — and the next pass begins every thirty minutes.
+      const id = await source("mid-run");
+      await run(id, "2026-09-16T08:00:00Z", "failed");
+      await run(id, "2026-09-16T08:30:00Z", "failed");
+      await run(id, "2026-09-16T09:00:00Z", "failed");
+      await run(id, "2026-09-16T09:30:00Z", "in-flight");
+      expect(await healthOf("mid-run")).toMatchObject({
+        health: "FAILING",
+        consecutiveFailures: 3,
+      });
+    });
   });
 
   describe("PUT /api/sources/:key", () => {
