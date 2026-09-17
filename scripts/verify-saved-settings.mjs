@@ -22,6 +22,7 @@
  * a control proving it reddens.
  */
 import { launchBrowser, requireServer } from "./lib/browser.mjs";
+import { collectStoryIds } from "./lib/fixture-ids.mjs";
 
 const base = process.argv[2] || process.env.VERIFY_URL || "http://127.0.0.1:3210";
 await requireServer(base);
@@ -30,16 +31,20 @@ const CONTROL = process.env.VERIFY_CONTROL || null;
 /** The bin must never be emptier than this for the assertions to mean anything. */
 const MIN_SAVED = 2;
 
-const SEED_IDS = [1, 2, 3];
-const SEED_MARKS = {
-  1: { note: null, tags: ["ship"], savedAt: "2026-09-15T09:00:00.000Z" },
-  2: { note: null, tags: ["read-later"], savedAt: "2026-09-14T09:00:00.000Z" },
-  3: { note: null, tags: [], savedAt: "2026-09-13T09:00:00.000Z" },
-};
+/** Read from the running app, never typed here — see lib/fixture-ids.mjs. */
+const SEED_STORY_COUNT = 3;
+const MARKS_TEMPLATE = [
+  { note: null, tags: ["ship"], savedAt: "2026-09-15T09:00:00.000Z" },
+  { note: null, tags: ["read-later"], savedAt: "2026-09-14T09:00:00.000Z" },
+  { note: null, tags: [], savedAt: "2026-09-13T09:00:00.000Z" },
+];
 
 const out = { control: CONTROL };
 const floor = [];
 const browser = await launchBrowser();
+const SEED_IDS = await collectStoryIds(browser, base, SEED_STORY_COUNT);
+const SEED_MARKS = Object.fromEntries(SEED_IDS.map((id, i) => [id, MARKS_TEMPLATE[i]]));
+out.seededIds = SEED_IDS;
 
 /** A browser whose reader has finished onboarding and has a full bin. */
 async function seededContext() {

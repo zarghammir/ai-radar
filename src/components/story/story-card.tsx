@@ -36,7 +36,12 @@ export function StoryCardView({
   const others = alsoReportedBy(story);
 
   return (
-    <article className="flex items-stretch">
+    // data-story-id is how the browser-driven scripts know WHICH stories are
+    // on the page. They seed the reader's saved list from it rather than from
+    // a list of ids typed into the script, which would silently stop matching
+    // the day a fixture changed and leave every assertion measuring an empty
+    // screen.
+    <article data-story-id={story.id} className="flex items-stretch">
       {/* The rail carries the entry number. Importance is card SIZE, not a
           separate indicator — the design the owner approved shows the lead
           story larger rather than decorating it. */}

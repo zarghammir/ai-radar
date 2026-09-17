@@ -35,22 +35,25 @@ const ROUTES = ["/", "/radar", "/research", "/releases", "/saved", "/settings", 
  * at all, so their contrast and labelling would be unaudited while the run
  * still said "0 violations".
  *
- * The ids are fixture story ids; see src/lib/api/fixtures.ts.
+ * The ids are READ FROM THE RUNNING APP rather than typed here. A list typed
+ * into a script stops matching the day a fixture changes its id, and every
+ * seeded run then measures an empty screen while still reporting that it
+ * seeded three stories.
  */
-const SEEDED_SAVED_IDS = [1, 2, 3];
-const SEEDED_MARKS = {
-  1: {
+const SEEDED_STORY_COUNT = 3;
+const MARKS_TEMPLATE = [
+  {
     note: "Worth a second read before Friday.",
     tags: ["ship", "agents"],
     savedAt: "2026-09-15T09:00:00.000Z",
   },
-  2: { note: null, tags: ["read-later"], savedAt: "2026-09-14T09:00:00.000Z" },
-  3: {
+  { note: null, tags: ["read-later"], savedAt: "2026-09-14T09:00:00.000Z" },
+  {
     note: "The pricing table is the part that matters.",
     tags: [],
     savedAt: "2026-09-13T09:00:00.000Z",
   },
-};
+];
 /**
  * AUDIT_CONTROL=narrow squeezes the phone viewport until the six-tab bar MUST
  * clip. It exists so the bar gate can be seen going red: a gate that has only
@@ -70,9 +73,14 @@ const EXPECTED_TABS = 6;
 const THEMES = ["light", "dark"];
 
 import { launchBrowser, requireServer } from "./lib/browser.mjs";
+import { collectStoryIds } from "./lib/fixture-ids.mjs";
 
 await requireServer(base);
 const browser = await launchBrowser();
+const SEEDED_SAVED_IDS = await collectStoryIds(browser, base, SEEDED_STORY_COUNT);
+const SEEDED_MARKS = Object.fromEntries(
+  SEEDED_SAVED_IDS.map((id, index) => [id, MARKS_TEMPLATE[index]]),
+);
 const report = {
   states: 0,
   serious: [],
