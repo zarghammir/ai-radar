@@ -208,10 +208,12 @@ export const FIXTURE_STORIES: StoryCard[] = [
     excerpt:
       "Reports say OpenAI is considering a new private round. Outlets disagree by $300 billion on the figure and the sourcing is anonymous throughout.",
     url: "https://www.bloomberg.com/news/articles/2026-09-15/openai-weighing-funding-round-at-over-1-2-trillion-valuation",
-    // NEWS, not BUSINESS: content type comes from the SOURCE's default and no
-    // seeded source emits BUSINESS, so a fixture asserting it would be a state
-    // the product cannot currently reach.
-    contentType: "NEWS",
+    // BUSINESS since #41: content type is now classified from the item's own
+    // title, and this one carries "valuation". It was NEWS while the type came
+    // only from the source default and no seeded source emitted BUSINESS —
+    // that is no longer a state the product cannot reach, it is one it reaches
+    // from exactly this headline.
+    contentType: "BUSINESS",
     // ALLOWED ON TODAY, labelled, ranked low, NOT dropped. The owner ruled this
     // directly: a leak can be the most important thing that happened, and the
     // chip is what makes it safe to show.
@@ -242,9 +244,12 @@ export const FIXTURE_STORIES: StoryCard[] = [
     excerpt:
       "Spokesperson Guo Jiakun called the chip-restriction argument fearmongering, days before US-China talks in Washington.",
     url: "https://www.npr.org/2026/09/14/nx-s1-5968456/china-hits-back-ai-development",
-    // NEWS for the same reason: nothing can emit REGULATION today. Its badge
-    // ("Policy") is covered by the label test rather than by a fixture
-    // pretending the pipeline can produce it.
+    // Still NEWS, but no longer because REGULATION is unreachable — #41 made it
+    // reachable. This headline simply trips none of the rules: "curb" and
+    // "Foreign Ministry" are not in the vocabulary, and no rule fires on the
+    // topic of a story, only on its wording. It is a fair example of the
+    // classifier's recall, which is about a third. The "Policy" badge stays
+    // covered by the label test.
     contentType: "NEWS",
     verification: "CORROBORATED",
     verificationNote: "Reported independently by several outlets; no primary transcript published.",
