@@ -1,3 +1,6 @@
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { CONTENT_TYPES, type ContentType } from "@/db/schema";
 import { SOURCE_SEEDS } from "@/db/seed-data";
@@ -156,12 +159,15 @@ describe("the content-family invariant", () => {
    * overruled, and a non-paper item never becomes a paper.
    *
    * Control run, measured on the whole suite with a database rather than on
-   * this file alone: adding PAPER to CLASSIFIABLE with a rule matching any
-   * title reddens this test AND ELEVEN OTHERS across three files, because an
-   * always-matching rule also breaks every test expecting a different
-   * classification. Narrowing the injected rule to a single corpus title
-   * ("Abstain") isolates it to two — this test and "covers every classifiable
-   * type", which correctly notices the CLASSIFIABLE change.
+   * this file alone. Adding PAPER to CLASSIFIABLE with a rule matching any
+   * title, INJECTED AS THE SECOND RULE — immediately after MODEL and before
+   * REGULATION — reddens this test and eleven others across three files.
+   *
+   * The position has to be stated. The same description with the rule appended
+   * last reddens 9 and with it placed first reddens 16: those are three
+   * different controls, not a range. Narrowing the injected rule to a single
+   * corpus title ("Abstain") isolates it to two — this test and "covers every
+   * classifiable type", which correctly notices the CLASSIFIABLE change.
    *
    * The earlier version of this comment claimed "nothing else in the file",
    * which was measured by running only this directory. A control measured on a
@@ -260,6 +266,48 @@ describe("decideContentType records why, it does not leave it to be inferred", (
       expect(d.source === "classifier", `${title} -> ${d.type}/${d.source}`).toBe(
         d.type !== "NEWS",
       );
+    }
+  });
+});
+
+describe("the premise the provenance migration rests on", () => {
+  /**
+   * Migration 0002 decides provenance for pre-existing rows with two facts and
+   * no titles: a stored PAPER or DISCUSSION can only have come from an adapter,
+   * and anything else differing from its source default can only have come from
+   * the classifier.
+   *
+   * That holds only while adapters declare nothing but those two types. If a
+   * third adapter declaration appears, the migration silently records it as
+   * `classifier` and the backfill becomes free to overwrite an adapter's fact.
+   * The migration is historical and cannot be re-run, so this test is the only
+   * thing standing between that change and a wrong column.
+   *
+   * It reads the adapter sources rather than importing them, because the type
+   * is a literal inside a mapping function and there is no value to inspect
+   * without performing a fetch.
+   */
+  it("no adapter declares a content type outside PAPER and DISCUSSION", () => {
+    const dir = fileURLToPath(new URL("../../sources", import.meta.url));
+    const files = readdirSync(dir, { recursive: true, encoding: "utf8" })
+      .filter((f) => f.endsWith("adapter.ts"))
+      .map((f) => join(dir, f));
+    // A floor: a glob that silently matched nothing would pass this vacuously.
+    expect(files.length).toBeGreaterThanOrEqual(2);
+
+    // Every uppercase string literal on a line that assigns contentType. Not
+    // `contentType: "X"` alone: Hacker News writes
+    // `contentType: it.url ? undefined : "DISCUSSION"`, and a stricter pattern
+    // found one declaration where there are two — which the floor below caught.
+    const declared = files.flatMap((file) =>
+      readFileSync(file, "utf8")
+        .split("\n")
+        .filter((line) => /\bcontentType\s*:/.test(line))
+        .flatMap((line) => [...line.matchAll(/"([A-Z_]+)"/g)].map((m) => ({ file, type: m[1] }))),
+    );
+    expect(declared.length).toBeGreaterThanOrEqual(2);
+    for (const d of declared) {
+      expect(["PAPER", "DISCUSSION"], `${d.file} declares ${d.type}`).toContain(d.type);
     }
   });
 });
