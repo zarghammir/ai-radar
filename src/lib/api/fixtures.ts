@@ -241,6 +241,33 @@ export const FIXTURE_STORIES: StoryCard[] = [
     score: 21.7,
   }),
   story({
+    id: 462,
+    slug: "anthropic-threat-intelligence-september",
+    title: "Anthropic details how state and criminal groups are misusing Claude",
+    excerpt:
+      "Eight months of disrupted operations across seven harm areas, including a suspected state operation that automated malware and exfiltration through a multi-agent framework.",
+    url: "https://www.anthropic.com/threat-intelligence-report-september-2026",
+    // RESEARCH is reachable from real data TODAY — four seeded lab blogs
+    // default to it — and until this fixture existed no screen had ever drawn
+    // the badge. It could have appeared on the owner's screen the first time
+    // the worker ran, having been seen by nobody.
+    contentType: "RESEARCH",
+    verification: "PRIMARY_SOURCE",
+    verificationNote: "Published directly by Anthropic and picked up by 1 other source.",
+    sourceCount: 2,
+    sources: [anthropic, npr],
+    primarySource: anthropic,
+    topics: [
+      { key: "safety", name: "Safety", group: "field" },
+      { key: "agents", name: "Agents", group: "field" },
+    ],
+    publishedAt: "2026-09-10T15:05:00.000Z",
+    firstSeenAt: "2026-09-10T15:22:00.000Z",
+    lastActivityAt: "2026-09-15T18:30:00.000Z",
+    readingMinutes: 1,
+    score: 30.8,
+  }),
+  story({
     id: 451,
     slug: "china-rejects-amodei-chip-argument",
     title: "China's Foreign Ministry rejects Amodei's call to curb its AI",
