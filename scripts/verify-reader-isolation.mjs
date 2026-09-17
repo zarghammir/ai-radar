@@ -127,8 +127,30 @@ try {
    * afterwards. A control that works here has to share a backing store, or
    * re-copy storage between the second browser's write and the first's read.
    *
-   * So: the assertion below is repaired and can now fail, and it is UNCONTROLLED.
-   * It has never been watched going red. Treat it accordingly until it has.
+   * TWO FACTS, AND THEY ARE DIFFERENT — the file holds both because holding one
+   * would misdescribe the other.
+   *
+   * IT HAS BEEN WATCHED GOING RED. On 2026-09-17, at head 8312215, under a
+   * liveness control: the precondition was checked first — the second browser
+   * really did read back "Everything", so it could exhibit the property — and
+   * only then was the mutation applied. Exit 1, firstAfterSecondChanged
+   * "Everything", and the message printed the sentence naming the failure it
+   * describes. It fires, it reads what it claims to read, and it says the right
+   * thing. This paragraph replaces one saying it had never been observed
+   * failing, which was true when written and stopped being true that evening.
+   *
+   * IT IS STILL UNCONTROLLED FOR THE ISOLATION PROPERTY, and that has not
+   * changed. VERIFY_CONTROL=shared-identity cannot redden it for the reason
+   * above: `second` is created before either browser writes a length, and a
+   * storageState copy taken at creation cannot carry a later write. Being
+   * observed failing under a hand-applied mutation is not the same as having a
+   * control that reddens it on demand. Treat it accordingly until it has one.
+   *
+   * AND THE WRITE-FAILURE MESSAGE HAS NOT BEEN SEEN ALONE. In the run that
+   * exercised the floors, the read-failure and write-failure messages fired
+   * TOGETHER, because setLength delegates to readLength and the mutation broke
+   * both. The wordings are distinct and the leak message stayed silent, which
+   * is the property that mattered — but nobody has isolated the write-only case.
    */
   const settingMark = sectionStart(floor);
   /**
