@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="AI Radar">
+  <title>AI Radar</title>
+  <rect width="512" height="512" fill="#0b0c0e"/>
+  <g fill="#f0531c">
+    <rect x="128" y="120" width="256" height="46" rx="4"/>
+    <rect x="128" y="204" width="256" height="46" rx="4"/>
+    <rect x="128" y="288" width="256" height="46" rx="4"/>
+  </g>
+  <g fill="#f3f3f1">
+    <rect x="128" y="372" width="150" height="20" rx="4"/>
+  </g>
+</svg>

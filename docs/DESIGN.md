@@ -229,13 +229,31 @@ drawing them as pseudo-elements or marking them `aria-hidden` is queued for #12.
 - **Bounded, never endless.** 5 minutes gives four stories, 10 gives eight, Everything gives
   the lot. The count and the minutes are stated before you start. There is no infinite scroll.
 
-## 10. Not decided here
+## 10. Where these tokens live now
 
-- `src/config/brand.ts` still holds the scaffold values `accent: #2563eb` and
-  `themeColor: #fafaf9 / #0c0c0d`. Issue #11 changes nothing under `src/`. Moving these tokens
-  into `brand.ts` and the app shell is issue #12.
-- Motion. The prototype is deliberately still: no transitions were designed beyond the
-  reduced-motion guard. The flag, the mode switch and the tab marker are the three places
-  motion would earn its keep.
-- The empty, loading and error states exist only for Saved and for a filtered-empty Radar.
-  A full pass belongs with the app shell.
+As of issue #12 the system is implemented, not just described.
+
+- `src/app/globals.css` carries every token above as CSS custom properties, and
+  **shadcn's semantic tokens are mapped onto them** (`--card` is `--paper`, `--muted-foreground`
+  is `--ash`, `--ring` is `--org`, and so on). A shadcn component added later inherits this
+  world instead of introducing a second palette.
+- `src/config/brand.ts` holds the approved palette: `themeColor` is the bench per theme,
+  `accent` is the reserved orange, and `accentText` carries the light/dark split that palette
+  law two requires. `app/manifest.ts` and the root metadata read from it, so renaming the
+  product renames the installed app.
+- The three faces are self-hosted by `next/font` at build time. The production build contains
+  **no reference to `fonts.googleapis.com` or `fonts.gstatic.com`** and emits 12 `woff2` files
+  from our own origin. A reader's browser never contacts Google.
+- Layout switches on **real CSS media queries** (Tailwind's `lg:`, min-width 64rem): the
+  sidebar is `hidden lg:flex`, the bottom bar `lg:hidden`. Nothing switches on a class toggled
+  from JavaScript.
+- Separators in the shell are drawn as pseudo-elements or `aria-hidden` spans, never as text
+  nodes.
+
+### Still not decided
+
+- **Motion.** Deliberately none beyond the reduced-motion guard. The flag, the reading-mode
+  switch and the tab marker are where it would earn its keep.
+- **Data.** The shell ships with honest empty states; nothing fetches yet.
+- **The settings that need a pipeline** — sources, brief time, notification choice — are
+  described on the page as not yet wired, rather than shown as dead controls.

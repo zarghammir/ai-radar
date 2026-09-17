@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Offline · AI Radar</title>
+    <meta name="theme-color" content="#0b0c0e" />
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bench: #e4e3de;
+        --ash-hi: #3d3a34;
+        --ash: #5a564e;
+        --paper: #ffffff;
+        --ink: #17181b;
+        --soft: #585c62;
+        --edge: #cbc9c2;
+        --org: #f0531c;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bench: #0b0c0e;
+          --ash-hi: #d6d1c6;
+          --ash: #9a958a;
+          --paper: #f3f3f1;
+          --edge: #2a2b2e;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--bench);
+        color: var(--ash-hi);
+        padding: 24px;
+        font-family:
+          "Archivo",
+          system-ui,
+          -apple-system,
+          sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      main {
+        max-width: 34rem;
+        width: 100%;
+      }
+      .rail {
+        height: 10px;
+        width: 100%;
+        background: repeating-linear-gradient(90deg, transparent 0 9px, var(--edge) 9px 18px);
+      }
+      h1 {
+        font-size: 27px;
+        line-height: 1.15;
+        letter-spacing: -0.022em;
+        margin: 20px 0 0;
+      }
+      .card {
+        background: var(--paper);
+        color: var(--ink);
+        padding: 20px;
+        margin-top: 20px;
+      }
+      .card p {
+        margin: 0;
+        font-size: 15px;
+        line-height: 1.55;
+        color: var(--soft);
+      }
+      .card p + p {
+        margin-top: 10px;
+      }
+      button {
+        font: inherit;
+        font-size: 14px;
+        font-weight: 600;
+        margin-top: 20px;
+        cursor: pointer;
+        background: var(--org);
+        color: #0b0c0e;
+        border: 0;
+        border-radius: 2px;
+        padding: 11px 20px;
+      }
+      button:focus-visible {
+        outline: 2px solid var(--org);
+        outline-offset: 2px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="rail"></div>
+      <h1>You are offline</h1>
+      <div class="card">
+        <p>
+          AI Radar is installed and working. It just cannot reach the network right now, so there is
+          nothing new to show you.
+        </p>
+        <p>
+          Anything already downloaded stays readable. Reconnect and this page will get out of the
+          way.
+        </p>
+      </div>
+      <button type="button" onclick="location.reload()">Try again</button>
+    </main>
+  </body>
+</html>
