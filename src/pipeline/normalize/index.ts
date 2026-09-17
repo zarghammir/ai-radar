@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import type { ContentType, NewRawItem, Source } from "@/db/schema";
+import type { NewRawItem, Source } from "@/db/schema";
 import type { FetchedItem } from "@/sources/types";
-import { classifyContentType } from "./content-type";
+import { decideContentType } from "./content-type";
 import { canonicalizeUrl } from "./url";
 import { cleanTitle, stripHtml, truncate } from "./text";
 
@@ -35,9 +35,8 @@ export function normalizeItem(
   // Precedence: what the adapter declared, then what the title says, then the
   // source default. The adapter wins because it is reading structured data —
   // arXiv's PAPER and Hacker News's DISCUSSION are facts about the item, not
-  // inferences from its wording.
-  const contentType: ContentType =
-    item.contentType ?? classifyContentType(title, source.defaultContentType);
+  // inferences from its wording. The provenance is stored, not re-derived.
+  const decided = decideContentType(item.contentType, title, source.defaultContentType);
   return {
     sourceId: source.id,
     externalId: item.externalId || canonicalUrl,
@@ -48,7 +47,8 @@ export function normalizeItem(
     author: item.author?.trim() || null,
     publishedAt,
     fetchedAt: now,
-    contentType,
+    contentType: decided.type,
+    contentTypeSource: decided.source,
     metadata: item.metadata ?? {},
     fingerprint: fingerprintFor(source.key, canonicalUrl),
   };

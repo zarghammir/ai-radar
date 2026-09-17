@@ -3,6 +3,7 @@ import { CONTENT_TYPES, type ContentType } from "@/db/schema";
 import { SOURCE_SEEDS } from "@/db/seed-data";
 import {
   CLASSIFIABLE,
+  decideContentType,
   NOT_CLASSIFIABLE,
   REJECTED_KEYWORDS,
   classifyContentType,
@@ -154,8 +155,19 @@ describe("the content-family invariant", () => {
    * the guard for that, in both directions at once: a PAPER default is never
    * overruled, and a non-paper item never becomes a paper.
    *
-   * Control run: adding PAPER to CLASSIFIABLE and giving it a rule that matches
-   * any title reddens THIS test, named, and nothing else in the file.
+   * Control run, measured on the whole suite with a database rather than on
+   * this file alone: adding PAPER to CLASSIFIABLE with a rule matching any
+   * title reddens this test AND ELEVEN OTHERS across three files, because an
+   * always-matching rule also breaks every test expecting a different
+   * classification. Narrowing the injected rule to a single corpus title
+   * ("Abstain") isolates it to two — this test and "covers every classifiable
+   * type", which correctly notices the CLASSIFIABLE change.
+   *
+   * The earlier version of this comment claimed "nothing else in the file",
+   * which was measured by running only this directory. A control measured on a
+   * subset of the suite understates its blast radius, and a false description
+   * of a load-bearing control is how the next person talks themselves into
+   * deleting it.
    */
   it("never moves an item across a content family", () => {
     expect(CORPUS_TITLES.length).toBeGreaterThanOrEqual(15);
@@ -207,5 +219,47 @@ describe("content-type coverage", () => {
   it("keeps the rejected keywords documented with a reason", () => {
     expect(REJECTED_KEYWORDS.length).toBeGreaterThanOrEqual(5);
     for (const r of REJECTED_KEYWORDS) expect(r.because.length).toBeGreaterThan(20);
+  });
+});
+
+describe("decideContentType records why, it does not leave it to be inferred", () => {
+  /**
+   * The backfill used to recover provenance with `stored !== sourceDefault`,
+   * which was true only while nothing but an adapter could move a type. The
+   * classifier moves types, so a second run filed this tool's own output as an
+   * adapter's declaration and refused to re-apply a changed rule to it. These
+   * three cases are the whole reason the column exists.
+   */
+  it("marks an adapter's declaration as adapter", () => {
+    expect(decideContentType("PAPER", "Introducing Gemini 3.7 Flash", "RESEARCH")).toEqual({
+      type: "PAPER",
+      source: "adapter",
+    });
+  });
+
+  it("marks its own inference as classifier, even though it differs from the default", () => {
+    // This is the case the old inference got wrong: the value differs from the
+    // source default and no adapter was involved.
+    expect(decideContentType(undefined, "Introducing Gemini 3.7 Flash", "RESEARCH")).toEqual({
+      type: "MODEL",
+      source: "classifier",
+    });
+  });
+
+  it("marks an untouched default as default", () => {
+    expect(
+      decideContentType(undefined, "Helping older adults use AI in everyday life", "NEWS"),
+    ).toEqual({ type: "NEWS", source: "default" });
+  });
+
+  it("never reports classifier when the type equals the source default", () => {
+    // Otherwise the backfill would rewrite rows it did not change, and the
+    // provenance would drift towards "classifier" for the whole corpus.
+    for (const title of CORPUS_TITLES) {
+      const d = decideContentType(undefined, title, "NEWS");
+      expect(d.source === "classifier", `${title} -> ${d.type}/${d.source}`).toBe(
+        d.type !== "NEWS",
+      );
+    }
   });
 });

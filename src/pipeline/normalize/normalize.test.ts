@@ -247,4 +247,19 @@ describe("normalizeItem content-type precedence", () => {
     expect(normalizeItem(quiet, labBlog)?.contentType).toBe("RESEARCH");
     expect(normalizeItem(quiet, newsroom)?.contentType).toBe("NEWS");
   });
+
+  it("records where the type came from, on the row", () => {
+    // The backfill reads this rather than inferring it from a comparison.
+    const quiet = { ...base, title: "Helping older adults use AI in everyday life" };
+    expect(normalizeItem(quiet, labBlog)?.contentTypeSource).toBe("default");
+    expect(
+      normalizeItem({ ...base, title: "Introducing Gemini 3.7 Flash" }, labBlog)?.contentTypeSource,
+    ).toBe("classifier");
+    expect(
+      normalizeItem(
+        { ...base, title: "Introducing Gemini 3.7 Flash", contentType: "PAPER" },
+        labBlog,
+      )?.contentTypeSource,
+    ).toBe("adapter");
+  });
 });

@@ -39,9 +39,15 @@ export function matchesAnyKeyword(text: string, keywords: string[]): boolean {
 export function matchesPhrase(text: string, phrase: string): boolean {
   const kw = phrase.toLowerCase().trim();
   if (!kw) return false;
+  // Every character that is not a letter or a digit becomes a space, full
+  // stops and hyphens included. Keeping them could only ever cost a match,
+  // because none of the classifier vocabularies contain one: "regulation"
+  // would not be found inside "AI-regulation", and a phrase at the end of a
+  // title that ends in a full stop would never match at all. Several real feed
+  // titles end in one.
   const haystack = ` ${text
     .toLowerCase()
-    .replace(/[^a-z0-9.+\- ]/g, " ")
+    .replace(/[^a-z0-9 ]/g, " ")
     .replace(/\s+/g, " ")} `;
   return haystack.includes(` ${kw} `) || haystack.includes(` ${kw}s `);
 }

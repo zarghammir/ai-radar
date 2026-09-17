@@ -1,4 +1,4 @@
-import type { ContentType } from "@/db/schema";
+import type { ContentType, ContentTypeSource } from "@/db/schema";
 import { matchesAnyPhrase } from "./keywords";
 
 /**
@@ -309,4 +309,33 @@ export function classifyContentType(title: string, declared: ContentType): Conte
   if (isDeclaredFact(declared)) return declared;
   for (const rule of RULES) if (rule.test(title)) return rule.type;
   return declared;
+}
+
+export interface ContentTypeDecision {
+  type: ContentType;
+  /** Recorded on the row so the backfill never has to infer it back. */
+  source: ContentTypeSource;
+}
+
+/**
+ * The whole precedence rule in one place: what the adapter declared, then what
+ * the title says, then the source default.
+ *
+ * It returns the provenance alongside the type because the one-off backfill
+ * needs to know which stored types it may overwrite, and inferring that later
+ * from `stored !== sourceDefault` is wrong the moment this classifier starts
+ * moving types — the comparison then reports the classifier's own previous
+ * output as an adapter's declaration, and a re-run cannot re-apply a changed
+ * rule to anything it has already moved.
+ */
+export function decideContentType(
+  declaredByAdapter: ContentType | undefined,
+  title: string,
+  sourceDefault: ContentType,
+): ContentTypeDecision {
+  if (declaredByAdapter) return { type: declaredByAdapter, source: "adapter" };
+  const classified = classifyContentType(title, sourceDefault);
+  return classified === sourceDefault
+    ? { type: sourceDefault, source: "default" }
+    : { type: classified, source: "classifier" };
 }
