@@ -401,9 +401,13 @@ describe("a title that announces its own launch", () => {
     // here would freeze every Show HN row against future fixes to these rules
     // — which is why the adapter-declares-RELEASE version of this fix was
     // rejected in #80.
+    // Declared NEWS rather than RELEASE deliberately. With RELEASE the literal
+    // and the declared value coincide, so this assertion could not tell them
+    // apart — a control returning a literal "RELEASE" left it green while the
+    // test's name claimed it guarded exactly that.
     expect(
-      decideContentType(undefined, "Show HN: an EU AI Act compliance checker", "RELEASE"),
-    ).toEqual({ type: "RELEASE", source: "default" });
+      decideContentType(undefined, "Show HN: an EU AI Act compliance checker", "NEWS"),
+    ).toEqual({ type: "NEWS", source: "default" });
   });
 
   it("cannot change the classification of anything that is not a launch", () => {
