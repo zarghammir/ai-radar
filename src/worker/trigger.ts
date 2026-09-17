@@ -1,8 +1,8 @@
 import type postgres from "postgres";
 import type { Db } from "@/db/client";
-import { describeError } from "@/pipeline/run";
 import { ingestOnce } from "./ingest";
-import { readInternalSecret, secretMatches, type SecretEnv } from "./secret";
+import { type SecretEnv } from "./secret";
+import { refuseUnlessInternal } from "@/api/internal-guard";
 
 export interface TriggerDeps {
   db: Db;
@@ -20,23 +20,11 @@ export interface TriggerDeps {
  * nothing to refuse.
  */
 export async function handleIngestTrigger(request: Request, deps: TriggerDeps): Promise<Response> {
-  let expected: string;
-  try {
-    expected = readInternalSecret(deps.env);
-  } catch (error) {
-    // A secret that cannot be read is not permission to run without one. It is
-    // refused here and said out loud on the server, where an operator can see
-    // it — the caller is told only that the trigger is unavailable.
-    console.error(`/api/internal/ingest refused: ${describeError(error)}`);
-    return Response.json(
-      { error: "the internal ingest trigger is not configured" },
-      { status: 503 },
-    );
-  }
-
-  if (!secretMatches(request.headers.get("x-internal-secret"), expected)) {
-    return Response.json({ error: "unauthorized" }, { status: 401 });
-  }
+  // The same guard the source write uses, not a second copy of it. Two copies
+  // of an authorisation check drift, and the one that drifts is the one nobody
+  // is looking at.
+  const refusal = refuseUnlessInternal(request, "/api/internal/ingest", deps.env);
+  if (refusal) return refusal;
 
   const outcome = await ingestOnce(deps.db, deps.sql);
   if (!outcome.ran) {

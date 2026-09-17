@@ -30,12 +30,21 @@ const urlFor = (database: string) => {
 };
 
 const BASE = "http://localhost:3000";
+
+/**
+ * The operator secret the guarded routes check (#103). A real-looking value
+ * rather than "test": readInternalSecret REFUSES the .env.example placeholders,
+ * so a placeholder here would make every guarded route answer 503 and the
+ * guard tests would pass for the wrong reason.
+ */
+const SECRET = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 const req = (path: string) => new Request(`${BASE}${path}`) as never;
 const body = async (res: Response) => (await res.json()) as Record<string, never>;
 
 withDb("API routes", () => {
   let admin: ReturnType<typeof postgres>;
   let sql: ReturnType<typeof postgres>;
+  let savedSecret: string | undefined;
 
   beforeAll(async () => {
     admin = postgres(urlFor("postgres"), { max: 1, onnotice: () => {} });
@@ -45,9 +54,14 @@ withDb("API routes", () => {
     await migrate(drizzle(sql), { migrationsFolder: "./drizzle" });
     // Every dynamic import below now resolves the singleton to this database.
     process.env.DATABASE_URL = urlFor(TEST_DB);
+    // The guarded routes read this from the environment at request time.
+    savedSecret = process.env.INTERNAL_API_SECRET;
+    process.env.INTERNAL_API_SECRET = SECRET;
   }, 60_000);
 
   afterAll(async () => {
+    if (savedSecret === undefined) delete process.env.INTERNAL_API_SECRET;
+    else process.env.INTERNAL_API_SECRET = savedSecret;
     // Importing a route opens the shared db singleton against this database,
     // and a connection left open makes DROP DATABASE hang rather than fail.
     // A connection this file caused is this file's to close.
@@ -404,13 +418,13 @@ withDb("API routes", () => {
     });
   });
 
-  describe("PUT /api/sources/:key", () => {
+  describe("PUT /api/internal/sources/:key", () => {
     it("switches a source off", async () => {
       await source("verge-ai");
-      const { PUT } = await import("@/app/api/sources/[key]/route");
-      const request = new Request(`${BASE}/api/sources/verge-ai`, {
+      const { PUT } = await import("@/app/api/internal/sources/[key]/route");
+      const request = new Request(`${BASE}/api/internal/sources/verge-ai`, {
         method: "PUT",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", "x-internal-secret": SECRET },
         body: JSON.stringify({ enabled: false }),
       });
       const res = await PUT(
@@ -426,10 +440,10 @@ withDb("API routes", () => {
 
     it("rejects a body that is not { enabled: boolean }", async () => {
       await source("verge-ai");
-      const { PUT } = await import("@/app/api/sources/[key]/route");
-      const request = new Request(`${BASE}/api/sources/verge-ai`, {
+      const { PUT } = await import("@/app/api/internal/sources/[key]/route");
+      const request = new Request(`${BASE}/api/internal/sources/verge-ai`, {
         method: "PUT",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", "x-internal-secret": SECRET },
         body: JSON.stringify({ enabled: "no" }),
       });
       const res = await PUT(
@@ -441,10 +455,10 @@ withDb("API routes", () => {
     });
 
     it("is a 404 for a source that does not exist", async () => {
-      const { PUT } = await import("@/app/api/sources/[key]/route");
-      const request = new Request(`${BASE}/api/sources/nope`, {
+      const { PUT } = await import("@/app/api/internal/sources/[key]/route");
+      const request = new Request(`${BASE}/api/internal/sources/nope`, {
         method: "PUT",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", "x-internal-secret": SECRET },
         body: JSON.stringify({ enabled: false }),
       });
       const res = await PUT(
@@ -453,6 +467,158 @@ withDb("API routes", () => {
       );
       expect(res.status).toBe(404);
       expect((await body(res)).error).toMatchObject({ code: "NOT_FOUND" });
+    });
+
+    // ── #103: the guard ──────────────────────────────────────────────────────
+    // This route used to live at /api/sources/[key] with no guard at all, so
+    // anyone who could reach the port could disable every source by key — and
+    // the keys are in seed-data.ts, in a public repository.
+    it("refuses an unauthenticated write AND LEAVES THE ROW UNCHANGED", async () => {
+      await source("verge-ai"); // enabled: true
+
+      const { PUT } = await import("@/app/api/internal/sources/[key]/route");
+      const request = new Request(`${BASE}/api/internal/sources/verge-ai`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" }, // no x-internal-secret
+        body: JSON.stringify({ enabled: false }),
+      });
+      const res = await PUT(
+        request as never,
+        { params: Promise.resolve({ key: "verge-ai" }) } as never,
+      );
+
+      expect(res.status).toBe(401);
+
+      // THE ROW IS THE ASSERTION, not the status. A route that returns 401 and
+      // writes anyway passes a status-only check, and the write is the harm.
+      const [row] = await sql.unsafe(`select enabled from sources where key = 'verge-ai'`);
+      expect(row.enabled).toBe(true);
+    });
+
+    it("refuses a WRONG secret and leaves the row unchanged", async () => {
+      await source("verge-ai");
+      const { PUT } = await import("@/app/api/internal/sources/[key]/route");
+      const request = new Request(`${BASE}/api/internal/sources/verge-ai`, {
+        method: "PUT",
+        headers: { "content-type": "application/json", "x-internal-secret": `${SECRET}x` },
+        body: JSON.stringify({ enabled: false }),
+      });
+      const res = await PUT(
+        request as never,
+        { params: Promise.resolve({ key: "verge-ai" }) } as never,
+      );
+      expect(res.status).toBe(401);
+      const [row] = await sql.unsafe(`select enabled from sources where key = 'verge-ai'`);
+      expect(row.enabled).toBe(true);
+    });
+
+    /**
+     * The OTHER internal route, covered here because #103's claim is about the
+     * boundary rather than about one route.
+     *
+     * src/worker/trigger.test.ts already tests handleIngestTrigger deeply — it
+     * asserts 401 AND that no ingest_runs row appeared, on every refusal path.
+     * But it tests the FUNCTION. Nothing imported the ROUTE MODULE, whose whole
+     * body is `return handleIngestTrigger(request, ...)`. If that wrapper ever
+     * stopped delegating, every existing test stayed green.
+     *
+     * That is the same import-versus-call gap that internal-guard.test.ts
+     * documents about itself, one level up: the reachability check proves the
+     * route imports the trigger, not that it calls it. This closes it for the
+     * refusal path, which is the path the guard claim rests on.
+     *
+     * Only the refusal is exercised. A request WITH the secret would run a real
+     * ingestion pass over the network, which is not this suite's job.
+     */
+    it("the ingest route module refuses an unauthenticated POST and records no run", async () => {
+      const { POST } = await import("@/app/api/internal/ingest/route");
+      const before = await sql.unsafe(`select count(*)::int as n from ingest_runs`);
+
+      const res = await POST(
+        new Request(`${BASE}/api/internal/ingest`, { method: "POST" }) as never,
+      );
+
+      expect(res.status).toBe(401);
+      // The effect, not the status. A wrapper that 401s and ingests anyway
+      // passes a status-only check.
+      const after = await sql.unsafe(`select count(*)::int as n from ingest_runs`);
+      expect(after[0].n).toBe(before[0].n);
+    });
+
+    /**
+     * The positive for the wrapper, and it closes a mode the refusal test
+     * cannot see.
+     *
+     *   wrapper stops refusing (200, or bypasses the guard) -> refusal test RED
+     *   wrapper ALWAYS refuses (401 regardless of secret)   -> refusal test GREEN
+     *
+     * The second is not harmless: a permanently-401 ingest trigger means
+     * ingestion never runs, nothing reports a failure, and the news quietly
+     * stops. That is #104's shape one layer up — "collected nothing" and "had
+     * nothing to collect" being indistinguishable — so the two tickets are
+     * related rather than merely adjacent.
+     *
+     * This runs a REAL pass, and it costs nothing because the catalogue is
+     * empty: runIngest selects enabled sources, finds none, and never enters
+     * its loop, so no request leaves the machine. (trigger.test.ts takes the
+     * other approach for the function — one source pointed at a closed port.)
+     *
+     * WHAT "NO REQUEST LEAVES THE MACHINE" ACTUALLY RESTS ON, because it is
+     * not the beforeEach. It is that TRUNCATE_ALL is DERIVED rather than
+     * enumerated: src/db/tables.ts reads the schema module's own exports and
+     * filters for PgTable, so `sources` is covered by construction. A
+     * hand-written truncate list that happened to omit it would leave a seeded
+     * catalogue standing, and this test would fetch every feed over the
+     * network — surfacing later as an order-dependent flake rather than as an
+     * error. That file's own comment records three test files each carrying
+     * their own list and each missing a DIFFERENT table, so it is the defect
+     * it was written to retire rather than a hypothetical.
+     *
+     * The floor below is what keeps this true as the suite changes: it asserts
+     * the catalogue is empty BEFORE the POST, so a future change that seeds
+     * sources fails here loudly instead of quietly turning this into a
+     * network test.
+     *
+     * What it still does not prove: that the guard runs BEFORE any work. That
+     * is trigger.test.ts's job and it asserts it directly — every refusal path
+     * leaves runCount() at zero.
+     */
+    it("the ingest route module ACCEPTS a correct secret, so it does not simply refuse everything", async () => {
+      const { POST } = await import("@/app/api/internal/ingest/route");
+      const sources0 = await sql.unsafe(`select count(*)::int as n from sources`);
+      expect(sources0[0].n).toBe(0); // the floor: an empty catalogue is why this is free
+
+      const res = await POST(
+        new Request(`${BASE}/api/internal/ingest`, {
+          method: "POST",
+          headers: { "x-internal-secret": SECRET },
+        }) as never,
+      );
+
+      expect(res.status).toBe(200);
+      const payload = await body(res);
+      expect(payload.ran).toBe(true);
+      expect(payload.sources).toBe(0);
+    });
+
+    // The positive beside the negatives. Without it, a route that refused
+    // EVERYTHING — a guard that never lets anyone through, or a handler that
+    // 401s unconditionally — would satisfy both tests above.
+    it("allows the write when the secret is correct, so the guard discriminates", async () => {
+      await source("verge-ai");
+      const { PUT } = await import("@/app/api/internal/sources/[key]/route");
+      const request = new Request(`${BASE}/api/internal/sources/verge-ai`, {
+        method: "PUT",
+        headers: { "content-type": "application/json", "x-internal-secret": SECRET },
+        body: JSON.stringify({ enabled: false }),
+      });
+      const res = await PUT(
+        request as never,
+        { params: Promise.resolve({ key: "verge-ai" }) } as never,
+      );
+      expect(res.status).toBe(200);
+      const [row] = await sql.unsafe(`select enabled from sources where key = 'verge-ai'`);
+      expect(row.enabled).toBe(false);
     });
   });
 

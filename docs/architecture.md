@@ -70,11 +70,27 @@ A pass is `runIngest` then `rankAllStories`, in that order, in one call.
 
 ## The read path
 
-Every route handler lives under `src/app/api/`. All but one are the client API;
-the exception is `internal/ingest`, which triggers an ingestion pass and is
-guarded by `INTERNAL_API_SECRET`. At the time of writing that is twelve and one
-— **`npm run routes:check` prints the current pair**, so the number above is a
-convenience and the command is the source of truth.
+Every route handler lives under `src/app/api/`, and the `internal/` path
+segment is the boundary:
+
+> **`internal/` means operator-only and is secret-guarded. Everything outside
+> it is reader-facing and must not mutate operator state.**
+
+That is deliberately a rule and not a list of routes. `PUT /api/sources/[key]`
+sat outside `internal/` with no guard at all until #103, so anyone who could
+reach the port could disable every source by key — and the keys are in
+`src/db/seed-data.ts`, in a public repository. A list of guarded routes would
+not have survived that route being added. The same segment already carries the
+cost rule in `scripts/check-route-cost.ts`, whose own comment says the boundary
+is "a rule rather than a list" — this is the authorisation question answered
+the same way, at the same seam.
+
+"Operator state" means anything that changes what the product _does_: which
+sources run, what gets ingested, how ranking behaves. Reader state — saves,
+read marks, hidden stories — is a separate question tracked in #65 and #95.
+
+**`npm run routes:check` prints the current public/internal pair**, so any
+number written here is a convenience and the command is the source of truth.
 
 A handler is thin. The pattern, from `src/app/api/radar/route.ts`:
 
