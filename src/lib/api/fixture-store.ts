@@ -152,6 +152,14 @@ export function localPreferences(): Preferences {
  * nothing.
  */
 export const BRIEF_LENGTH_COOKIE = "ai-radar-fixture-brief-length";
+
+/**
+ * The second cookie, and the comment above now covers two. Same reason as the
+ * first: Today filters in the query on the SERVER, so which view to show has to
+ * arrive before the device runs any JavaScript. It carries one word — "built"
+ * or "all" — and nothing else.
+ */
+export const VIEW_COOKIE = "ai-radar-view";
 const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
 
 /**

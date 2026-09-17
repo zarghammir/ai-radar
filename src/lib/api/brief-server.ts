@@ -3,6 +3,7 @@ import { briefWindow, storiesInWindow, takeWithinReadingTime } from "@/api/brief
 import { getPreferences } from "@/api/reader";
 import { USING_FIXTURES } from "@/lib/api/client";
 import { fixtureBrief } from "@/lib/api/fixtures";
+import { typesForView, type BriefView } from "@/lib/api/views";
 import type { BriefLengthParam, BriefResponse } from "@/lib/api/types";
 
 /**
@@ -23,13 +24,16 @@ import type { BriefLengthParam, BriefResponse } from "@/lib/api/types";
  * It calls the SAME functions the route calls, so the page and the API cannot
  * disagree about what a brief is.
  */
-export async function loadBrief(length: BriefLengthParam): Promise<BriefResponse> {
-  if (USING_FIXTURES) return fixtureBrief(length);
+export async function loadBrief(
+  length: BriefLengthParam,
+  view: BriefView = "all",
+): Promise<BriefResponse> {
+  if (USING_FIXTURES) return fixtureBrief(length, view);
 
   const db = getDb();
   const prefs = await getPreferences(db);
   const window = briefWindow(new Date(), prefs.briefTime, prefs.timezone);
-  const ranked = await storiesInWindow(db, window);
+  const ranked = await storiesInWindow(db, window, { types: typesForView(view) });
   const stories = takeWithinReadingTime(ranked, length);
 
   return {
@@ -40,6 +44,7 @@ export async function loadBrief(length: BriefLengthParam): Promise<BriefResponse
       timezone: window.timezone,
     },
     length,
+    view,
     // Both describe the response, not the window.
     count: stories.length,
     readingMinutes: stories.reduce((n, s) => n + s.readingMinutes, 0),
