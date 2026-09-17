@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { ContentTypeBadge, VerificationChip } from "@/components/story/badges";
 import { StoryActions } from "@/components/story/story-actions";
 import { alsoReportedBy, storyBody } from "@/lib/api/labels";
@@ -9,14 +10,27 @@ function detectedAt(iso: string) {
   return new Date(iso).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 }
 
+/**
+ * One story on paper, on the bench.
+ *
+ * `actions` and `footer` are slots so that Saved can put its own controls on
+ * the same card instead of a second card drifting away from this one. Both
+ * default to nothing extra, so Today is untouched by their existence.
+ */
 export function StoryCardView({
   story,
   rank,
   lead,
+  actions,
+  footer,
 }: {
   story: Story;
   rank: number;
   lead: boolean;
+  /** Replaces the default Save/Share/Hide row. */
+  actions?: ReactNode;
+  /** Sits below the actions. Used for the reader's note and tags. */
+  footer?: ReactNode;
 }) {
   const body = storyBody(story);
   const others = alsoReportedBy(story);
@@ -93,7 +107,12 @@ export function StoryCardView({
           <span>{story.readingMinutes} min</span>
         </div>
 
-        <StoryActions story={story} />
+        {actions ?? <StoryActions story={story} />}
+
+        {/* empty:hidden on the CONTAINER. An element is always truthy, so a
+            `footer` whose component returns null would still draw this div and
+            its top margin; the ternary cannot see that. */}
+        {footer ? <div className="mt-3 empty:hidden">{footer}</div> : null}
       </div>
     </article>
   );

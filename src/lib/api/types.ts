@@ -5,9 +5,15 @@
  * value added to the database cannot silently go unhandled here. There are ten
  * content types, not the six the prototype drew.
  */
-import type { ContentType, SourceTier, VerificationLevel } from "@/db/schema";
+import type {
+  BriefLength,
+  ContentType,
+  NotificationChannel,
+  SourceTier,
+  VerificationLevel,
+} from "@/db/schema";
 
-export type { ContentType, SourceTier, VerificationLevel };
+export type { BriefLength, ContentType, NotificationChannel, SourceTier, VerificationLevel };
 
 export interface SourceRef {
   key: string;
@@ -22,7 +28,13 @@ export interface Topic {
   group: "company" | "domain" | "field";
 }
 
-/** What a list renders. Returned by /api/brief, /api/radar and /api/saved. */
+/**
+ * What a list renders. Returned by /api/brief and /api/radar.
+ *
+ * /api/saved returns the WIDER `SavedCard` below. This comment used to claim
+ * it returned this shape, which is how the saved list ended up with no name
+ * for the note and the tags it was already being sent.
+ */
 export interface StoryCard {
   id: number;
   slug: string;
@@ -54,6 +66,22 @@ export interface StoryCard {
   read: boolean;
 }
 
+/**
+ * One item on the Saved screen: the card, plus the three things that are true
+ * only because the reader put it there. Mirrors `SavedCard` in src/api/reader.ts.
+ */
+export interface SavedCard extends StoryCard {
+  note: string | null;
+  tags: string[];
+  savedAt: string;
+}
+
+export interface SavedResponse {
+  stories: SavedCard[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
 export interface BriefWindow {
   from: string;
   to: string;
@@ -77,4 +105,50 @@ export interface ApiError {
     code: "VALIDATION_ERROR" | "NOT_FOUND" | "METHOD_NOT_ALLOWED" | "INTERNAL";
     message: string;
   };
+}
+
+/**
+ * The reader's preferences, as /api/preferences returns them.
+ *
+ * `briefLength`, `notificationChannel` and `theme` are `string` and not their
+ * unions ON PURPOSE. The write path validates them, but the columns are plain
+ * text, so a value this build has never heard of can come back from a database
+ * an older or newer build wrote. Typing them as the union here would be a
+ * promise the data does not keep, and every screen that reads one would then
+ * be free to assume a branch it never handles. Narrow them where they are used,
+ * with a fallback the reader can see.
+ */
+export interface Preferences {
+  topicKeys: string[];
+  /** "HH:MM", 24-hour, in `timezone`. */
+  briefTime: string;
+  /** An IANA zone name, e.g. "America/Toronto". */
+  timezone: string;
+  briefLength: string;
+  notificationChannel: string;
+  email: string | null;
+  theme: string;
+  /** Null until first-run onboarding finishes. The gate, and nothing else. */
+  onboardedAt: string | null;
+  updatedAt: string;
+}
+
+/**
+ * A topic as the catalogue lists it, with how much it has carried lately.
+ *
+ * `group` is `string` rather than Topic["group"] because it comes back from raw
+ * SQL over a text column. A screen that groups by it must put an unrecognised
+ * group SOMEWHERE VISIBLE rather than filter it out — a topic that exists and
+ * is not shown is a topic the reader cannot turn off.
+ */
+export interface TopicSummary {
+  key: string;
+  name: string;
+  group: string;
+  /** Stories in the recent window. 0 is a real answer, not a missing one. */
+  storyCount: number;
+}
+
+export interface TopicsResponse {
+  topics: TopicSummary[];
 }
