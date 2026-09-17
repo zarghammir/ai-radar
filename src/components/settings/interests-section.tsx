@@ -1,5 +1,6 @@
 "use client";
 
+import { X } from "lucide-react";
 import { SaveStatusText, Section, useSaveStatus } from "@/components/settings/section";
 import { TopicChips } from "@/components/settings/topic-chips";
 import { savePreferences } from "@/lib/api/preferences-store";
@@ -24,6 +25,28 @@ export function InterestsSection({
 }) {
   const { status, run } = useSaveStatus();
   const chosen = new Set(preferences.topicKeys);
+
+  /**
+   * Subjects the reader follows that the catalogue no longer lists.
+   *
+   * They were valid when they were saved — the route checks every key it is
+   * sent — so one can only appear because a topic was removed afterwards. Two
+   * things go wrong if they are simply left out of the grid, and the second is
+   * the serious one:
+   *
+   *  - the reader follows something they cannot see and cannot unfollow;
+   *  - EVERY toggle then fails. Each write sends the whole list, the route
+   *    rejects an unknown key, and the reader gets "unknown topic: …" for a
+   *    subject they never chose in this session and cannot find on the page.
+   *
+   * So they are shown, and they can be taken off. Only computed against a
+   * catalogue that was actually READ: when the read failed, every key would
+   * look orphaned and the panel would offer to delete all of them.
+   */
+  const orphans =
+    topics === null
+      ? []
+      : preferences.topicKeys.filter((key) => !topics.some((t) => t.key === key));
 
   function toggle(key: string) {
     const next = new Set(chosen);
@@ -51,6 +74,31 @@ export function InterestsSection({
       ) : (
         <div className="flex flex-col gap-5">
           <TopicChips topics={topics} chosen={chosen} onToggle={toggle} />
+
+          {orphans.length > 0 ? (
+            <div className="border-faint-2 border border-dashed p-3">
+              <p className="text-soft text-[13px] leading-relaxed">
+                You follow {orphans.length === 1 ? "one subject" : `${orphans.length} subjects`}{" "}
+                this version no longer has. Taking {orphans.length === 1 ? "it" : "them"} off is the
+                only thing left to do with {orphans.length === 1 ? "it" : "them"}.
+              </p>
+              <ul className="mt-2 flex flex-wrap gap-1.5">
+                {orphans.map((key) => (
+                  <li key={key}>
+                    <button
+                      type="button"
+                      onClick={() => toggle(key)}
+                      className="focus-visible:ring-org border-faint-2 text-soft hover:bg-faint flex items-center gap-1.5 rounded-xs border px-2.5 py-1.5 text-[13px] font-semibold focus-visible:ring-2 focus-visible:outline-none"
+                    >
+                      {key}
+                      <X aria-hidden className="size-3.5" />
+                      <span className="sr-only">— stop following</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
 
           <p className="text-meta text-[12.5px]">
             {chosen.size === 0

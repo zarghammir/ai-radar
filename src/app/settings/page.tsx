@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
 import { brand } from "@/config/brand";
 import { PageShell } from "@/components/page-shell";
+import { loadTopics } from "@/lib/api/catalogue-server";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { InstallPrompt } from "@/components/install-prompt";
 import { PreferenceSections } from "@/components/settings/preference-sections";
-import { getTopics } from "@/lib/api/client";
-import type { TopicSummary } from "@/lib/api/types";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -32,23 +31,6 @@ function Section({
       <div className="mt-4">{children}</div>
     </section>
   );
-}
-
-/**
- * The catalogue of subjects, read on the server.
- *
- * `null` means the read FAILED and is a different answer from an empty list,
- * which means there are no subjects yet. The Interests panel says something
- * different for each; collapsing them would tell a reader with a broken
- * database that the app has simply not learned any subjects.
- */
-async function loadTopics(): Promise<TopicSummary[] | null> {
-  try {
-    return await getTopics();
-  } catch (error) {
-    console.error("settings: could not read the topic catalogue", error);
-    return null;
-  }
 }
 
 export default async function SettingsPage() {

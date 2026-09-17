@@ -1,24 +1,10 @@
 import type { Metadata } from "next";
 import { PageShell } from "@/components/page-shell";
+import { loadTopics } from "@/lib/api/catalogue-server";
 import { OnboardingFlow } from "@/components/onboarding/onboarding-flow";
 import { brand } from "@/config/brand";
-import { getTopics } from "@/lib/api/client";
-import type { TopicSummary } from "@/lib/api/types";
 
 export const metadata: Metadata = { title: "Welcome" };
-
-/**
- * `null` means the catalogue could not be READ, which is a different answer
- * from an empty list. The last step says something different for each.
- */
-async function loadTopics(): Promise<TopicSummary[] | null> {
-  try {
-    return await getTopics();
-  } catch (error) {
-    console.error("welcome: could not read the topic catalogue", error);
-    return null;
-  }
-}
 
 /**
  * A real page rather than a dialog over Today.
