@@ -70,8 +70,14 @@ export function useSaveStatus() {
  * happen.
  */
 export function SaveStatusText({ status, what }: { status: SaveStatus; what: string }) {
+  // No empty:hidden on the span below, deliberately, and the same goes for
+  // every other live region on these screens. display:none takes an element
+  // out of the accessibility tree, so a region hidden while empty is ADDED to
+  // the tree at the moment it gets its message — and assistive technology may
+  // not announce a region it has only just seen. It stays rendered and only
+  // its text changes; an empty inline span costs nothing visible.
   return (
-    <span role="status" aria-live="polite" className="text-[12.5px] empty:hidden">
+    <span role="status" aria-live="polite" className="text-[12.5px]">
       {status.kind === "saving" ? <span className="text-meta">Saving…</span> : null}
       {status.kind === "saved" ? <span className="text-meta">Saved</span> : null}
       {status.kind === "failed" ? (

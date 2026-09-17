@@ -279,7 +279,7 @@ function Label({ htmlFor, children }: { htmlFor: string; children: React.ReactNo
 
 function Problem({ message }: { message: string | null }) {
   return (
-    <p role="status" aria-live="polite" className="mt-4 text-[13px] empty:hidden">
+    <p role="status" aria-live="polite" className="mt-4 text-[13px]">
       {message ? <span className="text-destructive font-semibold">{message}</span> : null}
     </p>
   );

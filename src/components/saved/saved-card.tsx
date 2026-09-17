@@ -29,21 +29,32 @@ export function SavedCardView({
    * without also being able to put it back. The note and the tags travel
    * TOGETHER on each write because the route replaces both.
    */
-  async function write(changes: Partial<SavedCard>, send: () => Promise<void>, failure: string) {
+  async function write(
+    changes: Partial<SavedCard>,
+    send: () => Promise<void>,
+    failure: string,
+  ): Promise<boolean> {
     setStatus({ kind: "saving" });
     const rollback = onPatch(story.id, changes);
     try {
       await send();
       setStatus({ kind: "saved" });
+      return true;
     } catch (error) {
       console.error("saved: write failed", error);
       rollback();
       setStatus({ kind: "failed", message: failure });
+      return false;
     }
   }
 
-  async function saveMarks(next: { note: string | null; tags: string[] }, failure: string) {
-    await write(next, () => setSavedMarks(story.id, next), failure);
+  /**
+   * Returns whether the write landed. The note editor needs to know: closing
+   * on a failure would throw away what the reader had just typed, and the
+   * error message would be about a note they could no longer see.
+   */
+  function saveMarks(next: { note: string | null; tags: string[] }, failure: string) {
+    return write(next, () => setSavedMarks(story.id, next), failure);
   }
 
   async function toggleRead() {
@@ -122,7 +133,9 @@ export function SavedCardView({
           />
           <TagEditor
             tags={story.tags}
-            onChange={(tags) => saveMarks({ note: story.note, tags }, "Could not save those tags.")}
+            onChange={(tags) =>
+              void saveMarks({ note: story.note, tags }, "Could not save those tags.")
+            }
           />
           {story.savedAt ? (
             <p className="text-meta mt-3 font-mono text-[10.5px] tabular-nums">
@@ -177,10 +190,12 @@ function NoteEditor({
   onSave,
 }: {
   note: string | null;
-  onSave: (note: string | null) => Promise<void>;
+  /** Resolves true when the note was stored. False keeps the editor open. */
+  onSave: (note: string | null) => Promise<boolean>;
 }) {
   const id = useId();
   const [draft, setDraft] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const editing = draft !== null;
   const value = draft ?? note ?? "";
   const tooLong = value.length > NOTE_MAX;
@@ -220,20 +235,27 @@ function NoteEditor({
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <button
           type="button"
-          disabled={tooLong}
+          disabled={tooLong || saving}
           onClick={() => {
             const trimmed = value.trim();
-            setDraft(null);
+            setSaving(true);
             // An empty note is stored as nothing, not as an empty string: one
             // absence, not two that render the same and compare differently.
-            void onSave(trimmed.length === 0 ? null : trimmed);
+            void onSave(trimmed.length === 0 ? null : trimmed).then((stored) => {
+              setSaving(false);
+              // Closing on a failure would discard what the reader typed and
+              // leave the error message pointing at a note they can no longer
+              // see. The editor stays open with their words in it.
+              if (stored) setDraft(null);
+            });
           }}
           className="focus-visible:ring-org bg-ink text-paper border-ink rounded-xs border px-2.5 py-1.5 text-[13px] font-semibold focus-visible:ring-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60"
         >
-          Save note
+          {saving ? "Saving…" : "Save note"}
         </button>
         <button
           type="button"
+          disabled={saving}
           onClick={() => setDraft(null)}
           className="focus-visible:ring-org border-faint-2 text-soft hover:bg-faint rounded-xs border px-2.5 py-1.5 text-[13px] font-semibold focus-visible:ring-2 focus-visible:outline-none"
         >
@@ -323,7 +345,7 @@ function TagEditor({ tags, onChange }: { tags: string[]; onChange: (tags: string
           Add
         </button>
       </div>
-      <span role="status" aria-live="polite" className="text-[12.5px] empty:hidden">
+      <span role="status" aria-live="polite" className="text-[12.5px]">
         {problem ? <span className="text-destructive font-semibold">{problem}</span> : null}
       </span>
     </div>

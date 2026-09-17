@@ -250,10 +250,65 @@ As of issue #12 the system is implemented, not just described.
 - Separators in the shell are drawn as pseudo-elements or `aria-hidden` spans, never as text
   nodes.
 
+## 11. Naming what a screen is
+
+Every screen that loads something is in exactly one of four states, and **says which one in
+the DOM** as `data-screen-state`:
+
+| State            | What it means                           | Why it is its own state                                                                                                                   |
+| ---------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `loading`        | The read has not come back              | A blank panel and an empty bin look identical for as long as the read takes, and a test that catches the screen early would call it empty |
+| `list` / `brief` | There is something to show              | —                                                                                                                                         |
+| `empty`          | The read succeeded and there is nothing | A fact about the reader                                                                                                                   |
+| `unreachable`    | The read FAILED                         | A fact about the app — and the reader is told their work is where they left it, not gone                                                  |
+
+Collapsing the last two is this project's signature defect. A saved list that could not be read
+must never render as a reader who has saved nothing: the first says "try again in a minute",
+the second says "your notes are gone".
+
+Two rules follow from it:
+
+- **Never render defaults after a failed read.** A settings screen showing 07:30 because it
+  could not reach the store invites the reader to confirm a value they never chose, and the
+  confirmation overwrites what is really stored.
+- **Never gate on a failed read.** First-run onboarding fires on `onboardedAt === null` and
+  nothing else. An unreachable store is not a new reader.
+
+### A control with nothing behind it
+
+Where a capability is not built, the control stays **visible, disabled, and next to a sentence
+saying why** — it is never quietly absent and never faked in browser storage. Absence tells the
+reader nothing, and a local fake disagrees with the server the moment they open a second
+device. Archive on the Saved card is the worked example; the endpoint is issue #70.
+
+Where a whole feature is missing, the panel says so above its controls rather than below them.
+"Being told" carries the sentence "nothing is sent yet — not a push, not an email" before the
+choices, because a product that accepts _email me at seven_ and then never writes is worse than
+one that admits it cannot.
+
+### Settings is a list of sections
+
+Not a list of switches. The things that belong there next are not switches — interests are a
+grid, a watchlist is a list with its own adding and removing — so each section is
+self-contained (its own heading, its own explanation, its own saving state) and adding one is
+a new component in the list rather than a change to the ones already there.
+
+### Every write says what happened to it
+
+A change shows immediately, and if the write throws the old value comes back **and the reader
+is told**, in an `aria-live` region. A control that silently snaps back is indistinguishable
+from one that never moved.
+
 ### Still not decided
 
 - **Motion.** Deliberately none beyond the reduced-motion guard. The flag, the reading-mode
   switch and the tab marker are where it would earn its keep.
-- **Data.** The shell ships with honest empty states; nothing fetches yet.
-- **The settings that need a pipeline** — sources, brief time, notification choice — are
-  described on the page as not yet wired, rather than shown as dead controls.
+- **Sources.** Choosing which to follow still has no endpoint that can store the choice, so the
+  panel describes the situation rather than drawing dead switches.
+- **Delivery.** The notification choice is stored and nothing reads it: there is no push
+  subscription and no mail path in the repository. The panel says so.
+- **Archive.** The column and the list filter exist; the write does not (#70).
+- **Theme is device-local on purpose.** `user_preferences.theme` is deliberately left unwritten.
+  `ThemeScript` reads localStorage before first paint, so a server-stored theme cannot beat the
+  first paint without a cookie and would flash — and two writers for one fact is exactly the
+  disagreement the toggle's own comment warns about.
