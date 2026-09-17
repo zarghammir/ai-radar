@@ -10,11 +10,19 @@ Status: **final, signed off by PM and UI lane on 2026-09-16.**
 
 ## Ground rules
 
-**No route triggers ingestion, and no route makes an external call.** Every
-endpoint here reads the database and returns. No adapter is invoked, no feed or
-API is fetched, nothing is summarised on demand. Ingestion happens only in the
-worker (issue #5). This is what keeps a page load cheap, predictable and free,
-and it is why a slow upstream feed can never make the app slow.
+**No route a client can reach triggers ingestion, and none makes an external
+call.** Every endpoint documented here reads the database and returns. No
+adapter is invoked, no feed or API is fetched, nothing is summarised on demand.
+This is what keeps a page load cheap, predictable and free, and it is why a slow
+upstream feed can never make the app slow.
+
+One **internal** route is the exception, and it is not part of this client API:
+`POST /api/internal/ingest` triggers an ingestion pass. It is guarded by a shared
+secret (`INTERNAL_API_SECRET`) and **refuses before it reads or writes
+anything** — an unauthenticated caller leaves no row in `ingest_runs` and costs
+nothing to turn away. It exists for a scheduler or an operator, is documented
+with the worker rather than here, and does not change the rule above for
+anything a client can reach. Ingestion otherwise happens only in the worker.
 
 The only tables any route writes are `saved_items`, `read_state`,
 `user_preferences`, and `sources` — the last for its `enabled` column only, so
@@ -690,17 +698,17 @@ mislead, so it is stated twice.
 
 ## Deliberately absent
 
-| not here                              | why                                                                                                                                                             |
-| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A search endpoint                     | Nothing indexes text yet; filtering by topic and source covers Phase 1                                                                                          |
-| Any write to `stories` or `raw_items` | Only the worker writes those                                                                                                                                    |
-| A refresh or ingest trigger           | No route may cause an external call; the worker owns that                                                                                                       |
-| `sources[].config`, `sources[].url`   | Operational settings, not display data                                                                                                                          |
-| `topics[].keywords`                   | Internal tagging configuration                                                                                                                                  |
-| A total item count on the radar       | It would cost a second count query on every page; the returned array plus `appliedFilters` supports "showing N"                                                 |
-| A notification trigger rule           | The prototype's "plus anything major" is a different axis from `notificationChannel`, which is where a notification goes; nothing stores what would trigger one |
-| A numeric grade on a story            | The four-bar meter is a rendering of the `verification` enum, owned by the client; a number here would let the picture and the word drift apart                 |
-| A user id anywhere                    | Version 1 is single user; adding accounts stays additive                                                                                                        |
+| not here                              | why                                                                                                                                                                                            |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A search endpoint                     | Nothing indexes text yet; filtering by topic and source covers Phase 1                                                                                                                         |
+| Any write to `stories` or `raw_items` | Only the worker writes those                                                                                                                                                                   |
+| A public refresh or ingest trigger    | No client-reachable route may cause an external call, and the worker owns ingestion. The one exception is the internal, secret-guarded `POST /api/internal/ingest`, documented with the worker |
+| `sources[].config`, `sources[].url`   | Operational settings, not display data                                                                                                                                                         |
+| `topics[].keywords`                   | Internal tagging configuration                                                                                                                                                                 |
+| A total item count on the radar       | It would cost a second count query on every page; the returned array plus `appliedFilters` supports "showing N"                                                                                |
+| A notification trigger rule           | The prototype's "plus anything major" is a different axis from `notificationChannel`, which is where a notification goes; nothing stores what would trigger one                                |
+| A numeric grade on a story            | The four-bar meter is a rendering of the `verification` enum, owned by the client; a number here would let the picture and the word drift apart                                                |
+| A user id anywhere                    | Version 1 is single user; adding accounts stays additive                                                                                                                                       |
 
 ---
 

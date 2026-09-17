@@ -24,7 +24,9 @@
     "db:studio": "drizzle-kit studio",
     "sources:check": "tsx scripts/sources-check.ts",
     "a11y": "node scripts/a11y-audit.mjs",
-    "verify:shell": "node scripts/verify-shell.mjs"
+    "verify:shell": "node scripts/verify-shell.mjs",
+    "worker": "tsx src/worker/main.ts",
+    "worker:once": "tsx src/worker/main.ts --once"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.126.0",

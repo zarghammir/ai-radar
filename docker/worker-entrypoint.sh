@@ -1,5 +1,9 @@
 #!/bin/sh
-# Worker service. The ingestion entry is issue #5 and does not exist yet.
+# Worker service. The ingestion entry is src/worker/main.ts, bundled to
+# /app/ops/worker.cjs by the Dockerfile when that file is present.
+#
+# The fallback below is still reachable: the Dockerfile bundles the entry
+# conditionally, so an image built from a tree without it has no worker.
 #
 # A worker that cannot run must say so and exit non-zero. The alternative —
 # sleeping, or exiting 0 — makes a missing ingester look exactly like an
@@ -13,6 +17,6 @@ if [ -f /app/ops/worker.cjs ]; then
 fi
 
 echo "[worker] NOT IMPLEMENTED: this image contains no worker entry." >&2
-echo "[worker] src/worker/main.ts does not exist yet; issue #5 adds it." >&2
-echo "[worker] The service is wired and will run it the moment that file lands." >&2
+echo "[worker] /app/ops/worker.cjs is missing: the image was built from a tree" >&2
+echo "[worker] with no src/worker/main.ts, so nothing was bundled to run." >&2
 exit 78

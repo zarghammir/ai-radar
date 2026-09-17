@@ -1,0 +1,82 @@
+name: Ingest
+
+# Every 30 minutes, matching INGEST_INTERVAL_MINUTES in .env.example, plus a
+# manual button for when someone wants a brief refreshed now. This is the
+# hosted alternative to leaving the worker container running: same entry, same
+# single-writer lock, one pass per invocation.
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+# Never two ingests at once, by two mechanisms that cover different failures.
+#
+# Here: a run arriving while one is going is QUEUED, not skipped — and if a
+# third arrives while one is already pending, GitHub cancels the pending one so
+# the newest takes its place. So at most one run ever waits and a backlog
+# cannot build, which is the property that matters; it is not the same as
+# skipping, and saying so matters because a queued run still costs a minute.
+#
+# And in the worker: if the queued run starts while the previous is somehow
+# still working, the advisory lock in src/worker/lock.ts declines it and it
+# exits 0 having done nothing. Belt and braces, because the schedule and the
+# compose loop can both be running against one database.
+concurrency:
+  group: ingest
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  ingest:
+    name: one ingestion pass
+    runs-on: ubuntu-latest
+    # A pass takes seconds against a warm database. Anything near this is hung,
+    # and a hung scheduled job is how a free-tier minute budget disappears.
+    timeout-minutes: 15
+
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      INTERNAL_API_SECRET: ${{ secrets.INTERNAL_API_SECRET }}
+      NEXT_TELEMETRY_DISABLED: "1"
+
+    steps:
+      - name: Check out the branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node and the npm cache
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # Same reason as CI: Node 22 ships npm 10, which cannot read a lockfile
+      # written by npm 11 and fails with "Missing: esbuild@…".
+      - name: Pin npm to the version in packageManager
+        run: |
+          NPM_VERSION="$(node -p "require('./package.json').packageManager.split('@')[1]")"
+          npm install -g "npm@${NPM_VERSION}"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Named here rather than left to fail inside the worker: a scheduled job
+      # that goes red at 04:00 should say which secret is missing, not surface
+      # it as a connection error.
+      - name: Check the secrets this job needs are set
+        run: |
+          missing=""
+          [ -n "${DATABASE_URL:-}" ] || missing="$missing DATABASE_URL"
+          [ -n "${INTERNAL_API_SECRET:-}" ] || missing="$missing INTERNAL_API_SECRET"
+          if [ -n "$missing" ]; then
+            echo "Missing repository secret(s):$missing" >&2
+            echo "Set them under Settings → Secrets and variables → Actions." >&2
+            exit 1
+          fi
+
+      # Exit code: a single dead feed keeps this green on purpose. Every source
+      # failing fails the job, because that is the worker, the network or the
+      # database rather than one publisher having a bad morning.
+      - name: Run one ingestion pass
+        run: npm run worker:once

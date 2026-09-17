@@ -15,5 +15,10 @@ const sql =
 if (process.env.NODE_ENV !== "production") globalForDb.__aiRadarSql = sql;
 
 export const db = drizzle(sql, { schema });
+/**
+ * The raw client, for the one thing drizzle cannot express: reserving a single
+ * connection for a session-level advisory lock (src/worker/lock.ts).
+ */
+export { sql };
 export type Db = typeof db;
 export { schema };
