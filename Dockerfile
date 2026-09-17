@@ -90,11 +90,7 @@ ENV NODE_ENV=production \
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 
-# The standalone server does NOT copy public/ — Next's own documentation says
-# so, on the assumption a CDN serves it. Nothing serves it here, so without this
-# the icons, the offline page and the service worker 404 in a self-hosted image
-# while every other check stays green.
-COPY --from=builder /app/public ./public
+# CONTROL, THROWAWAY BRANCH, NEVER MERGE: public/ deliberately not copied.
 
 # SQL migration files are read from disk at run time by the migrator.
 COPY --from=builder /app/drizzle ./drizzle
@@ -107,7 +103,6 @@ RUN test -f /app/ops/migrate.cjs \
   && test -f /app/ops/seed.cjs \
   && test -f /app/server.js \
   && test -f /app/docker/web-entrypoint.sh \
-  && test -f /app/public/icons/icon-192.png \
   && echo "runtime image has every path its entrypoints reference"
 
 RUN chmod +x ./docker/*.sh \
