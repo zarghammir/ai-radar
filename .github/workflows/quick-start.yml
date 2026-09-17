@@ -30,6 +30,10 @@ on:
       - docker/**
       - .env.example
       - package.json
+      # The contributor job resolves its Node from here. The image does not read
+      # it — the Dockerfile pins node:22-alpine directly — so nothing else covers
+      # a change to it.
+      - .nvmrc
       - .github/workflows/quick-start.yml
   push:
     branches: [main]
@@ -40,6 +44,10 @@ on:
       - docker/**
       - .env.example
       - package.json
+      # The contributor job resolves its Node from here. The image does not read
+      # it — the Dockerfile pins node:22-alpine directly — so nothing else covers
+      # a change to it.
+      - .nvmrc
       - .github/workflows/quick-start.yml
 
 # One run per commit on main, one per ref on a pull request. Written as "not a
@@ -75,14 +83,35 @@ jobs:
       - name: Stand in for `git clone` (see the note above)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # No Node setup step on purpose: the README says the Node toolchain is not
-      # needed to self-host because Docker builds it all, and this is here to
-      # find out whether that is true.
+      # The machine as delivered. This step ASSERTS NOTHING — it is a record of
+      # what the runner shipped with, and the step below is what tests the claim.
       - name: Show what this machine has before we start
         run: |
           echo "docker:  $(docker --version 2>/dev/null || echo 'absent')"
           echo "node:    $(node --version 2>/dev/null || echo 'absent')"
           echo "openssl: $(openssl version 2>/dev/null || echo 'absent')"
+
+      # The README says the Node toolchain is not needed to self-host because
+      # Docker builds it all. `ubuntu-latest` ships Node, so simply printing the
+      # version cannot test that: `node --version` succeeds, the step exits 0,
+      # and a documented path that quietly reached for the host's Node would
+      # stay green here while failing on the Docker-only machine the README is
+      # actually addressing.
+      #
+      # So the host's Node is taken away for the rest of this job. The documented
+      # path is cp, openssl, sed and docker compose, none of which is a Node
+      # program; if any of them invokes `node`, this fails and names why. That
+      # turns an observation into an assertion, which is the difference between
+      # recording a hazard and testing for it.
+      #
+      # Safe because every step below is plain shell: the only JavaScript action
+      # in this job is the checkout above, which has already run.
+      - name: Take the host's Node away, since the README says it is not needed
+        run: |
+          mkdir -p /tmp/no-node
+          printf '#!/bin/sh\necho "the self-host path invoked the host node; the README says Docker builds it all" >&2\nexit 1\n' > /tmp/no-node/node
+          chmod +x /tmp/no-node/node
+          echo "/tmp/no-node" >> "$GITHUB_PATH"
 
       - name: cp .env.example .env
         run: cp .env.example .env
@@ -159,6 +188,16 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # The README's stated prerequisites for this path, and nothing else.
+      #
+      # Deliberately no `cache: npm`. On a workflow whose whole purpose is a cold
+      # machine, a warm cache is precisely the thing that would make it prove
+      # nothing. Do not add it as a speed-up.
+      #
+      # Known gap, recorded rather than hidden: the README states the floor as
+      # 22.13 and explains why, but `.nvmrc` is `22`, so this installs the latest
+      # 22.x and the documented floor is never exercised. A contributor on
+      # exactly 22.13 — the version the README tells them is enough — is the one
+      # case this job cannot speak to.
       - name: Node 22.13+ and npm 11+, as the README requires
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
