@@ -64,10 +64,17 @@ services:
       # Waits for web because web owns the migrations.
       web:
         condition: service_healthy
+    # Deliberately no command: the service runs the worker's LOOP, a pass every
+    # INGEST_INTERVAL_MINUTES. Only the CI smoke passes --once, because a smoke
+    # that never exits is a hung job. Adding --once here would silently turn a
+    # self-hoster's continuous ingestion into a single pass at boot.
     entrypoint: ["/app/docker/worker-entrypoint.sh"]
-    # One pass, then stop. Nothing here should loop until issue #5 decides the
-    # schedule; a restarting container that cannot work is just a noisy one.
-    restart: "no"
+    # The worker loops now (issue #5), so a crash should not end ingestion until
+    # someone notices. `unless-stopped` restarts it but still respects a
+    # deliberate `docker compose stop`. It refuses to start on a placeholder
+    # INTERNAL_API_SECRET, and that refusal is immediate and repeated in the
+    # log rather than hidden by the restart.
+    restart: unless-stopped
 
 volumes:
   postgres-data:

@@ -11,18 +11,36 @@
 FROM node:22-alpine AS builder
 WORKDIR /app
 
-COPY . .
+# Only what the install itself reads, so the npm ci layer is reused whenever
+# application code changes and nothing else does. With `COPY . .` first, editing
+# one component invalidated the install and every build paid for it again.
+COPY package.json package-lock.json .npmrc ./
 
 # node:22 ships npm 10, which cannot read this lockfile (it omits nested entries
 # npm 10 expects). The exact version comes from packageManager in package.json,
 # so this is not a third place to keep in sync — see issue #22.
 # engine-strict is on in .npmrc, so if the base image's Node ever drops below
 # the engines floor this install fails here with EBADENGINE rather than later.
+#
+# --ignore-scripts is required by the ordering above, not a preference: this
+# package's own postinstall is `next typegen`, which exits 1 with "Couldn't find
+# any `pages` or `app` directory" when the source has not been copied yet —
+# verified, not assumed. Nothing is lost by skipping it here, because `next
+# build` below generates the same route types. Dependency install scripts are
+# run instead by `npm rebuild` once the source is in place; six packages declare
+# them, esbuild among them, and esbuild is what bundles the workers.
 RUN NPM_VERSION="$(node -p "require('./package.json').packageManager.split('@')[1]")" \
   && npm install -g "npm@${NPM_VERSION}" \
   && node -v \
   && npm -v \
-  && npm ci
+  && npm ci --ignore-scripts
+
+COPY . .
+
+# The install scripts skipped above, now that this is a complete tree. If
+# esbuild's binary were wrong the bundling steps below would fail loudly rather
+# than silently produce nothing.
+RUN npm rebuild
 
 RUN npx next build
 
@@ -72,6 +90,12 @@ ENV NODE_ENV=production \
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 
+# The standalone server does NOT copy public/ — Next's own documentation says
+# so, on the assumption a CDN serves it. Nothing serves it here, so without this
+# the icons, the offline page and the service worker 404 in a self-hosted image
+# while every other check stays green.
+COPY --from=builder /app/public ./public
+
 # SQL migration files are read from disk at run time by the migrator.
 COPY --from=builder /app/drizzle ./drizzle
 COPY --from=builder /app/ops ./ops
@@ -83,6 +107,7 @@ RUN test -f /app/ops/migrate.cjs \
   && test -f /app/ops/seed.cjs \
   && test -f /app/server.js \
   && test -f /app/docker/web-entrypoint.sh \
+  && test -f /app/public/icons/icon-192.png \
   && echo "runtime image has every path its entrypoints reference"
 
 RUN chmod +x ./docker/*.sh \
