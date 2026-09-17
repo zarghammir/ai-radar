@@ -3,7 +3,7 @@ import { ReadingMode } from "@/components/today/reading-mode";
 import { EmptyState, PageShell } from "@/components/page-shell";
 import { LocalDate } from "@/components/local-date";
 import { briefSummary } from "@/lib/api/brief-summary";
-import { getBrief } from "@/lib/api/client";
+import { loadBrief } from "@/lib/api/brief-server";
 import { defaultBriefLength } from "@/lib/api/brief-length";
 import type { BriefLengthParam } from "@/lib/api/types";
 
@@ -38,18 +38,19 @@ export default async function TodayPage({ searchParams }: PageProps<"/">) {
    * this catch the third state is an unhandled error and the reader gets the
    * framework's crash page instead of a screen anyone designed.
    */
-  let brief: Awaited<ReturnType<typeof getBrief>> | null = null;
+  let brief: Awaited<ReturnType<typeof loadBrief>> | null = null;
   let unreachable = false;
   try {
-    brief = await getBrief(length);
+    brief = await loadBrief(length);
   } catch (error) {
-    // The driver's message goes to the CONSOLE, not onto the page. An earlier
-    // version of this screen printed it, and merging #16 is what made that
-    // wrong twice over: every other surface in the app now logs it and shows
-    // words instead, and a Postgres error can carry the host and the
-    // credentials out of DATABASE_URL onto a page somebody screenshots. The
-    // operator who needs the detail is the person with the server log.
-    console.error("today: could not reach the story database", error);
+    // Logged, never rendered. The driver's message is the failed SQL including
+    // column names: meaningless to the person looking at the screen, and not
+    // something a page should put in front of them — a connection error can
+    // also carry the host and the credentials out of DATABASE_URL onto a page
+    // somebody screenshots. The screen says what to check; the server log says
+    // what broke. Every surface added in #16 answers a failed read the same
+    // way, so this is now the app's rule rather than this page's habit.
+    console.error("[today] could not load the brief", error);
     unreachable = true;
   }
 
