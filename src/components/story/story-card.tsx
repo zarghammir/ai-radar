@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { ContentTypeBadge, VerificationChip } from "@/components/story/badges";
 import { StoryActions } from "@/components/story/story-actions";
 import { alsoReportedBy, storyBody } from "@/lib/api/labels";
@@ -9,20 +10,38 @@ function detectedAt(iso: string) {
   return new Date(iso).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 }
 
+/**
+ * One story on paper, on the bench.
+ *
+ * `actions` and `footer` are slots so that Saved can put its own controls on
+ * the same card instead of a second card drifting away from this one. Both
+ * default to nothing extra, so Today is untouched by their existence.
+ */
 export function StoryCardView({
   story,
   rank,
   lead,
+  actions,
+  footer,
 }: {
   story: Story;
   rank: number;
   lead: boolean;
+  /** Replaces the default Save/Share/Hide row. */
+  actions?: ReactNode;
+  /** Sits below the actions. Used for the reader's note and tags. */
+  footer?: ReactNode;
 }) {
   const body = storyBody(story);
   const others = alsoReportedBy(story);
 
   return (
-    <article className="flex items-stretch">
+    // data-story-id is how the browser-driven scripts know WHICH stories are
+    // on the page. They seed the reader's saved list from it rather than from
+    // a list of ids typed into the script, which would silently stop matching
+    // the day a fixture changed and leave every assertion measuring an empty
+    // screen.
+    <article data-story-id={story.id} className="flex items-stretch">
       {/* The rail carries the entry number. Importance is card SIZE, not a
           separate indicator — the design the owner approved shows the lead
           story larger rather than decorating it. */}
@@ -93,7 +112,12 @@ export function StoryCardView({
           <span>{story.readingMinutes} min</span>
         </div>
 
-        <StoryActions story={story} />
+        {actions ?? <StoryActions story={story} />}
+
+        {/* empty:hidden on the CONTAINER. An element is always truthy, so a
+            `footer` whose component returns null would still draw this div and
+            its top margin; the ternary cannot see that. */}
+        {footer ? <div className="mt-3 empty:hidden">{footer}</div> : null}
       </div>
     </article>
   );

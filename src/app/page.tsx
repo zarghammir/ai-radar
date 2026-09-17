@@ -4,17 +4,21 @@ import { EmptyState, PageShell } from "@/components/page-shell";
 import { LocalDate } from "@/components/local-date";
 import { briefSummary } from "@/lib/api/brief-summary";
 import { getBrief, USING_FIXTURES } from "@/lib/api/client";
+import { defaultBriefLength } from "@/lib/api/brief-length";
 import type { BriefLengthParam } from "@/lib/api/types";
 
 const LENGTHS: BriefLengthParam[] = ["5", "10", "all"];
 
-function parseLength(value: string | string[] | undefined): BriefLengthParam {
+/** Null when the reader has not chosen a length for this visit, so the caller
+ *  can fall back to the one they saved rather than to a constant. */
+function parseLength(value: string | string[] | undefined): BriefLengthParam | null {
   const first = Array.isArray(value) ? value[0] : value;
-  return LENGTHS.includes(first as BriefLengthParam) ? (first as BriefLengthParam) : "10";
+  return LENGTHS.includes(first as BriefLengthParam) ? (first as BriefLengthParam) : null;
 }
 
 export default async function TodayPage({ searchParams }: PageProps<"/">) {
-  const length = parseLength((await searchParams).length);
+  const chosen = parseLength((await searchParams).length);
+  const length = chosen ?? (await defaultBriefLength());
   const brief = await getBrief(length);
   const summary = briefSummary(brief);
 

@@ -1,10 +1,25 @@
 import type { Metadata } from "next";
 import { brand } from "@/config/brand";
 import { PageShell } from "@/components/page-shell";
+import { loadTopics } from "@/lib/api/catalogue-server";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { InstallPrompt } from "@/components/install-prompt";
+import { PreferenceSections } from "@/components/settings/preference-sections";
 
 export const metadata: Metadata = { title: "Settings" };
+
+/**
+ * Rendered per request, never prerendered.
+ *
+ * This page READS THE TOPIC CATALOGUE, which changes as the pipeline ingests.
+ * Without this Next prerenders it at build time: the subject list would be
+ * frozen at whatever the database held when the image was built, and on a
+ * build with no DATABASE_URL — which is how this project's CI builds — the
+ * read fails once and "the list of subjects could not be read" is baked into
+ * a static page forever. Nothing would look wrong; the page would simply
+ * always say that.
+ */
+export const dynamic = "force-dynamic";
 
 const GRADES = [
   { bars: 4, word: "Primary source", def: "The company, lab or author published it themselves." },
@@ -31,7 +46,9 @@ function Section({
   );
 }
 
-export default function SettingsPage() {
+export default async function SettingsPage() {
+  const topics = await loadTopics();
+
   return (
     <PageShell
       eyebrow={brand.name}
@@ -40,11 +57,25 @@ export default function SettingsPage() {
     >
       <InstallPrompt />
       <div className="flex flex-col gap-4">
+        <PreferenceSections topics={topics} />
+
         <Section
           title="Appearance"
           hint="System follows your device. The choice is remembered on this device only."
         >
           <ThemeToggle />
+        </Section>
+
+        <Section
+          title="Starting over"
+          hint="The three questions this app asks when it first opens. Nothing you have saved is touched by going through them again."
+        >
+          <a
+            href="/welcome"
+            className="focus-visible:ring-org border-faint-2 text-soft hover:bg-faint inline-block rounded-xs border px-3 py-1.5 text-[13px] font-semibold focus-visible:ring-2 focus-visible:outline-none"
+          >
+            Run the welcome again
+          </a>
         </Section>
 
         <Section
@@ -80,14 +111,14 @@ export default function SettingsPage() {
         </Section>
 
         <Section
-          title="Sources, brief and notifications"
-          hint="Not wired up yet. These land with the ingestion pipeline; this release is the shell, the theme and installability only."
+          title="Where stories come from"
+          hint="The list of sources is fixed for now. Turning one off needs an endpoint that does not exist yet, so the switches are not drawn rather than drawn dead."
         >
           {/* --soft and --faint-2, not --ash and --edge: this sits on paper,
               and bench colours on paper fail AA in dark. */}
           <p className="border-faint-2 text-soft border border-dashed p-4 text-[14px] leading-relaxed">
-            Choosing sources, setting the time your brief is ready, and picking how you hear about
-            it all arrive with the first working brief.
+            Every source the app reads is listed in the repository and each story names the one it
+            came from. Choosing which to follow arrives with the endpoint that can store the choice.
           </p>
         </Section>
       </div>

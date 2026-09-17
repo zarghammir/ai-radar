@@ -21,7 +21,39 @@ const require = createRequire(import.meta.url);
 const base = process.argv[2] || "http://127.0.0.1:3210";
 const AXE = readFileSync(require.resolve("axe-core/axe.min.js"), "utf8");
 
-const ROUTES = ["/", "/radar", "/research", "/releases", "/saved", "/settings"];
+const ROUTES = ["/", "/radar", "/research", "/releases", "/saved", "/settings", "/welcome"];
+
+/**
+ * The reader this audit drives: someone who has finished onboarding and has
+ * stories in their bin.
+ *
+ * Both halves matter. Without onboardedAt the first-run gate redirects EVERY
+ * route to /welcome, and the sweep would audit one page seven times while
+ * reporting seven routes — a gate measuring the same state over and over and
+ * agreeing with itself. Without the saved ids, /saved renders its empty state
+ * and the note editor, the tag chips and the card controls are never scanned
+ * at all, so their contrast and labelling would be unaudited while the run
+ * still said "0 violations".
+ *
+ * The ids are READ FROM THE RUNNING APP rather than typed here. A list typed
+ * into a script stops matching the day a fixture changes its id, and every
+ * seeded run then measures an empty screen while still reporting that it
+ * seeded three stories.
+ */
+const SEEDED_STORY_COUNT = 3;
+const MARKS_TEMPLATE = [
+  {
+    note: "Worth a second read before Friday.",
+    tags: ["ship", "agents"],
+    savedAt: "2026-09-15T09:00:00.000Z",
+  },
+  { note: null, tags: ["read-later"], savedAt: "2026-09-14T09:00:00.000Z" },
+  {
+    note: "The pricing table is the part that matters.",
+    tags: [],
+    savedAt: "2026-09-13T09:00:00.000Z",
+  },
+];
 /**
  * AUDIT_CONTROL=narrow squeezes the phone viewport until the six-tab bar MUST
  * clip. It exists so the bar gate can be seen going red: a gate that has only
@@ -41,9 +73,19 @@ const EXPECTED_TABS = 6;
 const THEMES = ["light", "dark"];
 
 import { launchBrowser, requireServer } from "./lib/browser.mjs";
+import { collectStoryIds } from "./lib/fixture-ids.mjs";
+import { markOnboardedOnServer } from "./lib/seed.mjs";
 
 await requireServer(base);
 const browser = await launchBrowser();
+// Onboarding, written where a LIVE build keeps it. The localStorage seeding in
+// each context covers fixture builds; this covers the other mode, which is the
+// one CI switches to when #65 lands. Neither is required to succeed.
+const onboardedOnServer = await markOnboardedOnServer(base);
+const SEEDED_SAVED_IDS = await collectStoryIds(browser, base, SEEDED_STORY_COUNT);
+const SEEDED_MARKS = Object.fromEntries(
+  SEEDED_SAVED_IDS.map((id, index) => [id, MARKS_TEMPLATE[index]]),
+);
 const report = {
   states: 0,
   serious: [],
@@ -51,6 +93,7 @@ const report = {
   overflow: [],
   nav: {},
   bottomBar: {},
+  seeded: {},
 };
 
 try {
@@ -63,11 +106,22 @@ try {
       const page = await context.newPage();
       // Pin the stored preference so the audit tests the explicit choice, not
       // whatever the OS happens to be set to.
-      await page.addInitScript((t) => {
-        try {
-          localStorage.setItem("ai-radar-theme", t);
-        } catch {}
-      }, theme);
+      await page.addInitScript(
+        ([t, ids, marks]) => {
+          try {
+            localStorage.setItem("ai-radar-theme", t);
+            // An onboarded reader with a full bin — see SEEDED_SAVED_IDS above
+            // for why an audit of the default empty state would prove less.
+            localStorage.setItem(
+              "ai-radar-fixture-preferences",
+              JSON.stringify({ onboardedAt: "2026-09-01T00:00:00.000Z", topicKeys: ["agents"] }),
+            );
+            localStorage.setItem("ai-radar-fixture-saved", JSON.stringify(ids));
+            localStorage.setItem("ai-radar-fixture-marks", JSON.stringify(marks));
+          } catch {}
+        },
+        [theme, SEEDED_SAVED_IDS, SEEDED_MARKS],
+      );
 
       for (const route of ROUTES) {
         await page.goto(base + route, { waitUntil: "networkidle" });
@@ -122,6 +176,22 @@ try {
         // Record the ABSENCE too: a state that contributes nothing silently is
         // how a gate ends up measuring an empty set and passing.
         report.bottomBar[`${size.name}/${theme}${route}`] = bar ?? { present: false };
+
+        /**
+         * The audit's OWN floor, route by route: a page that landed somewhere
+         * else, or a Saved screen that came up empty, scans clean while
+         * proving nothing. Recorded for every route so the absence is visible
+         * rather than inferred.
+         */
+        report.seeded[`${size.name}/${theme}${route}`] = await page.evaluate(() => ({
+          path: location.pathname,
+          savedState: document.querySelector("[data-screen-state]")?.dataset.screenState ?? null,
+          settingsState:
+            document.querySelector("[data-settings-state]")?.dataset.settingsState ?? null,
+          noteButtons: document.querySelectorAll(
+            "[data-screen-state='list'] textarea, [data-screen-state='list'] button",
+          ).length,
+        }));
 
         const nav = await page.evaluate(() => {
           const visible = (el) => {
@@ -189,6 +259,43 @@ const laptopStatesWithBar = Object.entries(report.bottomBar).filter(
 const expectedBarStates = ROUTES.length * THEMES.length;
 
 const floorFailures = [];
+
+/**
+ * THE SEEDING FLOOR. Everything below measures whatever was on the page; this
+ * asserts the right thing was. A first-run gate that redirected every route to
+ * /welcome, or a Saved screen that came up empty because the seed key changed
+ * name, would leave a sweep that scans clean and proves nothing — the shape of
+ * a gated suite agreeing perfectly with itself because it ran nothing.
+ */
+/**
+ * A floor on the seeding floor. The loop below iterates a map, and a map that
+ * came back EMPTY would satisfy every check in it without examining anything —
+ * the vacuous instrument, one level up from the thing it guards.
+ */
+const expectedSeedStates = ROUTES.length * THEMES.length * SIZES.length;
+if (Object.keys(report.seeded).length !== expectedSeedStates) {
+  floorFailures.push(
+    `recorded what ${Object.keys(report.seeded).length} states rendered, expected ${expectedSeedStates}`,
+  );
+}
+
+for (const [state, seen] of Object.entries(report.seeded)) {
+  const route = state.slice(state.indexOf("/", state.indexOf("/") + 1));
+  if (seen.path !== route) {
+    floorFailures.push(`${state}: asked for ${route} and ended up on ${seen.path}`);
+  }
+  if (route === "/saved" && seen.savedState !== "list") {
+    floorFailures.push(
+      `${state}: Saved is "${seen.savedState}", so its note, tag and card controls were never scanned`,
+    );
+  }
+  if (route === "/settings" && seen.settingsState !== "ready") {
+    floorFailures.push(
+      `${state}: Settings is "${seen.settingsState}", so none of its controls were scanned`,
+    );
+  }
+}
+
 if (phoneStates.length !== expectedBarStates) {
   floorFailures.push(`visited ${phoneStates.length} phone states, expected ${expectedBarStates}`);
 }
@@ -244,6 +351,41 @@ console.log(
           ? Math.min(...measuredBars.map((b) => b.shortestTapTarget))
           : null,
         sample: report.bottomBar["phone/dark/"] ?? null,
+      },
+      // Evidence that the sweep audited the screens it claims to have. Printed
+      // on SUCCESS as well as failure, so a future reader can see the
+      // instrument had something to measure rather than take it on trust.
+      seeding: {
+        // seed.mjs says of this value: "Returns whether it applied, so a
+        // caller can report it rather than assume it." This script computed it
+        // and discarded it — a value correct, connected to nothing, and
+        // invisible to the reader of a green run. That is the very shape the
+        // floor.mjs docstring was written about, one file over.
+        onboardedOnServer,
+        statesRecorded: Object.keys(report.seeded).length,
+        expected: expectedSeedStates,
+        landedElsewhere: Object.entries(report.seeded).filter(
+          ([state, seen]) => seen.path !== state.slice(state.indexOf("/", state.indexOf("/") + 1)),
+        ).length,
+        savedStates: [
+          ...new Set(
+            Object.entries(report.seeded)
+              .filter(([state]) => state.endsWith("/saved"))
+              .map(([, seen]) => seen.savedState),
+          ),
+        ],
+        settingsStates: [
+          ...new Set(
+            Object.entries(report.seeded)
+              .filter(([state]) => state.endsWith("/settings"))
+              .map(([, seen]) => seen.settingsState),
+          ),
+        ],
+        fewestControlsScannedOnSaved: Math.min(
+          ...Object.entries(report.seeded)
+            .filter(([state]) => state.endsWith("/saved"))
+            .map(([, seen]) => seen.noteButtons),
+        ),
       },
       navSpotCheck: {
         "phone/light/": report.nav["phone/light/"],

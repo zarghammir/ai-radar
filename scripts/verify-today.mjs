@@ -12,6 +12,8 @@
  * card), and the whole run would sweep clean while the page was blank.
  */
 import { launchBrowser, requireServer } from "./lib/browser.mjs";
+import { bailIfBroken, isFloorBail, sectionStart } from "./lib/floor.mjs";
+import { markOnboarded } from "./lib/seed.mjs";
 
 const base = process.argv[2] || process.env.VERIFY_URL || "http://127.0.0.1:3210";
 await requireServer(base);
@@ -22,6 +24,10 @@ const MIN_STORIES = 2;
 const out = {};
 const floor = [];
 const browser = await launchBrowser();
+// Whether the LIVE half of the seeding applied. markOnboarded writes both
+// sides in one call, so a context cannot end up half-seeded by a forgotten
+// line — which is exactly how verify-saved-settings was missed.
+let onboardedOnServer = false;
 
 const cards = (page) => page.locator("article h2 a");
 
@@ -29,6 +35,10 @@ try {
   /* ---- 1. the reading-length switch actually shortens the list ---------- */
   {
     const ctx = await browser.newContext({ viewport: { width: 390, height: 780 } });
+    // The first-run gate is in the root layout, so an unseeded context asking
+    // for Today is sent to /welcome and every locator below waits on a page
+    // that is not there.
+    onboardedOnServer = await markOnboarded(ctx, base);
     const page = await ctx.newPage();
 
     await page.goto(`${base}/?length=all`, { waitUntil: "networkidle" });
@@ -58,12 +68,21 @@ try {
   /* ---- 2. save toggles, and survives a reload -------------------------- */
   {
     const ctx = await browser.newContext({ viewport: { width: 390, height: 780 } });
+    // The first-run gate is in the root layout, so an unseeded context asking
+    // for Today is sent to /welcome and every locator below waits on a page
+    // that is not there.
+    onboardedOnServer = await markOnboarded(ctx, base);
+    const mark = sectionStart(floor);
     const page = await ctx.newPage();
     await page.goto(`${base}/?length=all`, { waitUntil: "networkidle" });
 
     const saveButtons = page.getByRole("button", { name: /^Save$/ });
     const before = await saveButtons.count();
     if (before < 1) floor.push("no Save button on the page; nothing to toggle");
+    // Before the click. With zero buttons the click throws a timeout and the
+    // line above never prints — the same ordering defect the reviewer found in
+    // verify-shell.mjs, one file over.
+    bailIfBroken(floor, mark);
 
     await saveButtons.first().click();
     await page.waitForTimeout(250);
@@ -86,12 +105,19 @@ try {
   /* ---- 3. hide removes the card, and it stays hidden ------------------- */
   {
     const ctx = await browser.newContext({ viewport: { width: 390, height: 780 } });
+    // The first-run gate is in the root layout, so an unseeded context asking
+    // for Today is sent to /welcome and every locator below waits on a page
+    // that is not there.
+    onboardedOnServer = await markOnboarded(ctx, base);
+    const mark = sectionStart(floor);
     const page = await ctx.newPage();
     await page.goto(`${base}/?length=all`, { waitUntil: "networkidle" });
 
     const before = await cards(page).count();
     if (before < MIN_STORIES)
       floor.push(`only ${before} stories before hiding; too few to prove removal`);
+    // Before the Hide click, for the same reason as the Save one above.
+    bailIfBroken(floor, mark);
     const firstTitle = before > 0 ? await cards(page).first().innerText() : null;
 
     await page
@@ -127,6 +153,7 @@ try {
           viewport: { width, height: 900 },
           colorScheme: theme,
         });
+        onboardedOnServer = await markOnboarded(ctx, base);
         const page = await ctx.newPage();
         await page.addInitScript((t) => {
           try {
@@ -147,10 +174,14 @@ try {
     }
     out.states = perState;
   }
+} catch (error) {
+  // A bail is a reported failure, not a crash — no stack trace over the floor.
+  if (!isFloorBail(error)) throw error;
 } finally {
   await browser.close();
 }
 
+out.onboardedOnServer = onboardedOnServer;
 out.floor = { passed: floor.length === 0, failures: floor, minStories: MIN_STORIES };
 console.log(JSON.stringify(out, null, 2));
 if (floor.length > 0) process.exit(1);
