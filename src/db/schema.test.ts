@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { getTableColumns } from "drizzle-orm";
+import { getTableColumns, is } from "drizzle-orm";
+import { PgTable } from "drizzle-orm/pg-core";
+import * as schema from "./schema";
 import { CONTENT_TYPES, VERIFICATION_LEVELS, rawItems, stories } from "./schema";
 
 /**
@@ -7,6 +9,19 @@ import { CONTENT_TYPES, VERIFICATION_LEVELS, rawItems, stories } from "./schema"
  * are answered independently. These tests fail if the two are ever merged,
  * renamed into one column, or allowed to share vocabulary.
  */
+/**
+ * The table count is floored here because docs/architecture.md states it, and a
+ * number in a document rots silently: nothing fails when a table is added, the
+ * sentence simply becomes wrong and stays wrong. Adding a table is fine — update
+ * both. What this refuses is the count drifting with nobody noticing.
+ */
+describe("the schema's shape is what the architecture document says", () => {
+  it("has the number of tables docs/architecture.md claims", () => {
+    const tables = Object.values(schema).filter((v) => is(v, PgTable));
+    expect(tables).toHaveLength(10);
+  });
+});
+
 describe("verification level and content type stay separate", () => {
   it("stories carry both as distinct columns", () => {
     const cols = getTableColumns(stories);

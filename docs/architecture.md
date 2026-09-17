@@ -7,6 +7,12 @@ counts are things you can check. Lines marked **Why** are reasons that are not
 visible in the code and come from the decisions behind it; they are the ones
 worth challenging if the code ever disagrees with them.
 
+A reason does not expire; a count does. So every number here is either **pinned
+by a test** or **phrased so ordinary work cannot falsify it**, and where a list
+would go stale this document names the directory instead of its contents. An
+earlier draft enumerated the modules in `src/api/`; one file arrived with the
+Today page and the sentence was false before it merged.
+
 ## The shape
 
 ```
@@ -64,9 +70,11 @@ A pass is `runIngest` then `rankAllStories`, in that order, in one call.
 
 ## The read path
 
-Thirteen route handlers live under `src/app/api/`. Twelve are the client API;
-the thirteenth is `internal/ingest`, which triggers a pass and is guarded by
-`INTERNAL_API_SECRET`.
+Every route handler lives under `src/app/api/`. All but one are the client API;
+the exception is `internal/ingest`, which triggers an ingestion pass and is
+guarded by `INTERNAL_API_SECRET`. At the time of writing that is twelve and one
+— **`npm run routes:check` prints the current pair**, so the number above is a
+convenience and the command is the source of truth.
 
 A handler is thin. The pattern, from `src/app/api/radar/route.ts`:
 
@@ -77,14 +85,22 @@ radarPage(...)               // src/api/radar.ts — the actual query
 handle() / json()            // src/api/http.ts — one response shape for every route
 ```
 
-`src/api/` holds the work: `brief`, `radar`, `stories`, `catalogue`, `reader`,
-plus `params` and `http`. Errors carry a machine-readable `code` and a human
-`message`; clients branch on the code.
+`src/api/` holds the work: one module per area of the product, plus two shared
+ones — `params.ts` turns a query string into typed values, `http.ts` defines the
+single response shape. Read the directory for the current set. Errors carry a
+machine-readable `code` and a human `message`; clients branch on the code.
 
-**The screens do not consume these yet.** `src/app/radar/page.tsx` imports
-components and nothing else — the pages are shells while the Today page is built.
-So the API is finished and exercised by tests before it has a caller, which is
-worth knowing before you conclude a route is dead.
+**No screen calls these route handlers.** Nothing under `src/app`, `src/components`
+or `src/lib` fetches `/api/…`; the Today page reads through `src/lib/api/client.ts`,
+which serves fixtures under an explicit `NEXT_PUBLIC_USE_FIXTURES` mode rather
+than a fallback. So the API is finished and exercised by its own tests before it
+has a caller — **which is worth knowing before you conclude a route is dead and
+delete it.**
+
+> **Why fixtures are a mode and not a fallback:** a client that tries the network
+> and quietly uses fixtures on a 404 cannot tell "this route does not exist yet"
+> from "this save failed", and would report a failed write as a success. The
+> reasoning is in `client.ts` and it is worth reading before changing it.
 
 ## Three things that look wrong and are load-bearing
 
@@ -124,7 +140,8 @@ exceptions list.
 
 ## Data model, in one paragraph
 
-Ten tables. `sources` is the catalogue; `raw_items` is one row per thing a source
+Ten tables — a count `src/db/schema.test.ts` now floors, so this sentence fails
+a test rather than rotting quietly. `sources` is the catalogue; `raw_items` is one row per thing a source
 produced; `stories` cluster items that are the same event; `topics` and
 `story_topics` tag them; `user_preferences`, `saved_items` and `read_state` are
 the single local user; `ingest_runs` is one row per source per pass, with counts
@@ -146,6 +163,14 @@ fails if they are ever merged.
 
 ## Not built yet
 
-The screens (`#13`, `#14`, `#15`, `#16`), AI summaries — `LLM_MAX_STORIES_PER_DAY`
-and `llm_usage` exist and nothing reads them, which `#35` owns — and an HTML
-listing adapter for sources with no feed (`#26`).
+Screens are landing week by week, so this document does not list which — the
+Phase 1 milestone does, and it stays current. The durable gaps:
+
+- **Nothing consumes the API yet.** The flip is `NEXT_PUBLIC_USE_FIXTURES=0`,
+  and it is the single change that turns the screens from a prototype into the
+  product.
+- **AI summaries do not exist.** `LLM_MAX_STORIES_PER_DAY` and `llm_usage` are
+  in the schema and nothing reads either; `#35` owns closing that before any
+  paid call ships.
+- **Sources with no usable feed cannot be added**, pending the HTML listing
+  adapter in `#26`.
