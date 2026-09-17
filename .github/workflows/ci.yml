@@ -178,21 +178,12 @@ jobs:
           npm run db:migrate
           npm run db:seed
 
-      # A production server, because that is what the scripts measure: the
-      # service worker, the theme-colour meta and the bundled CSS all behave
-      # differently under `next dev`.
-      - name: Start the production server
-        run: |
-          npx next start -p 3210 > /tmp/next-server.log 2>&1 &
-          echo $! > /tmp/next-server.pid
-          for i in $(seq 1 60); do
-            CODE="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3210/ || true)"
-            if [ "$CODE" = "200" ]; then echo "server answered 200 after ${i}s"; exit 0; fi
-            sleep 1
-          done
-          echo "the server never answered 200; last code was '${CODE:-none}'" >&2
-          cat /tmp/next-server.log >&2
-          exit 1
+      # CONTROL, THROWAWAY BRANCH, NEVER MERGE. The server is deliberately NOT
+      # started, and Chrome is left in place, so scripts/lib/browser.mjs exits 2
+      # from requireServer rather than from launchBrowser. #49 proved the
+      # no-browser cause; this proves the other one the job's message names.
+      - name: CONTROL — do not start the server
+        run: echo "no server on 127.0.0.1:3210, as intended"
 
       # Exit 2 from these scripts means THE INSTRUMENT COULD NOT RUN — no
       # browser, or nothing serving. That is a different state from "the checks
