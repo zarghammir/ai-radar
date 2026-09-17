@@ -107,11 +107,16 @@ single response shape. Read the directory for the current set. Errors carry a
 machine-readable `code` and a human `message`; clients branch on the code.
 
 **Screens do not call route handlers directly.** They go through
-`src/lib/api/client.ts`, and its `/api/…` calls are inert while
-`NEXT_PUBLIC_USE_FIXTURES` is on — the calls exist, and one variable activates
-them. So the API is finished and exercised by its own tests before it has a live
-caller, **which is worth knowing before you conclude a route is dead and delete
-it.**
+`src/lib/api/client.ts`, which reads the live API; fixtures are opt-in with
+`NEXT_PUBLIC_USE_FIXTURES=1`, for working on a screen without a database.
+
+**A SERVER component does not go through the client either.** A relative
+`/api/…` URL has no base on the server, so the request throws on every load —
+and a `catch` that falls back looks like an empty database rather than a broken
+one. Server-rendered screens call the same functions the route calls:
+`brief-server.ts` for Today, `brief-length.ts` and `catalogue-server.ts` for the
+preference and topic reads behind Today and Settings. **Read those three before
+adding a fourth; they are one convention, not three.**
 
 > **Why fixtures are a mode and not a fallback:** a client that tries the network
 > and quietly uses fixtures on a 404 cannot tell "this route does not exist yet"
@@ -190,9 +195,10 @@ fails if they are ever merged.
 Screens are landing week by week, so this document does not list which — the
 Phase 1 milestone does, and it stays current. The durable gaps:
 
-- **Nothing consumes the API yet.** The flip is `NEXT_PUBLIC_USE_FIXTURES=0`,
-  and it is the single change that turns the screens from a prototype into the
-  product.
+- **Three surfaces are still placeholders.** Radar, Research and Releases have
+  routes and design, and neither reads its data yet. Today, Saved and Settings
+  read the live API — that flip is done, and the sentence that used to sit here
+  saying nothing consumed the API was true until `#62`.
 - **AI summaries do not exist.** `LLM_MAX_STORIES_PER_DAY` and `llm_usage` are
   in the schema and nothing reads either; `#35` owns closing that before any
   paid call ships.

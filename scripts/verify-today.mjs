@@ -156,8 +156,19 @@ try {
    */
   {
     const ctx = await browser.newContext({ viewport: { width: 390, height: 780 } });
+    // This block was written BEFORE the first-run gate existed and arrived in
+    // this tree through the rebase onto it. Unseeded, it is sent to /welcome,
+    // there is no data-screen-state marker, and the floor below fires "the
+    // states cannot be told apart" — about a page that has no states because
+    // it is the wrong page. A rebase can import a pre-gate assumption into a
+    // post-gate tree, and neither the merge nor the type checker can see it.
+    onboardedOnServer = await markOnboarded(ctx, base);
+    const mark = sectionStart(floor);
     const page = await ctx.newPage();
     await page.goto(`${base}/?length=all`, { waitUntil: "networkidle" });
+    const landed = new URL(page.url()).pathname;
+    if (landed !== "/") floor.push(`the screen-state check asked for / and landed on ${landed}`);
+    bailIfBroken(floor, mark);
     const state = await page.getAttribute("[data-screen-state]", "data-screen-state");
     const storyCount = await cards(page).count();
     const text = (await page.locator("main").innerText()).toLowerCase();

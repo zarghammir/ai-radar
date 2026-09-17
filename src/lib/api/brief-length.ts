@@ -1,4 +1,7 @@
-import { getPreferences, USING_FIXTURES } from "@/lib/api/client";
+import { cookies } from "next/headers";
+import { getDb } from "@/db/client";
+import { getPreferences } from "@/api/reader";
+import { getPreferences as getPreferencesViaClient, USING_FIXTURES } from "@/lib/api/client";
 import { BRIEF_LENGTH_COOKIE } from "@/lib/api/fixture-store";
 import { asBriefLength } from "@/lib/api/preferences";
 import type { BriefLengthParam, Preferences } from "@/lib/api/types";
@@ -17,8 +20,10 @@ export const FALLBACK_BRIEF_LENGTH: BriefLengthParam = "10";
 /**
  * Reads preferences the way a SERVER component must.
  *
- * Against the real API it calls the same function the route calls, through a
- * dynamic import so no database code reaches a browser bundle. It does NOT
+ * Against the real API it calls the same function the route calls, the way
+ * brief-server.ts does — static imports, one fixture guard at the top, then the
+ * live path. Two modules solving one problem in two shapes is how they drift,
+ * so this follows the one that arrived with the live flip. It does NOT
  * fetch /api/preferences: a server component asking its own app for a relative
  * URL has no origin to resolve it against, so the request throws on every
  * load. Today already shipped that defect once, and it was invisible — the
@@ -34,14 +39,12 @@ async function readPreferences(): Promise<Preferences> {
     // see BRIEF_LENGTH_COOKIE in fixture-store.ts and issue #75. Everything
     // else still comes from the client-side defaults, because nothing else on
     // this page needs it.
-    const { cookies } = await import("next/headers");
     const jar = await cookies();
     const stored = jar.get(BRIEF_LENGTH_COOKIE)?.value;
-    const base = await getPreferences();
+    const base = await getPreferencesViaClient();
     return stored ? { ...base, briefLength: decodeURIComponent(stored) } : base;
   }
-  const [{ getDb }, reader] = await Promise.all([import("@/db/client"), import("@/api/reader")]);
-  return reader.getPreferences(getDb());
+  return getPreferences(getDb());
 }
 
 /**

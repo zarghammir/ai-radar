@@ -38,8 +38,11 @@ export default async function TodayPage({ searchParams }: PageProps<"/">) {
    * this catch the third state is an unhandled error and the reader gets the
    * framework's crash page instead of a screen anyone designed.
    */
+  // `brief` staying null IS the third state. There was a second `unreachable`
+  // flag here after the rebase, left over from the version of this screen that
+  // printed the driver's message; with that gone it recorded a fact nothing
+  // read. A clean line-merge can leave code that compiles and means nothing.
   let brief: Awaited<ReturnType<typeof loadBrief>> | null = null;
-  let unreachable = false;
   try {
     brief = await loadBrief(length);
   } catch (error) {
@@ -51,7 +54,6 @@ export default async function TodayPage({ searchParams }: PageProps<"/">) {
     // what broke. Every surface added in #16 answers a failed read the same
     // way, so this is now the app's rule rather than this page's habit.
     console.error("[today] could not load the brief", error);
-    unreachable = true;
   }
 
   if (!brief) {

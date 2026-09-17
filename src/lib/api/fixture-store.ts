@@ -102,9 +102,15 @@ export function localPreferences(): Preferences {
  *
  * Today resolves its brief length on the SERVER, and on fixtures the reader's
  * preferences live in localStorage, which the server cannot see — so without
- * this, choosing a length in Settings changes nothing about Today. That is the
- * only mode the owner can see this build in, so a feature that looks broken
- * there is a real cost.
+ * this, choosing a length in Settings changes nothing about Today.
+ *
+ * The REASON for it has changed and the mechanism has not. It was written when
+ * fixtures were the default and therefore the only mode anyone could see the
+ * app in; since #62 the app reads the live API by default and fixtures are
+ * opt-in, so this is no longer the path most readers take. It is still the
+ * right behaviour for the path they DO take when they take it: working on a
+ * screen without a database, where a Settings control that changes nothing
+ * would look broken rather than absent.
  *
  * IT CARRIES THE LENGTH AND NOTHING ELSE. Not the preferences object: that row
  * holds the reader's EMAIL ADDRESS, and a cookie is the wrong place for it.
@@ -113,8 +119,9 @@ export function localPreferences(): Preferences {
  * On the promise. "Self-hosted, nothing is sent anywhere" is about a THIRD
  * PARTY learning something. A cookie the app sets and the app's own server
  * reads adds no third party and nothing leaves this machine. Settings says so
- * in the reader's own words, and says it only here, because on a build with a
- * database there is no cookie and the sentence would be false.
+ * in the reader's own words, and says it ONLY on a fixture build, because a
+ * build with a database sets no cookie and the sentence would be false there —
+ * which, since #62, is the ordinary case rather than the exception.
  */
 export const BRIEF_LENGTH_COOKIE = "ai-radar-fixture-brief-length";
 const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
