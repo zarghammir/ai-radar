@@ -17,11 +17,18 @@ on:
 # and main@59a8714 was cancelled before a single job started — no verdict at
 # all, which is precisely what this comment used to promise could not happen.
 #
+# The condition is written as "not a pull request" rather than "is a push" on
+# purpose. Naming the event that GETS isolation means any event added later —
+# workflow_dispatch, merge_group — silently opts out of it: those runs would
+# share ci-<ref> with cancel-in-progress false, which is this same bug
+# reintroduced by an edit that never touches this line. Inverted, a new event
+# inherits isolation and has to be deliberately excluded to lose it.
+#
 # The cost is that two merges landing together both run instead of one. That is
 # the price of the guarantee, and a merge commit with no verdict is the thing
 # you cannot buy back later — you can re-run it, but only if someone notices.
 concurrency:
-  group: ci-${{ github.ref }}-${{ github.event_name == 'push' && github.sha || '' }}
+  group: ci-${{ github.ref }}-${{ github.event_name != 'pull_request' && github.sha || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
