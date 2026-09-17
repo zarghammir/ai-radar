@@ -1,4 +1,5 @@
 import { CONTENT_TYPES } from "@/db/schema";
+import { ApiError } from "@/api/http";
 import type { ContentType } from "@/lib/api/types";
 
 /**
@@ -68,3 +69,26 @@ export const VIEW_LABELS: Record<BriefView, { label: string; hint: string }> = {
     hint: "Adds the reporting around them: news, discussion, funding and policy.",
   },
 };
+
+/**
+ * The route's parser: an unrecognised value is REFUSED, never widened.
+ *
+ * This matches parseBriefLength, which throws VALIDATION_ERROR rather than
+ * falling back — and it matches the rule #105 sets for its own axis, that an
+ * unknown value must never silently open the front door. Refusing is the
+ * strictest form of that: nothing is opened at all.
+ *
+ * Absent is a different answer from unrecognised, and the two are deliberately
+ * not collapsed. No ?view= at all means the caller expressed no view, and the
+ * route answers what it answered before #102 — everything stored. A ?view=
+ * this build does not know is a caller asking for something specific that does
+ * not exist, and it gets told.
+ */
+export function parseViewOrThrow(raw: string | null, fallback: BriefView): BriefView {
+  if (raw === null) return fallback;
+  const parsed = parseView(raw);
+  if (!parsed) {
+    throw new ApiError("VALIDATION_ERROR", `view must be one of ${BRIEF_VIEWS.join(", ")}`);
+  }
+  return parsed;
+}

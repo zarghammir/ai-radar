@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { CONTENT_TYPES } from "@/db/schema";
-import { BRIEF_VIEWS, VIEW_OF, VIEW_LABELS, parseView, typesForView } from "@/lib/api/views";
+import {
+  BRIEF_VIEWS,
+  VIEW_OF,
+  VIEW_LABELS,
+  parseView,
+  parseViewOrThrow,
+  typesForView,
+} from "@/lib/api/views";
 
 describe("the two positions", () => {
   it("gives every content type a side", () => {
@@ -61,5 +68,38 @@ describe("the two positions", () => {
     }
     expect(parseView("built")).toBe("built");
     expect(parseView(["all"])).toBe("all");
+  });
+});
+
+describe("an unrecognised view never widens", () => {
+  it("is REFUSED by the route rather than falling back", () => {
+    // The first version of the route did `parseView(raw) ?? "all"`, so a typo
+    // returned everything stored — a value nobody asked for, opening the front
+    // door. parseBriefLength throws on a bad length rather than guessing, and
+    // this now matches it. #105 sets the same rule for its own axis.
+    for (const bad of ["everything", "ai-only", "BUILT", "", "1"]) {
+      expect(() => parseViewOrThrow(bad, "all"), `accepted ${JSON.stringify(bad)}`).toThrow();
+    }
+  });
+
+  it("tells ABSENT apart from unrecognised, because they are different answers", () => {
+    // No ?view= means the caller expressed no view, and the route answers what
+    // it answered before this existed. Collapsing the two would make a typo
+    // indistinguishable from silence — the absence-versus-failure shape, in a
+    // query parameter.
+    expect(parseViewOrThrow(null, "all")).toBe("all");
+    expect(parseViewOrThrow(null, "built")).toBe("built");
+    // And the positive beside it: a value it DOES know is honoured, so
+    // "everything throws" cannot be why the negatives above pass.
+    expect(parseViewOrThrow("built", "all")).toBe("built");
+    expect(parseViewOrThrow("all", "built")).toBe("all");
+  });
+
+  it("narrows rather than widens wherever it cannot throw", () => {
+    // The page cannot throw at a reader for a typo'd URL, so its parser answers
+    // null and the caller falls back. What must never happen on either path is
+    // an unknown value producing MORE than the reader asked for.
+    expect(parseView("everything")).toBeNull();
+    expect(parseView("ai-only")).toBeNull();
   });
 });
