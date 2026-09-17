@@ -211,7 +211,14 @@ describe("content-type coverage", () => {
     // The two adapters that declare a type per item; see src/sources/.
     const adapterDeclared: ContentType[] = ["PAPER", "DISCUSSION"];
     expect(sourceDefaults.length).toBe(SOURCE_SEEDS.length);
-    expect(SOURCE_SEEDS.length).toBeGreaterThanOrEqual(18);
+    // The corpus floor: without it, an emptied catalogue would satisfy the
+    // coverage assertion below with nothing in it. Moved 18 -> 17 when
+    // import-ai was dropped (#38), which is the second thing this number has
+    // had to track. It mirrors the catalogue size, so every future removal
+    // moves it again — a floor that expressed "a real catalogue" rather than
+    // "today's catalogue" would not. Left as a tracking number because it is
+    // this test's guard to retune, not mine.
+    expect(SOURCE_SEEDS.length).toBeGreaterThanOrEqual(17);
 
     const accounted = new Set<ContentType>([
       ...CLASSIFIABLE,
