@@ -29,7 +29,8 @@
     "verify:saved": "node scripts/verify-saved-settings.mjs",
     "worker": "tsx src/worker/main.ts",
     "worker:once": "tsx src/worker/main.ts --once",
-    "verify:today": "node scripts/verify-today.mjs"
+    "verify:today": "node scripts/verify-today.mjs",
+    "backfill:content-types": "tsx scripts/reclassify-content-types.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.126.0",

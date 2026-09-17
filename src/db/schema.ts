@@ -60,6 +60,16 @@ export const VERIFICATION_LEVELS = [
   "EMERGING",
   "UNVERIFIED",
 ] as const;
+/**
+ * Why an item carries the content type it does.
+ *
+ * Recorded rather than inferred. It used to be derivable — a stored type that
+ * differed from its source default could only have come from an adapter —
+ * but the classifier moves types too, so that comparison now conflates the
+ * classifier's own output with an adapter's declaration, and a source default
+ * edited in the catalogue changes the answer retroactively.
+ */
+export const CONTENT_TYPE_SOURCES = ["adapter", "classifier", "default"] as const;
 export const ITEM_ROLES = ["primary", "report", "discussion"] as const;
 export const NOTIFICATION_CHANNELS = ["push", "email", "none"] as const;
 export const BRIEF_LENGTHS = ["5", "10", "all"] as const;
@@ -67,6 +77,7 @@ export const BRIEF_LENGTHS = ["5", "10", "all"] as const;
 export type SourceTier = (typeof SOURCE_TIERS)[number];
 export type SourceKind = (typeof SOURCE_KINDS)[number];
 export type ContentType = (typeof CONTENT_TYPES)[number];
+export type ContentTypeSource = (typeof CONTENT_TYPE_SOURCES)[number];
 export type VerificationLevel = (typeof VERIFICATION_LEVELS)[number];
 export type ItemRole = (typeof ITEM_ROLES)[number];
 export type NotificationChannel = (typeof NOTIFICATION_CHANNELS)[number];
@@ -75,6 +86,7 @@ export type BriefLength = (typeof BRIEF_LENGTHS)[number];
 export const sourceTierEnum = pgEnum("source_tier", SOURCE_TIERS);
 export const sourceKindEnum = pgEnum("source_kind", SOURCE_KINDS);
 export const contentTypeEnum = pgEnum("content_type", CONTENT_TYPES);
+export const contentTypeSourceEnum = pgEnum("content_type_source", CONTENT_TYPE_SOURCES);
 export const verificationEnum = pgEnum("verification_level", VERIFICATION_LEVELS);
 export const itemRoleEnum = pgEnum("item_role", ITEM_ROLES);
 
@@ -120,6 +132,8 @@ export const rawItems = pgTable(
     publishedAt: timestamp("published_at", { withTimezone: true }).notNull(),
     fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
     contentType: contentTypeEnum("content_type").notNull(),
+    /** Where contentType came from; see CONTENT_TYPE_SOURCES. */
+    contentTypeSource: contentTypeSourceEnum("content_type_source").notNull().default("default"),
     /** Anything adapter-specific: HN points, arXiv authors/categories, stars … */
     metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
     /**

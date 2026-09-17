@@ -218,3 +218,48 @@ describe("cross-source identity", () => {
     expect(a!.excerpt!.endsWith("…")).toBe(true);
   });
 });
+
+describe("normalizeItem content-type precedence", () => {
+  const labBlog = { id: 1, key: "google-deepmind", defaultContentType: "RESEARCH" as const };
+  const newsroom = { id: 2, key: "verge-ai", defaultContentType: "NEWS" as const };
+  const base = {
+    externalId: "c1",
+    url: "https://example.com/a",
+    publishedAt: new Date("2026-09-16T10:00:00Z"),
+  };
+
+  it("prefers what the adapter declared over the title", () => {
+    // arXiv and Hacker News read the type from the feed. An inference from
+    // wording must not overrule a fact from the source.
+    const item = { ...base, title: "Introducing Gemini 3.7 Flash", contentType: "PAPER" as const };
+    expect(normalizeItem(item, labBlog)?.contentType).toBe("PAPER");
+  });
+
+  it("prefers the title over the source default", () => {
+    const item = { ...base, title: "Introducing Gemini 3.7 Flash" };
+    // The point of #41: the four RESEARCH-default sources are lab blogs, which
+    // is exactly where model launches are published.
+    expect(normalizeItem(item, labBlog)?.contentType).toBe("MODEL");
+  });
+
+  it("falls back to the source default when the title says nothing", () => {
+    const quiet = { ...base, title: "Helping older adults use AI in everyday life" };
+    expect(normalizeItem(quiet, labBlog)?.contentType).toBe("RESEARCH");
+    expect(normalizeItem(quiet, newsroom)?.contentType).toBe("NEWS");
+  });
+
+  it("records where the type came from, on the row", () => {
+    // The backfill reads this rather than inferring it from a comparison.
+    const quiet = { ...base, title: "Helping older adults use AI in everyday life" };
+    expect(normalizeItem(quiet, labBlog)?.contentTypeSource).toBe("default");
+    expect(
+      normalizeItem({ ...base, title: "Introducing Gemini 3.7 Flash" }, labBlog)?.contentTypeSource,
+    ).toBe("classifier");
+    expect(
+      normalizeItem(
+        { ...base, title: "Introducing Gemini 3.7 Flash", contentType: "PAPER" },
+        labBlog,
+      )?.contentTypeSource,
+    ).toBe("adapter");
+  });
+});

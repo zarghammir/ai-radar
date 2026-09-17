@@ -38,7 +38,15 @@ function bestEngagement(
   return best;
 }
 
-async function rankOne(
+/**
+ * Score one story inside a transaction the caller already owns.
+ *
+ * Exported for the content-type backfill, which must retype, refresh and
+ * re-score a story in a single atomic step: committing the new badge and
+ * re-scoring afterwards leaves a window where a story wears a type its score
+ * was not computed from.
+ */
+export async function rankOneInTransaction(
   tx: Tx,
   storyId: number,
   userTopicKeys: string[],
@@ -125,7 +133,7 @@ export async function rankAllStories(db: Db, now: Date = new Date()): Promise<Ra
   for (const { id } of due) {
     // due.length would report a story that vanished before its transaction as
     // scored. This number is a report of work done, and #5 will report it.
-    if (await db.transaction((tx) => rankOne(tx, id, userTopicKeys, now))) ranked++;
+    if (await db.transaction((tx) => rankOneInTransaction(tx, id, userTopicKeys, now))) ranked++;
   }
   return { ranked };
 }

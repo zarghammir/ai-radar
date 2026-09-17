@@ -15,6 +15,13 @@
       "when": 1789589594536,
       "tag": "0001_early_warpath",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789609526195,
+      "tag": "0002_slimy_fallen_one",
+      "breakpoints": true
     }
   ]
 }
