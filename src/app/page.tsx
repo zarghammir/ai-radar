@@ -59,6 +59,7 @@ export default async function TodayPage({ searchParams }: PageProps<"/">) {
         eyebrow={<LocalDate />}
         title="Good morning"
         summary={<span>Your stories are out of reach</span>}
+        state="unreachable"
       >
         <EmptyState
           title="Cannot reach your stories"
@@ -96,6 +97,7 @@ export default async function TodayPage({ searchParams }: PageProps<"/">) {
         )
       }
       controls={<ReadingMode current={length} />}
+      state={brief.count === 0 ? "quiet" : "brief"}
     >
       {brief.count === 0 ? (
         <EmptyState

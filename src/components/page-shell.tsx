@@ -10,6 +10,7 @@ export function PageShell({
   title,
   summary,
   controls,
+  state,
   children,
 }: {
   eyebrow: ReactNode;
@@ -18,10 +19,22 @@ export function PageShell({
   summary?: ReactNode;
   /** Optional controls under the heading, e.g. the reading-length switch. */
   controls?: ReactNode;
+  /**
+   * Which state this screen is in, exposed to the DOM as `data-screen-state`.
+   *
+   * It exists so a check can assert WHICH state it is looking at rather than
+   * inferring one from an absence. "No stories rendered" is true of a quiet
+   * morning AND of a database we cannot reach, and those are different facts —
+   * an assertion that cannot tell them apart passes for the broken one.
+   */
+  state?: string;
   children: ReactNode;
 }) {
   return (
-    <div className="relative mx-auto w-full max-w-5xl px-4 py-6 pl-10 lg:px-10 lg:py-10 lg:pl-16">
+    <div
+      data-screen-state={state}
+      className="relative mx-auto w-full max-w-5xl px-4 py-6 pl-10 lg:px-10 lg:py-10 lg:pl-16"
+    >
       {/* The rail. Decorative, so it is hidden from assistive technology. */}
       <span
         aria-hidden
