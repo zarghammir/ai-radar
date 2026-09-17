@@ -2,11 +2,15 @@ import { and, desc, gte } from "drizzle-orm";
 import type { Db } from "@/db/client";
 import { stories } from "@/db/schema";
 import { ApiError } from "./http";
+import type { BriefLength } from "./reading-budget";
+import { BRIEF_LENGTHS } from "./reading-budget";
 import { notHidden } from "./radar";
 import { buildCards, type StoryCard } from "./stories";
 
-export const BRIEF_LENGTHS = ["5", "10", "all"] as const;
-export type BriefLength = (typeof BRIEF_LENGTHS)[number];
+// One implementation, in a module with no database imports so the fixtures can
+// use the same rule rather than a copy that drifts. See reading-budget.ts.
+export { BRIEF_LENGTHS, takeWithinReadingTime } from "./reading-budget";
+export type { BriefLength } from "./reading-budget";
 
 export interface BriefWindow {
   from: Date;
@@ -131,26 +135,6 @@ export function parseBriefLength(raw: string | null, fallback: string): BriefLen
     throw new ApiError("VALIDATION_ERROR", `length must be one of ${BRIEF_LENGTHS.join(", ")}`);
   }
   return value as BriefLength;
-}
-
-/**
- * Take stories until the reading time would exceed the target.
- *
- * A time budget, not a story count: "five-minute mode" means five minutes of
- * reading. Always returns at least one story when there are any, because a
- * brief that hides a long story rather than showing one is not a brief.
- */
-export function takeWithinReadingTime(stories: StoryCard[], length: BriefLength): StoryCard[] {
-  if (length === "all") return stories;
-  const target = Number(length);
-  const taken: StoryCard[] = [];
-  let minutes = 0;
-  for (const story of stories) {
-    if (taken.length > 0 && minutes + story.readingMinutes > target) break;
-    taken.push(story);
-    minutes += story.readingMinutes;
-  }
-  return taken;
 }
 
 /** Most stories a brief will ever consider, before the reading budget trims it. */

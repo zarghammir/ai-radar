@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { briefSummary } from "@/lib/api/brief-summary";
-import { fixtureBrief, fixtureEmptyBrief, selectWithinBudget } from "@/lib/api/fixtures";
+import { fixtureBrief, fixtureEmptyBrief } from "@/lib/api/fixtures";
+import { takeWithinReadingTime } from "@/api/reading-budget";
 import type { BriefResponse, StoryCard } from "@/lib/api/types";
 
 function briefOf(stories: Partial<StoryCard>[], length: BriefResponse["length"]): BriefResponse {
@@ -72,28 +73,42 @@ describe("briefSummary", () => {
      * which is the thing the copy actually depends on.
      */
     it("holds exactly one story when the top story alone exceeds the budget", () => {
-      const long = { ...fixtureBrief("all").stories[0], id: 9001, score: 99, readingMinutes: 6 };
+      const base = fixtureBrief("all").stories;
+      const long = { ...base[0], id: 9001, score: 99, readingMinutes: 6 };
       const others = [
-        { ...fixtureBrief("all").stories[1], id: 9002, score: 50, readingMinutes: 1 },
-        { ...fixtureBrief("all").stories[2], id: 9003, score: 40, readingMinutes: 1 },
+        { ...base[1], id: 9002, score: 50, readingMinutes: 1 },
+        { ...base[2], id: 9003, score: 40, readingMinutes: 1 },
       ];
-      const chosen = selectWithinBudget([long, ...others], 5);
-      // The assertion runs unconditionally: no `if` can skip it.
+      const chosen = takeWithinReadingTime([long, ...others], "5");
+      // Unconditional: no `if` can skip these.
       expect(chosen).toHaveLength(1);
       expect(chosen[0].id).toBe(9001);
       expect(chosen.reduce((t, s) => t + s.readingMinutes, 0)).toBeGreaterThan(5);
     });
 
-    it("never lets a second story push the selection over the budget", () => {
+    /**
+     * STOPS at the first story that will not fit; it does not keep looking for
+     * a smaller one to squeeze in. docs/api.md: "until the cumulative reading
+     * time would exceed the target".
+     *
+     * An earlier version of this test asserted [9101, 9103] — the first story,
+     * then SKIPPING the one that did not fit and taking a later one that did.
+     * That was greedy-fill, which is what the fixtures' own copy of the rule
+     * did, and this test pinned the divergence in place while claiming to
+     * verify it. The two rules agreed only because every fixture story is one
+     * minute. This input is the smallest one that tells them apart.
+     */
+    it("stops at the first story that does not fit, rather than filling the gap", () => {
+      const base = fixtureBrief("all").stories;
       const stories = [
-        { ...fixtureBrief("all").stories[0], id: 9101, score: 99, readingMinutes: 4 },
-        { ...fixtureBrief("all").stories[1], id: 9102, score: 80, readingMinutes: 4 },
-        { ...fixtureBrief("all").stories[2], id: 9103, score: 70, readingMinutes: 1 },
+        { ...base[0], id: 9101, score: 99, readingMinutes: 4 },
+        { ...base[1], id: 9102, score: 80, readingMinutes: 4 },
+        { ...base[2], id: 9103, score: 70, readingMinutes: 1 },
       ];
-      // 4 fits, 4+4 would exceed 5 so it is skipped, 4+1 fits.
-      const chosen = selectWithinBudget(stories, 5);
-      expect(chosen.map((s) => s.id)).toEqual([9101, 9103]);
-      expect(chosen.reduce((t, s) => t + s.readingMinutes, 0)).toBeLessThanOrEqual(5);
+      const chosen = takeWithinReadingTime(stories, "5");
+      expect(chosen.map((s) => s.id)).toEqual([9101]);
+      // Greedy-fill would have produced this, and did until it was caught.
+      expect(chosen.map((s) => s.id)).not.toEqual([9101, 9103]);
     });
   });
 
