@@ -6,6 +6,7 @@ import {
   fixtureQuietBrief,
 } from "@/lib/api/fixtures";
 import { alsoReportedBy, storyBody } from "@/lib/api/labels";
+import { deriveVerification } from "@/pipeline/clustering/verification";
 
 /**
  * A floor on the fixtures. Without it someone tidies away the uncomfortable
@@ -110,5 +111,39 @@ describe("the thin days", () => {
     expect(empty.readingMinutes).toBe(0);
     // The window still exists on an empty day; the reader is told when it ran.
     expect(empty.window.briefTime).toBeTruthy();
+  });
+});
+
+/**
+ * The fixtures must describe states the product can actually reach. Without
+ * this, a fixture can assert a combination the pipeline would never produce —
+ * and the screens, the browser job and the screenshots would all be built
+ * against a story that cannot exist. Two of these fixtures were exactly that
+ * until this test was written.
+ */
+describe("fixtures are states the pipeline can actually produce", () => {
+  it("derives each fixture's verification from its own sources", () => {
+    const mismatches = FIXTURE_STORIES.filter((s) => {
+      const derived = deriveVerification(
+        s.sources.map((src) => ({ sourceKey: src.key, sourceName: src.name, tier: src.tier })),
+      );
+      return derived.level !== s.verification;
+    }).map((s) => `${s.slug}: fixture says ${s.verification}`);
+    expect(mismatches).toEqual([]);
+  });
+
+  it("keeps sourceCount equal to the number of distinct sources", () => {
+    for (const s of FIXTURE_STORIES) {
+      expect(s.sourceCount, s.slug).toBe(new Set(s.sources.map((x) => x.key)).size);
+    }
+  });
+
+  it("names the primary source among the story's own sources", () => {
+    for (const s of FIXTURE_STORIES) {
+      expect(
+        s.sources.map((x) => x.key),
+        s.slug,
+      ).toContain(s.primarySource.key);
+    }
   });
 });

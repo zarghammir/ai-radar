@@ -73,6 +73,12 @@ const importAi: SourceRef = {
   tier: "ANALYST",
   homepage: "https://importai.substack.com",
 };
+const hackernews: SourceRef = {
+  key: "hackernews",
+  name: "Hacker News",
+  tier: "COMMUNITY",
+  homepage: "https://news.ycombinator.com",
+};
 const huggingface: SourceRef = {
   key: "huggingface-papers",
   name: "Hugging Face",
@@ -152,8 +158,10 @@ export const FIXTURE_STORIES: StoryCard[] = [
       "Siri AI arrived in beta alongside iOS 27, running on-device and on Private Cloud Compute, with Apple Foundation Models built together with Google under a multi-year deal.",
     url: "https://www.apple.com/newsroom/2026/09/siri-ai-a-profoundly-more-capable-and-personal-assistant-is-here/",
     contentType: "RELEASE",
-    verification: "CORROBORATED",
-    verificationNote: "Apple Newsroom, with three major outlets reporting within the hour.",
+    // A PRIMARY source outranks any amount of pickup: deriveVerification
+    // returns PRIMARY_SOURCE the moment the originator published it.
+    verification: "PRIMARY_SOURCE",
+    verificationNote: "Published directly by Apple Newsroom and picked up by 3 other sources.",
     sourceCount: 4,
     sources: [apple, forbes, fortune, npr],
     primarySource: apple,
@@ -199,16 +207,23 @@ export const FIXTURE_STORIES: StoryCard[] = [
     excerpt:
       "Reports say OpenAI is considering a new private round. Outlets disagree by $300 billion on the figure and the sourcing is anonymous throughout.",
     url: "https://www.bloomberg.com/news/articles/2026-09-15/openai-weighing-funding-round-at-over-1-2-trillion-valuation",
-    contentType: "BUSINESS",
+    // NEWS, not BUSINESS: content type comes from the SOURCE's default and no
+    // seeded source emits BUSINESS, so a fixture asserting it would be a state
+    // the product cannot currently reach.
+    contentType: "NEWS",
     // ALLOWED ON TODAY, labelled, ranked low, NOT dropped. The owner ruled this
     // directly: a leak can be the most important thing that happened, and the
     // chip is what makes it safe to show.
+    //
+    // It reaches UNVERIFIED the only way anything does: ONE source that is
+    // neither a newsroom nor an analyst. An earlier version listed four
+    // newsrooms, which deriveVerification grades CORROBORATED — the story
+    // demonstrating the owner's ruling was a state the product cannot produce.
     verification: "UNVERIFIED",
-    verificationNote:
-      "No named source and no company statement; the outlets disagree on the number.",
-    sourceCount: 4,
-    sources: [bloomberg, fortune, forbes, npr],
-    primarySource: bloomberg,
+    verificationNote: "Single community source: Hacker News.",
+    sourceCount: 1,
+    sources: [hackernews],
+    primarySource: hackernews,
     topics: [
       { key: "funding", name: "Funding", group: "domain" },
       { key: "openai", name: "OpenAI", group: "company" },
@@ -226,7 +241,10 @@ export const FIXTURE_STORIES: StoryCard[] = [
     excerpt:
       "Spokesperson Guo Jiakun called the chip-restriction argument fearmongering, days before US-China talks in Washington.",
     url: "https://www.npr.org/2026/09/14/nx-s1-5968456/china-hits-back-ai-development",
-    contentType: "REGULATION",
+    // NEWS for the same reason: nothing can emit REGULATION today. Its badge
+    // ("Policy") is covered by the label test rather than by a fixture
+    // pretending the pipeline can produce it.
+    contentType: "NEWS",
     verification: "CORROBORATED",
     verificationNote: "Reported independently by several outlets; no primary transcript published.",
     sourceCount: 3,
