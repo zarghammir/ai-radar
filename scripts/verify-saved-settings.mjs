@@ -23,6 +23,7 @@
  */
 import { launchBrowser, requireServer } from "./lib/browser.mjs";
 import { collectStoryIds } from "./lib/fixture-ids.mjs";
+import { bailIfBroken, isFloorBail } from "./lib/floor.mjs";
 
 const base = process.argv[2] || process.env.VERIFY_URL || "http://127.0.0.1:3210";
 await requireServer(base);
@@ -40,9 +41,6 @@ const MARKS_TEMPLATE = [
   { note: null, tags: ["read-later"], savedAt: "2026-09-14T09:00:00.000Z" },
   { note: null, tags: [], savedAt: "2026-09-13T09:00:00.000Z" },
 ];
-
-/** Thrown to leave a block early without pretending the rest of it ran. */
-class SkipRest extends Error {}
 
 const out = { control: CONTROL };
 const floor = [];
@@ -237,7 +235,7 @@ try {
     if (!ready) {
       floor.push('Settings never reached "ready", so none of its writes were exercised');
       await context.close();
-      throw new SkipRest();
+      bailIfBroken(floor);
     }
 
     await page.getByRole("radio", { name: /Five minutes/i }).check();
@@ -284,7 +282,7 @@ try {
     await context.close();
   }
 } catch (error) {
-  if (!(error instanceof SkipRest)) throw error;
+  if (!isFloorBail(error)) throw error;
 } finally {
   await browser.close();
 }

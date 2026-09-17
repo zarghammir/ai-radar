@@ -19,12 +19,17 @@
 export async function collectStoryIds(browser, base, howMany) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   try {
+    // Write-once, like markOnboarded in ./seed.mjs. addInitScript runs on
+    // EVERY navigation, so an unguarded write puts the starting preferences
+    // back over whatever the page has stored. It is harmless HERE — this
+    // context does one goto and is closed in a finally — but it is the
+    // identical pattern the sibling fixed, and the day someone adds a reload
+    // it goes quiet in exactly the same way.
     await context.addInitScript(() => {
       try {
-        localStorage.setItem(
-          "ai-radar-fixture-preferences",
-          JSON.stringify({ onboardedAt: "2026-09-01T00:00:00.000Z" }),
-        );
+        const key = "ai-radar-fixture-preferences";
+        if (localStorage.getItem(key) !== null) return;
+        localStorage.setItem(key, JSON.stringify({ onboardedAt: "2026-09-01T00:00:00.000Z" }));
       } catch {}
     });
     const page = await context.newPage();

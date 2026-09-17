@@ -181,8 +181,15 @@ function CardButton({
         // disabled but does not LOOK disabled is worse than a hidden one: the
         // reader clicks it, nothing happens, and the sentence explaining why
         // is never the thing they blame. Legible, and visibly inert.
+        // `font-normal` is the SECOND channel. The review judged the dashed
+        // border correct — it is this design's existing word for "not built
+        // yet" — but noted the difference is carried almost entirely by border
+        // STYLE, which is subtle on a phone and for a low-vision reader.
+        // Weight is already part of the same vocabulary here: explanatory text
+        // is light, actionable text is semibold. So the inert control now
+        // differs in two ways at once without inventing a third signal.
         disabled
-          ? "border-faint-2 text-meta cursor-not-allowed border-dashed hover:bg-transparent"
+          ? "border-faint-2 text-meta cursor-not-allowed border-dashed font-normal hover:bg-transparent"
           : null,
       )}
       {...rest}

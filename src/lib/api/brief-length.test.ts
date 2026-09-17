@@ -152,6 +152,40 @@ describe("the fixture brief-length cookie", () => {
     }
   });
 
+  it("survives a cookie whose value cannot even be DECODED, by the other branch", async () => {
+    // The class of input the test did not reach. The four above all RETURN
+    // something wrong and land in asBriefLength's allowlist. Malformed
+    // percent-encoding makes decodeURIComponent THROW, which unwinds out of
+    // readPreferences into defaultBriefLength's catch without asBriefLength
+    // ever running.
+    //
+    // ASSERTING THE RETURN VALUE ALONE WOULD BE VACUOUS: both branches answer
+    // "10", so the result is constant across the difference and the test would
+    // pass whether or not the throwing path existed. The branches are told
+    // apart by the thing only one of them does — the catch logs. So a
+    // malformed value must log, and a merely unrecognised one must not.
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      clientGetPreferences.mockResolvedValue(preferences("all"));
+
+      for (const malformed of ["%", "%E0%A4", "%zz", "5%"]) {
+        logged.mockClear();
+        cookieValue = malformed;
+        await expect(defaultBriefLength(), `on ${malformed}`).resolves.toBe(FALLBACK_BRIEF_LENGTH);
+        expect(logged, `${malformed} should have thrown into the catch`).toHaveBeenCalledTimes(1);
+      }
+
+      // The control, in the same test: a value that is merely unrecognised
+      // reaches the allowlist, answers the SAME "10", and logs nothing.
+      logged.mockClear();
+      cookieValue = "42";
+      await expect(defaultBriefLength()).resolves.toBe(FALLBACK_BRIEF_LENGTH);
+      expect(logged, "an unrecognised value must not go through the catch").not.toHaveBeenCalled();
+    } finally {
+      logged.mockRestore();
+    }
+  });
+
   it("IS NOT READ AT ALL against a real database", async () => {
     // The cookie exists for fixture mode and must not leak into a build that
     // has a database to ask. Positive beside negative: the reader WAS called.

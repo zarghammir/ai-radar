@@ -12,7 +12,8 @@
  * card), and the whole run would sweep clean while the page was blank.
  */
 import { launchBrowser, requireServer } from "./lib/browser.mjs";
-import { markOnboarded } from "./lib/seed.mjs";
+import { bailIfBroken, isFloorBail } from "./lib/floor.mjs";
+import { markOnboarded, markOnboardedOnServer } from "./lib/seed.mjs";
 
 const base = process.argv[2] || process.env.VERIFY_URL || "http://127.0.0.1:3210";
 await requireServer(base);
@@ -23,6 +24,10 @@ const MIN_STORIES = 2;
 const out = {};
 const floor = [];
 const browser = await launchBrowser();
+// Onboarding, written where a LIVE build keeps it. The localStorage seeding in
+// each context covers fixture builds; this covers the other mode, which is the
+// one CI switches to when #65 lands. Neither is required to succeed.
+const onboardedOnServer = await markOnboardedOnServer(base);
 
 const cards = (page) => page.locator("article h2 a");
 
@@ -73,6 +78,10 @@ try {
     const saveButtons = page.getByRole("button", { name: /^Save$/ });
     const before = await saveButtons.count();
     if (before < 1) floor.push("no Save button on the page; nothing to toggle");
+    // Before the click. With zero buttons the click throws a timeout and the
+    // line above never prints — the same ordering defect the reviewer found in
+    // verify-shell.mjs, one file over.
+    bailIfBroken(floor);
 
     await saveButtons.first().click();
     await page.waitForTimeout(250);
@@ -105,6 +114,8 @@ try {
     const before = await cards(page).count();
     if (before < MIN_STORIES)
       floor.push(`only ${before} stories before hiding; too few to prove removal`);
+    // Before the Hide click, for the same reason as the Save one above.
+    bailIfBroken(floor);
     const firstTitle = before > 0 ? await cards(page).first().innerText() : null;
 
     await page
@@ -161,10 +172,14 @@ try {
     }
     out.states = perState;
   }
+} catch (error) {
+  // A bail is a reported failure, not a crash — no stack trace over the floor.
+  if (!isFloorBail(error)) throw error;
 } finally {
   await browser.close();
 }
 
+out.onboardedOnServer = onboardedOnServer;
 out.floor = { passed: floor.length === 0, failures: floor, minStories: MIN_STORIES };
 console.log(JSON.stringify(out, null, 2));
 if (floor.length > 0) process.exit(1);
