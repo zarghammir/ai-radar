@@ -90,6 +90,13 @@ function localDateParts(at: Date, timeZone: string): { year: number; month: numb
  * was delivered, so reloading does not use one up, and two requests an hour
  * apart describe the same window.
  */
+/**
+ * What a brief runs to when the caller expresses no preference. Since #94 the
+ * reader's own length is in their browser, so there is no stored value for a
+ * route to fall back to — this is the product's default, not a person's.
+ */
+export const DEFAULT_BRIEF_LENGTH = "10" as const;
+
 export function briefWindow(now: Date, briefTime: string, timezone: string): BriefWindow {
   const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(briefTime);
   if (!match) {

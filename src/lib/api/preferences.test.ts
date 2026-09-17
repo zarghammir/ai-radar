@@ -40,11 +40,24 @@ describe("preference labels", () => {
     expect(NOTIFICATION_OPTIONS.map((o) => o.value)).toEqual([...NOTIFICATION_CHANNELS]);
   });
 
-  it("says exactly one channel needs an address", () => {
-    // If this ever becomes zero the email field stops appearing at all, and if
-    // it becomes every channel the field appears where it is meaningless.
-    const needing = NOTIFICATION_OPTIONS.filter((o) => o.needsEmail);
-    expect(needing.map((o) => o.value)).toEqual(["email"]);
+  it("asks for no address at all, and the route REFUSES one", async () => {
+    // #94 removed the email field: it stored an address for a feature that
+    // does not exist (#72), and on a shared instance that is one person's
+    // personal data served to the next person who opens Settings.
+    //
+    // Asserting the label no longer mentions an address would only prove the
+    // UI stopped asking. This drives the REAL schema, which is .strict(), so a
+    // client that still sends one is rejected rather than silently ignored —
+    // the difference between the field being gone and being hidden.
+    for (const option of NOTIFICATION_OPTIONS) {
+      expect(option, `${option.value} still declares an address flag`).not.toHaveProperty(
+        "needsEmail",
+      );
+    }
+    const { preferencesPatchSchema } = await import("@/api/reader");
+    expect(preferencesPatchSchema.safeParse({ email: "reader@example.com" }).success).toBe(false);
+    // The positive beside the negative: the schema still accepts what it should.
+    expect(preferencesPatchSchema.safeParse({ briefTime: "07:30" }).success).toBe(true);
   });
 });
 

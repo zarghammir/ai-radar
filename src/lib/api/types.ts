@@ -126,7 +126,6 @@ export interface Preferences {
   timezone: string;
   briefLength: string;
   notificationChannel: string;
-  email: string | null;
   theme: string;
   /** Null until first-run onboarding finishes. The gate, and nothing else. */
   onboardedAt: string | null;

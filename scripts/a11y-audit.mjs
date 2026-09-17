@@ -74,14 +74,9 @@ const THEMES = ["light", "dark"];
 
 import { launchBrowser, requireServer } from "./lib/browser.mjs";
 import { collectStoryIds } from "./lib/fixture-ids.mjs";
-import { markOnboardedOnServer } from "./lib/seed.mjs";
 
 await requireServer(base);
 const browser = await launchBrowser();
-// Onboarding, written where a LIVE build keeps it. The localStorage seeding in
-// each context covers fixture builds; this covers the other mode, which is the
-// one CI switches to when #65 lands. Neither is required to succeed.
-const onboardedOnServer = await markOnboardedOnServer(base);
 const SEEDED_SAVED_IDS = await collectStoryIds(browser, base, SEEDED_STORY_COUNT);
 const SEEDED_MARKS = Object.fromEntries(
   SEEDED_SAVED_IDS.map((id, index) => [id, MARKS_TEMPLATE[index]]),
@@ -361,7 +356,6 @@ console.log(
         // and discarded it — a value correct, connected to nothing, and
         // invisible to the reader of a green run. That is the very shape the
         // floor.mjs docstring was written about, one file over.
-        onboardedOnServer,
         statesRecorded: Object.keys(report.seeded).length,
         expected: expectedSeedStates,
         landedElsewhere: Object.entries(report.seeded).filter(

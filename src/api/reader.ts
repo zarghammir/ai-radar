@@ -10,10 +10,11 @@ import {
   userPreferences,
 } from "@/db/schema";
 import { ApiError } from "./http";
-import { BRIEF_LENGTHS } from "./brief";
 import { buildCards, type StoryCard } from "./stories";
 
-export const THEMES = ["light", "dark", "system"] as const;
+// No THEMES here any more. The theme is the reader's and lives on their device
+// (#94), so this module has nothing to validate it against — ThemeScript reads
+// it before first paint and the server never sees it.
 
 /** The single-user preferences row. Version 1 has no accounts. */
 export const PREFERENCES_ID = 1;
@@ -167,11 +168,7 @@ export interface Preferences {
   topicKeys: string[];
   briefTime: string;
   timezone: string;
-  briefLength: string;
   notificationChannel: string;
-  email: string | null;
-  theme: string;
-  onboardedAt: string | null;
   updatedAt: string;
 }
 
@@ -180,11 +177,7 @@ export const preferencesPatchSchema = z
     topicKeys: z.array(z.string().min(1)).max(100),
     briefTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "briefTime must be HH:MM"),
     timezone: z.string().min(1),
-    briefLength: z.enum(BRIEF_LENGTHS),
     notificationChannel: z.enum(NOTIFICATION_CHANNELS),
-    email: z.string().email().nullable(),
-    theme: z.enum(THEMES),
-    onboardedAt: z.string().datetime().nullable(),
   })
   .partial()
   .strict();
@@ -197,7 +190,6 @@ const DEFAULTS = {
   // widened string does not satisfy them.
   briefLength: "10" as const,
   notificationChannel: "none" as const,
-  email: null,
   theme: "system",
   onboardedAt: null,
 };
@@ -207,11 +199,7 @@ function serialise(row: typeof userPreferences.$inferSelect): Preferences {
     topicKeys: row.topicKeys,
     briefTime: row.briefTime,
     timezone: row.timezone,
-    briefLength: row.briefLength,
     notificationChannel: row.notificationChannel,
-    email: row.email,
-    theme: row.theme,
-    onboardedAt: row.onboardedAt ? row.onboardedAt.toISOString() : null,
     updatedAt: row.updatedAt.toISOString(),
   };
 }
@@ -267,17 +255,10 @@ export async function updatePreferences(
   }
 
   await getPreferences(db);
-  // onboardedAt arrives as an ISO string and is stored as a timestamp, so it
-  // is taken out of the spread rather than overridden inside it: spreading
-  // both leaves the column's type as a union of the two.
-  const { onboardedAt, ...rest } = patch;
   const [row] = await db
     .update(userPreferences)
     .set({
-      ...rest,
-      ...(onboardedAt !== undefined
-        ? { onboardedAt: onboardedAt ? new Date(onboardedAt) : null }
-        : {}),
+      ...patch,
       // Server-set, and ignored on input.
       updatedAt: new Date(),
     })

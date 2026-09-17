@@ -187,20 +187,55 @@ export async function setRead(storyId: number, read: boolean): Promise<void> {
   writeLocalRead(storyId, read);
 }
 
-/** Only the fields the route accepts: preferencesPatchSchema is `.strict()`. */
 export type PreferencesPatch = Partial<Omit<Preferences, "updatedAt">>;
 
+/**
+ * The preferences that belong to the READER rather than to the deployment, and
+ * therefore live in this browser (#94).
+ *
+ * What is NOT here is as considered as what is: `briefTime` and `timezone` are
+ * the schedule of the instance — the worker computes its sweep and the brief
+ * window from them before anyone opens a page — and `topicKeys` still feeds the
+ * score the worker writes ahead of time, so moving it would mean ranking at
+ * read time. That one is the remaining half of #94.
+ */
+const DEVICE_FIELDS = ["briefLength", "theme", "onboardedAt"] as const;
+
+function splitPatch(patch: PreferencesPatch) {
+  const device: PreferencesPatch = {};
+  const server: PreferencesPatch = {};
+  for (const [key, value] of Object.entries(patch)) {
+    const target = (DEVICE_FIELDS as readonly string[]).includes(key) ? device : server;
+    Object.assign(target, { [key]: value });
+  }
+  return { device, server };
+}
+
+/**
+ * One shape for the screen, two homes behind it. The device's answer is the
+ * base and the server's row is laid over it, so a field the server no longer
+ * stores cannot come back as undefined and blank a control.
+ */
 export async function getPreferences(): Promise<Preferences> {
   if (USING_FIXTURES) return localPreferences();
-  return json<Preferences>("/api/preferences");
+  const server = await json<Partial<Preferences>>("/api/preferences");
+  return { ...localPreferences(), ...server };
 }
 
 export async function putPreferences(patch: PreferencesPatch): Promise<Preferences> {
   if (USING_FIXTURES) return patchLocalPreferences(patch);
-  return json<Preferences>("/api/preferences", {
-    method: "PUT",
-    body: JSON.stringify(patch),
-  });
+  const { device, server } = splitPatch(patch);
+  // Device first: it cannot fail in a way the reader needs to hear about, and
+  // if the server write throws the caller rolls back from the store rather
+  // than from here.
+  if (Object.keys(device).length > 0) patchLocalPreferences(device);
+  if (Object.keys(server).length > 0) {
+    await json<Partial<Preferences>>("/api/preferences", {
+      method: "PUT",
+      body: JSON.stringify(server),
+    });
+  }
+  return getPreferences();
 }
 
 export async function getTopics(): Promise<TopicSummary[]> {

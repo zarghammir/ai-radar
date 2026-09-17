@@ -253,15 +253,31 @@ export const userPreferences = pgTable("user_preferences", {
   id: serial("id").primaryKey(),
   topicKeys: jsonb("topic_keys").$type<string[]>().notNull().default([]),
   briefTime: text("brief_time").notNull().default("07:30"),
+  /**
+   * briefTime and timezone STAY SERVER-SIDE, and this is the reasoned half of
+   * #94 rather than an oversight. They are the schedule of the deployment: the
+   * worker's sweep and the brief window are computed from them before anyone
+   * opens a page, so a reader's browser is the wrong place for them and moving
+   * them would mean sending a timezone with every request to compute a window
+   * the server already knows. A self-hoster sets when their own instance cuts
+   * its brief; a reader of someone else's instance reads it on that schedule.
+   */
   timezone: text("timezone").notNull().default("UTC"),
-  briefLength: text("brief_length").$type<BriefLength>().notNull().default("10"),
+
   notificationChannel: text("notification_channel")
     .$type<NotificationChannel>()
     .notNull()
     .default("none"),
-  email: text("email"),
-  theme: text("theme").notNull().default("system"),
-  onboardedAt: timestamp("onboarded_at", { withTimezone: true }),
+  // NO EMAIL COLUMN, deliberately — see #94. It stored an address for a
+  // feature that does not exist: #72 records that nothing sends a brief, not a
+  // push and not a mail. On a shared instance that is one person's personal
+  // data served to the next person who opens Settings, collected for nothing.
+  // You cannot leak what you do not collect. It returns when #72 gives sending
+  // a purpose, with whatever identity model that feature actually needs.
+  // NO briefLength, theme OR onboardedAt either — see #94. They are the
+  // reader's, not the instance's, so they live in the reader's browser beside
+  // their saves. What remains here is what a self-hoster sets for their own
+  // deployment.
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
