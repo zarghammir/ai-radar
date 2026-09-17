@@ -118,7 +118,10 @@ export async function setSaved(story: StoryCard, saved: boolean): Promise<void> 
     // drops them, matching the real route, where DELETE removes the row and
     // takes the note with it — a note that survives an unsave would come back
     // attached to a story the reader thought they had cleared.
-    writeLocalMarks(story.id, saved ? { note: null, tags: [], savedAt: new Date().toISOString() } : null);
+    writeLocalMarks(
+      story.id,
+      saved ? { note: null, tags: [], savedAt: new Date().toISOString() } : null,
+    );
     return;
   }
   await json(`/api/saved/${story.id}`, { method: saved ? "POST" : "DELETE" });
