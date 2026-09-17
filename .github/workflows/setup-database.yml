@@ -88,12 +88,17 @@ jobs:
           cat > "$GITHUB_WORKSPACE/counts.mjs" <<'EOF'
           import postgres from "postgres";
           const sql = postgres(process.env.DATABASE_URL, { max: 1, onnotice: () => {} });
-          const one = async (q, fallback) => { try { return (await q)[0].n; } catch { return fallback; } };
+          // Every fallback is "unknown", never 0. A dropped connection or a cold
+          // start returning 0 is indistinguishable from a genuinely empty
+          // database, and the step below would report "the schema was not
+          // created" when the truth is that nothing could be read. Absence and
+          // unreadable are different values.
+          const one = async (q) => { try { return (await q)[0].n; } catch { return "unknown"; } };
           const tables = await one(
-            sql`select count(*)::int as n from information_schema.tables where table_schema = 'public'`, 0);
+            sql`select count(*)::int as n from information_schema.tables where table_schema = 'public'`);
           const migrations = await one(
-            sql`select count(*)::int as n from drizzle.__drizzle_migrations`, "unknown");
-          const count = async (t) => tables === 0 ? 0 : await one(sql.unsafe(`select count(*)::int as n from ${t}`), 0);
+            sql`select count(*)::int as n from drizzle.__drizzle_migrations`);
+          const count = async (t) => tables === 0 ? 0 : await one(sql.unsafe(`select count(*)::int as n from ${t}`));
           console.log(`tables=${tables}`);
           console.log(`migrations=${migrations}`);
           console.log(`sources=${await count("sources")}`);
@@ -101,7 +106,24 @@ jobs:
           console.log(`stories=${await count("stories")}`);
           await sql.end();
           EOF
-          echo "counter written"
+          # One floor, three callers. Each distinguishes three states, because
+          # they need three different answers: unreadable, malformed, and a
+          # real zero.
+          cat > "$GITHUB_WORKSPACE/floor.sh" <<'EOF'
+          set -u
+          NAME="$1"; VALUE="$2"; ZERO_MSG="$3"
+          case "$VALUE" in
+            unknown)
+              echo "::error::$NAME could not be READ — the counter did not reach the database. That is not the same as $NAME being zero, and this run stops rather than guess which it was." >&2
+              exit 1 ;;
+            ''|*[!0-9]*)
+              echo "::error::$NAME came back as '$VALUE', which is not a number: the counter's output changed shape." >&2
+              exit 1 ;;
+          esac
+          [ "$VALUE" -gt 0 ] || { echo "::error::$ZERO_MSG" >&2; exit 1; }
+          echo "$NAME = $VALUE"
+          EOF
+          echo "counter and floor written"
 
       - name: Before — what is in the database now
         run: |
@@ -116,8 +138,7 @@ jobs:
           echo "RESULT: $TABLES tables present, $MIGRATIONS migrations in the journal."
           # The floor. A migrate that applied nothing to an empty database exits
           # 0 and prints "Migrations applied." just as loudly as one that worked.
-          [ "${TABLES:-0}" -gt 0 ] \
-            || { echo "no tables exist after migrating: the schema was not created" >&2; exit 1; }
+          bash "$GITHUB_WORKSPACE/floor.sh" tables "$TABLES" "no tables exist after migrating: the schema was not created"
 
       - name: Load the source catalogue
         run: |
@@ -126,8 +147,7 @@ jobs:
           BEFORE="$(awk -F= '$1=="sources"{print $2}' /tmp/after-migrate.txt)"
           AFTER="$(awk -F= '$1=="sources"{print $2}' /tmp/after-seed.txt)"
           echo "RESULT: $AFTER sources in the catalogue (was $BEFORE before this step)."
-          [ "${AFTER:-0}" -gt 0 ] \
-            || { echo "the sources table is empty after seeding: the catalogue did not load" >&2; exit 1; }
+          bash "$GITHUB_WORKSPACE/floor.sh" sources "$AFTER" "the sources table is empty after seeding: the catalogue did not load"
 
       # One pass, with a floor on what it fetched. `npm run worker:once` already
       # exits non-zero when EVERY source failed; this adds the case that exit
@@ -145,8 +165,7 @@ jobs:
           ITEMS="$(awk -F= '$1=="raw_items"{print $2}' /tmp/after-ingest.txt)"
           STORIES="$(awk -F= '$1=="stories"{print $2}' /tmp/after-ingest.txt)"
           echo "RESULT: $ITEMS items stored, $STORIES stories written."
-          [ "${ITEMS:-0}" -gt 0 ] \
-            || { echo "the pass stored no items: a green run that fetched nothing is not a working one" >&2; exit 1; }
+          bash "$GITHUB_WORKSPACE/floor.sh" items "$ITEMS" "the pass stored no items: a green run that fetched nothing is not a working one"
 
       - name: What this run did
         if: always()

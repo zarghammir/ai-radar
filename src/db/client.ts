@@ -19,6 +19,29 @@ import * as schema from "./schema";
  * hat. A function cannot be enumerated into a connection, has stable identity,
  * and has no trap semantics to get subtly wrong.
  */
+/**
+ * A database failure, without the coordinates.
+ *
+ * postgres.js attaches `address` and `port` to a connection error and puts them
+ * in the cause's message too, so `console.error(err)` prints the host. That goes
+ * straight into an Actions log, and this repository is public — GitHub masks
+ * registered secret VALUES, so the password inside DATABASE_URL is covered, but
+ * the host is a substring of that value and is not masked.
+ *
+ * What diagnoses a failure is the query and the error code, not the address it
+ * was dialling. Deliberately dropped: the stack, and the cause's free text.
+ * Kept: `Failed query: …` and `[ECONNREFUSED]`, `[ENOTFOUND]`, `[28P01]`.
+ */
+export function describeDbError(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  const cause: unknown = (error as { cause?: unknown }).cause;
+  const code =
+    cause && typeof cause === "object" && "code" in cause
+      ? String((cause as { code?: unknown }).code)
+      : null;
+  return code ? `${error.message} [${code}]` : error.message;
+}
+
 function connect() {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {

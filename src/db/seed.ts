@@ -15,7 +15,7 @@
  */
 import "dotenv/config";
 import { sql } from "drizzle-orm";
-import { getDb } from "./client";
+import { describeDbError, getDb } from "./client";
 import { sources, topics } from "./schema";
 import { SOURCE_SEEDS, TOPIC_SEEDS } from "./seed-data";
 
@@ -113,6 +113,6 @@ async function main() {
 main()
   .then(() => process.exit(0))
   .catch((err) => {
-    console.error(err);
+    console.error(describeDbError(err));
     process.exit(1);
   });
