@@ -305,6 +305,52 @@ jobs:
       - name: Seed stories for the browser checks
         run: npm run db:seed:stories
 
+      # THE ACCEPTANCE OF #102, ASSERTED RATHER THAN PHOTOGRAPHED.
+      #
+      # "One feed, one filter" is only true if the two positions return
+      # DIFFERENT SETS. #108 carries a screenshot pair, and a screenshot proves
+      # that ONCE, on whatever corpus that machine happened to hold — the same
+      # pair refused to be taken at all on a dev database whose stories were
+      # every one of them a RELEASE. This proves it on every run, against rows
+      # the real pipeline wrote.
+      #
+      # THROUGH THE JSON API AND NOT THE PAGE, and this is the reason rather
+      # than a preference. A Next.js document carries the page TWICE: the DOM
+      # HTML and the RSC flight payload, JSON-escaped in a script tag. Counting
+      # `<article` in that HTML counts both copies — and TWO EQUALLY DOUBLED
+      # NUMBERS COMPARE FINE while measuring something other than what you
+      # think. #115 owns sweeping the checks that already do this; this one is
+      # written not to need sweeping.
+      - name: The two view positions return different sets
+        run: |
+          set -euo pipefail
+          read_count() {
+            curl -s "http://127.0.0.1:3210/api/brief?view=$1&length=all" \
+              | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+                  const b=JSON.parse(s);
+                  const types=[...new Set(b.stories.map(x=>x.contentType))].sort().join(",");
+                  console.log(`${b.count} ${types}`);
+                })'
+          }
+          BUILT="$(read_count built)"; ALL="$(read_count all)"
+          built="${BUILT%% *}"; all="${ALL%% *}"
+          echo "MEASURED: view=built -> $built  [${BUILT#* }]"
+          echo "MEASURED: view=all   -> $all  [${ALL#* }]"
+
+          # THE FLOOR, AND IT COMES FIRST so the error text can tell the two
+          # causes apart. Two empty sets are not "different", and 0 < 0 is
+          # false, so an empty corpus would otherwise fail the assertion below
+          # and read exactly like a broken filter.
+          if [ "$built" -lt 1 ] || [ "$all" -lt 1 ]; then
+            echo "::error::one or both positions returned nothing (built=$built all=$all) — this is the SEED, not the filter" >&2
+            exit 1
+          fi
+          if [ "$built" -ge "$all" ]; then
+            echo "::error::both positions returned the same set (built=$built all=$all). Either the filter is not filtering, or the seeded corpus contains only built things — check the content types above before touching the filter." >&2
+            exit 1
+          fi
+          echo "RESULT: the two positions return different sets ($built built of $all total)."
+
       # Both checks go through one wrapper, which owns the exit-code contract:
       # 0 passed, 1 the checks ran and failed, 2 the instrument could not run.
       # Its reasoning lives in the file. Two callers, one copy — a control can
