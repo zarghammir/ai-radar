@@ -69,10 +69,12 @@ export function Sidebar() {
 }
 
 /**
- * Mobile navigation. Shown only below lg, by media query. It carries ALL SIX
- * surfaces: the sidebar that holds the rest is display:none here, so anything
- * left out of this bar is unreachable on a phone — not merely harder to find,
- * but absent from the tab order and unclickable.
+ * Mobile navigation. Shown only below lg, by media query. It carries EVERY
+ * surface in `navItems`, whatever that list currently holds — it IS that list,
+ * not a filtered copy of it, which is what keeps this true as the list changes.
+ * The sidebar that holds the rest is display:none here, so anything left out of
+ * this bar is unreachable on a phone — not merely harder to find, but absent
+ * from the tab order and unclickable.
  */
 export function BottomNav() {
   const isCurrent = useIsCurrent();
