@@ -1040,6 +1040,13 @@ withDb("pipeline orchestration", () => {
       // Put the row back into the state an upgraded database is in.
       await db.update(schema.rawItems).set({ matchedAiVocabulary: null });
       const [before] = await db.select().from(schema.stories);
+      // The precondition, asserted rather than assumed. This test only means
+      // something if the story IS adjacent before the NULL — otherwise the
+      // final expectation is true for a reason that has nothing to do with
+      // NULL handling, and the control stops reddening without failing.
+      // It is guaranteed today only by the fixture in the sibling test above,
+      // which is one edit away from silently retiring this one.
+      expect(before.adjacentTech).toBe(true);
       await db.transaction(async (tx) => {
         await refreshStory(tx, before.id);
       });
