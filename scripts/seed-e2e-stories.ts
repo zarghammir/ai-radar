@@ -182,9 +182,7 @@ async function main() {
   await runIngest(db, undefined, { now, fetchImpl, sink: () => {} });
   const ranked = await rankAllStories(db, now);
 
-  const written = await db
-    .select({ id: stories.id, summary: stories.summary })
-    .from(stories);
+  const written = await db.select({ id: stories.id, summary: stories.summary }).from(stories);
 
   // THE FLOOR ON THE SEED ITSELF. Without it the problem moves one step
   // earlier and gets quieter: a seed that silently wrote nothing would hand the
