@@ -278,8 +278,21 @@ try {
      *
      * Five minutes is provably shorter than everything, so a Today that
      * ignored the preference would show the same count for both.
+     *
+     * BOTH SIDES PIN ?view=all AND NEITHER SUPPLIES A LENGTH. This is the
+     * whole assertion, and it was broken between #102 and the review of #108:
+     * the left side read a bare "/", which after #102 also means view=built.
+     * The two sides then differed on TWO axes, and the sentence above stopped
+     * being true of the code under it. With seven fixtures of which four are
+     * built things, a Today that ignored the saved length ENTIRELY would have
+     * shown 4 against 7, and 4 < 7, so the check would have passed while
+     * measuring the filter instead of the preference.
+     *
+     * The rule this file is supposed to demonstrate: vary ONE axis. The right
+     * side may say length=all because that is the axis under test; neither
+     * side may say view, beyond pinning it to the same value.
      */
-    await page.goto(base + "/", { waitUntil: "networkidle" });
+    await page.goto(base + "/?view=all", { waitUntil: "networkidle" });
     const atPreference = await page.locator("article h2 a").count();
     await page.goto(base + "/?length=all&view=all", { waitUntil: "networkidle" });
     const atAll = await page.locator("article h2 a").count();
@@ -287,7 +300,7 @@ try {
     if (atPreference < 1) floor.push("Today rendered nothing at the saved length");
     if (!(atPreference < atAll)) {
       floor.push(
-        `Today showed ${atPreference} stories at the saved 5-minute length and ${atAll} at ?length=all&view=all — the preference is not reaching the server`,
+        `Today showed ${atPreference} stories at the saved 5-minute length and ${atAll} at ?length=all — both on view=all, so length is the only axis that differs — the preference is not reaching the server`,
       );
     }
 
