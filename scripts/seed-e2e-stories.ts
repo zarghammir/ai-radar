@@ -183,7 +183,7 @@ async function main() {
   const ranked = await rankAllStories(db, now);
 
   const written = await db
-    .select({ id: stories.id, title: stories.title, summary: stories.summary })
+    .select({ id: stories.id, summary: stories.summary })
     .from(stories);
 
   // THE FLOOR ON THE SEED ITSELF. Without it the problem moves one step
@@ -218,8 +218,22 @@ async function main() {
   // its consumers cannot measure against turns into two confident failures
   // naming the wrong subject, in two different files, neither of which can see
   // why. This floor names the real cause once, at the place that can fix it.
-  const totalMinutes = readingMinutes(
-    written.flatMap((story) => [story.title ?? "", story.summary ?? ""]),
+  // MIRRORS THE PRODUCER RATHER THAN RE-DERIVING IT, because the first version
+  // of this floor re-derived it and got a different number. It passed every
+  // text into readingMinutes() as ONE array, which sums the words and rounds
+  // once: eleven short stories came out as 1 minute and the floor failed a
+  // corpus that was actually fine.
+  //
+  // The real path, src/api/stories.ts:213, computes each story's minutes from
+  // its SUMMARY ALONE — `readingMinutes([s.summary ?? excerpt ?? ""])` — where
+  // the max(1, …) floors every story at one minute. The brief then SUMS those
+  // per-story values (brief-server.ts:50, api/brief/route.ts:51). Summing
+  // eleven ones is eleven; rounding their combined word count is one. Same
+  // function, same inputs, different answer, and only one of them is what a
+  // reader's budget is measured against.
+  const totalMinutes = written.reduce(
+    (total, story) => total + readingMinutes([story.summary ?? ""]),
+    0,
   );
   if (totalMinutes <= SHORTEST_BUDGET_MINUTES) {
     throw new Error(
