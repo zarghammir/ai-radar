@@ -13,7 +13,19 @@ import { rankStory } from "@/pipeline/ranking/score";
  */
 describe("source catalogue", () => {
   it("has sources across every tier the product uses", () => {
-    expect(SOURCE_SEEDS.length).toBeGreaterThanOrEqual(15);
+    // NO SIZE FLOOR HERE, deliberately (#90). There was one — `>= 15`, a
+    // number with no derivation, sitting in a test about TIERS. The tier
+    // assertions below are the floor and they are derived from the property:
+    // an emptied catalogue has no PRIMARY, so `tiers.has("PRIMARY")` fails on
+    // its own. A size floor added nothing, and a floor that adds nothing is a
+    // number somebody will one day adjust instead of reading.
+    //
+    // It also did not agree with the other floor on this same array, at
+    // content-type.test.ts — and #90's title called that a disagreement to
+    // reconcile. IT WAS NOT ONE. The two guarded different properties:
+    // coverage there, tier representation here. Making them match would have
+    // been making two unrelated numbers equal. Each is now derived from its
+    // own failure, so there is no shared number left to drift.
     const tiers = new Set(SOURCE_SEEDS.map((s) => s.tier));
     expect(tiers.has("PRIMARY")).toBe(true);
     expect(tiers.has("HIGH_QUALITY_REPORTING")).toBe(true);
