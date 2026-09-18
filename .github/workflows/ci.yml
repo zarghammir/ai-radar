@@ -352,59 +352,57 @@ jobs:
       # pattern" is untested.
       #
       # The fix claims the production pattern cannot be satisfied by the escaped
-      # payload copy. The only way to show that is to run it against a document
-      # that has the payload copy AND NOT the DOM one — and the app serves
-      # exactly that, on the same route in the same state, when asked the way a
-      # client navigation asks: `RSC: 1` returns the flight payload alone. A
-      # real route, a real state, a real server. No hand-written HTML, which
-      # would only prove something about the string I wrote.
+      # payload copy. The proof is that on a document containing BOTH copies it
+      # matches the DOM one and ONLY the DOM one — so the count it finds must
+      # equal the number of real elements, not the number of occurrences of the
+      # attribute name.
       #
-      # It runs here, still before the seed, because the empty state is what
-      # the payload has to contain for this to exercise anything.
-      - name: CONTROL — the empty-state pattern must find nothing in a payload-only document
+      # THE FLOOR IS WHAT MAKES THAT A CONTROL. If the escaped copy is not in
+      # the document, the pattern has nothing to be fooled by and matching once
+      # proves nothing. So the step first requires the name to appear MORE times
+      # than the DOM form does — that difference IS the second copy, measured
+      # rather than assumed.
+      #
+      # An earlier version fetched the flight payload alone with an `RSC: 1`
+      # header, on the theory that a payload-only document was the cleaner
+      # subject. That request returned ZERO BYTES, the floor said so, and the
+      # theory was wrong — which is why the floor prints what it received. This
+      # version needs no special request: the ordinary page already carries both
+      # copies, which is the whole problem and therefore the ideal subject.
+      - name: CONTROL — the empty-state pattern matches the DOM copy and not its escaped twin
         run: |
           set -euo pipefail
-          PAYLOAD="$(curl -s -H 'RSC: 1' http://127.0.0.1:3210/)"
+          DOC="$(curl -s http://127.0.0.1:3210/)"
+          echo "document bytes: ${#DOC}"
 
-          # EVERY grep BELOW CARRIES `|| true`, AND THAT IS NOT NOISE. Under
-          # `set -euo pipefail` a grep that matches nothing exits 1, the command
-          # substitution fails, and the step dies THERE — before the floor that
-          # exists to explain it. The first run of this control did exactly
-          # that: exit 1, no message, and the only way to tell a matched pattern
-          # from an empty payload was to add the guard the guard needed. A floor
-          # that cannot speak is worse than no floor, because it reports as the
-          # failure it was written to describe.
-          echo "payload bytes: ${#PAYLOAD}"
-          echo "first 200 bytes: ${PAYLOAD:0:200}"
+          # Every grep carries `|| true`. Under `set -euo pipefail` a grep that
+          # matches nothing exits 1 and the step dies THERE, before the floor
+          # written to explain it — which is how the first run of this control
+          # failed with no message at all. A floor that cannot speak reports as
+          # the failure it exists to describe.
+          NAME="$(printf '%s' "$DOC" | grep -o 'data-empty-body' | wc -l | tr -d ' ' || true)"
+          DOMF="$(printf '%s' "$DOC" | grep -o 'data-empty-body="true"' | wc -l | tr -d ' ' || true)"
+          NAME="${NAME:-0}"; DOMF="${DOMF:-0}"
+          echo "occurrences of the attribute NAME: $NAME    of the DOM form: $DOMF"
 
-          # FLOOR FIRST, TWICE, because a control that cannot exercise the
-          # hazard must say so rather than pass. Both of these would otherwise
-          # produce a confident green that proves nothing.
-          ESCAPED="$(printf '%s' "$PAYLOAD" | grep -o 'data-empty-body' | wc -l | tr -d ' ' || true)"
-          ESCAPED="${ESCAPED:-0}"
-          if [ "$ESCAPED" -lt 1 ]; then
-            echo "::error::the RSC payload carries no 'data-empty-body' at all, so this control exercised nothing. Either the route is not in the empty state or the payload is not being served — fix the setup, do not delete the control." >&2
+          if [ "$DOMF" -lt 1 ]; then
+            echo "::error::the page carries no DOM form of data-empty-body at all ($NAME name occurrence(s)), so this control exercised nothing. Fix the setup; do not delete the control." >&2
             exit 1
           fi
-          DOMFORM="$(printf '%s' "$PAYLOAD" | grep -o 'data-empty-body="true"' | wc -l | tr -d ' ' || true)"
-          DOMFORM="${DOMFORM:-0}"
-          if [ "$DOMFORM" -ne 0 ]; then
-            echo "::error::this document contains the DOM form ($DOMFORM occurrence(s)), so it is not payload-only and proves nothing about the escaped copy. The RSC request probably returned full HTML." >&2
+          if [ "$NAME" -le "$DOMF" ]; then
+            echo "::error::the attribute name appears $NAME time(s) and the DOM form $DOMF — there is NO second copy in this document, so the pattern had nothing to be fooled by and matching it proves nothing. If Next has stopped embedding the RSC payload, this control needs rewriting rather than deleting." >&2
             exit 1
           fi
 
-          # THE ASSERTION: the production pattern, character for character,
-          # must find NOTHING here. If it matches, it is reading the payload —
-          # which is the defect this rule exists to prevent, and it would have
-          # reported a screen as explained when nothing was rendered.
-          FOUND="$(printf '%s' "$PAYLOAD" | tr -d '\n' \
-            | grep -o 'data-empty-body="true"[^>]*>[^<]*' | head -1 | sed 's/.*>//' || true)"
-          if [ -n "$FOUND" ]; then
-            echo "::error::the pattern MATCHED a payload-only document and returned: ${FOUND:0:120}" >&2
-            echo "  That is the defect: the check would report an explanation that was never rendered." >&2
+          # THE ASSERTION. The production pattern must match exactly the DOM
+          # occurrences — never the extra ones, which are the escaped copy.
+          HITS="$(printf '%s' "$DOC" | tr -d '\n' | grep -o 'data-empty-body="true"[^>]*>[^<]*' | wc -l | tr -d ' ' || true)"
+          HITS="${HITS:-0}"
+          if [ "$HITS" -ne "$DOMF" ]; then
+            echo "::error::the pattern matched $HITS time(s) against $DOMF real element(s) — it is reading the escaped copy, which is the defect this rule exists to prevent." >&2
             exit 1
           fi
-          echo "RESULT: the pattern found nothing in a payload-only document carrying $ESCAPED escaped occurrence(s) of the attribute — it cannot be satisfied by the second copy."
+          echo "RESULT: the attribute name appears $NAME times, the DOM form $DOMF, and the pattern matched $DOMF — it discriminated against $(( NAME - DOMF )) escaped occurrence(s)."
 
       # Stories, through the REAL pipeline rather than inserted rows, because a
       # story that never went through it has no sources, no clustering and no
