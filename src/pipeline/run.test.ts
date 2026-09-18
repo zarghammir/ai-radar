@@ -6,11 +6,12 @@ import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { eq } from "drizzle-orm";
 import type { Db } from "@/db/client";
 import * as schema from "@/db/schema";
+import { matchedAiVocabulary } from "@/pipeline/normalize/ai-vocabulary";
 import { TRUNCATE_ALL } from "@/db/tables";
 import { rawItems, sources, stories, storyTopics, topics, ingestRuns } from "@/db/schema";
 import { deriveVerification } from "./clustering/verification";
 import { rankStory } from "./ranking/score";
-import { CANDIDATE_LIMIT, assignStory, runIngest, storySources } from "./run";
+import { CANDIDATE_LIMIT, assignStory, refreshStory, runIngest, storySources } from "./run";
 import { matchesAnyKeyword } from "./normalize/keywords";
 
 /**
@@ -940,5 +941,163 @@ withDb("pipeline orchestration", () => {
     for (const run of runs) {
       for (const fragment of fragments) expect(run.error ?? "").not.toContain(fragment);
     }
+  });
+
+  // ── Adjacent tech: kept, not shown by default (#71) ────────────────────────
+
+  describe("a source that labels instead of gating", () => {
+    const TITLE = "Show HN: A tiny Postgres migration runner";
+
+    it("STORES a non-AI item and marks its story adjacent tech", async () => {
+      // The half of the acceptance that gets skipped. Testing only that the
+      // filter hides it cannot tell a working filter from an item that was
+      // never stored at all — which is the bug this ticket exists to fix.
+      expect(matchedAiVocabulary(TITLE), "fixture must genuinely not match").toBe(false);
+
+      await addSource({
+        key: "hn-discovery",
+        name: "Show HN",
+        kind: "hackernews",
+        tier: "COMMUNITY",
+        url: null,
+        config: { list: "top", minPoints: 3, keywordPolicy: "label" },
+      });
+      await runIngest(db, undefined, {
+        now: NOW,
+        fetchImpl: fakeNetwork(hnRoutes([{ id: 1, title: TITLE, url: "https://example.com/pg" }])),
+        sink: () => {},
+      });
+
+      const items = await db.select().from(schema.rawItems);
+      expect(items).toHaveLength(1);
+      expect(items[0].matchedAiVocabulary).toBe(false);
+
+      const [story] = await db.select().from(schema.stories);
+      expect(story.adjacentTech).toBe(true);
+    });
+
+    it("still discards the same item when the source gates", async () => {
+      // The control that the POLICY is doing the work. Without it the test
+      // above would pass just as well if the gate had been removed outright,
+      // which would empty the front door instead of widening the back one.
+      await hackerNews();
+      await runIngest(db, undefined, {
+        now: NOW,
+        fetchImpl: fakeNetwork(hnRoutes([{ id: 1, title: TITLE, url: "https://example.com/pg" }])),
+        sink: () => {},
+      });
+      expect(await db.select().from(schema.rawItems)).toHaveLength(0);
+    });
+
+    it("gates on an unrecognised policy rather than falling open", async () => {
+      // Every other test in this describe passes the literal "label", so the
+      // asymmetry this pins was invisible: the adapter used to gate only on
+      // the exact literal "gate" while run.ts labels only on the exact literal
+      // "label". A typo therefore turned the gate OFF and, because the story
+      // was then not from a "label" source, put the resulting non-AI items in
+      // the DEFAULT VIEW — the precise inverse of what this change promises.
+      await addSource({
+        key: "hn-typo",
+        name: "Show HN",
+        kind: "hackernews",
+        tier: "COMMUNITY",
+        url: null,
+        config: { list: "top", minPoints: 3, keywordPolicy: "labl" },
+      });
+      await runIngest(db, undefined, {
+        now: NOW,
+        fetchImpl: fakeNetwork(hnRoutes([{ id: 1, title: TITLE, url: "https://example.com/pg" }])),
+        sink: () => {},
+      });
+      expect(await db.select().from(schema.rawItems)).toHaveLength(0);
+    });
+
+    it("does not treat an unevaluated item as a miss", async () => {
+      // The upgrade window, which is the only time this state exists: between
+      // the migration and the MANUAL backfill every pre-existing row is NULL.
+      // `matchedAiVocabulary === false` is what keeps those rows out of
+      // adjacent tech; loosened to `!matchedAiVocabulary`, every story whose
+      // items all come from a label source would flip to adjacent and VANISH
+      // from the default view.
+      //
+      // This doubles as the deletion control for that operator: all three
+      // tests above use booleans, so the mutation passes every one of them.
+      const src = await addSource({
+        key: "hn-discovery",
+        name: "Show HN",
+        kind: "hackernews",
+        tier: "COMMUNITY",
+        url: null,
+        config: { list: "top", minPoints: 3, keywordPolicy: "label" },
+      });
+      await runIngest(db, undefined, {
+        now: NOW,
+        fetchImpl: fakeNetwork(hnRoutes([{ id: 1, title: TITLE, url: "https://example.com/pg" }])),
+        sink: () => {},
+      });
+      void src;
+
+      // Put the row back into the state an upgraded database is in.
+      await db.update(schema.rawItems).set({ matchedAiVocabulary: null });
+      const [before] = await db.select().from(schema.stories);
+      // The precondition, asserted rather than assumed. This test only means
+      // something if the story IS adjacent before the NULL — otherwise the
+      // final expectation is true for a reason that has nothing to do with
+      // NULL handling, and the control stops reddening without failing.
+      // It is guaranteed today only by the fixture in the sibling test above,
+      // which is one edit away from silently retiring this one.
+      expect(before.adjacentTech).toBe(true);
+      await db.transaction(async (tx) => {
+        await refreshStory(tx, before.id);
+      });
+
+      const [story] = await db.select().from(schema.stories);
+      expect(story.adjacentTech).toBe(false);
+    });
+
+    it("keeps a story out of adjacent tech when one item does match", async () => {
+      // One matching item is enough. A launch nobody described in AI words is
+      // adjacent; the same launch written up by somebody who did is not.
+      //
+      // Two SOURCES rather than two items from one, because a fingerprint is
+      // scoped to source plus canonical url — one source publishing the same
+      // link twice is one item, and an earlier version of this test proved
+      // only that.
+      const url = "https://example.com/pg";
+      await addSource({
+        key: "hn-discovery",
+        name: "Show HN",
+        kind: "hackernews",
+        tier: "COMMUNITY",
+        url: null,
+        config: { list: "top", minPoints: 3, keywordPolicy: "label" },
+      });
+      await addSource({
+        key: "a-newsletter",
+        name: "A newsletter",
+        tier: "ANALYST",
+        // Also a label source, so the miss cannot be rescued by provenance —
+        // this test is about one item MATCHING, not about where it came from.
+        config: { keywordPolicy: "label" },
+      });
+      await runIngest(db, undefined, {
+        now: NOW,
+        fetchImpl: fakeNetwork({
+          ...hnRoutes([{ id: 1, title: TITLE, url }]),
+          "a-newsletter.test/feed": rssFeed([
+            { title: "An AI agent that writes migrations", link: url, date: hoursAgo(2) },
+          ]),
+        }),
+        sink: () => {},
+      });
+
+      const items = await db.select().from(schema.rawItems);
+      expect(items).toHaveLength(2);
+      expect(items.filter((i) => i.matchedAiVocabulary === true)).toHaveLength(1);
+
+      const rows = await db.select().from(schema.stories);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].adjacentTech).toBe(false);
+    });
   });
 });

@@ -131,11 +131,12 @@ withDb("API routes", () => {
     read?: boolean;
     saved?: boolean;
     points?: number;
+    adjacentTech?: boolean;
   }) {
     const at = opts.lastActivityAt ?? new Date(Date.now() - 3_600_000);
     const [s] = await sql.unsafe(
-      `insert into stories (slug,title,content_type,verification,verification_note,first_seen_at,last_activity_at,source_count,score)
-       values ($1,$2,$3,$4,$5,$6,$6,$7,$8) returning id`,
+      `insert into stories (slug,title,content_type,verification,verification_note,first_seen_at,last_activity_at,source_count,score,adjacent_tech)
+       values ($1,$2,$3,$4,$5,$6,$6,$7,$8,$9) returning id`,
       [
         opts.slug,
         opts.title ?? opts.slug,
@@ -145,6 +146,7 @@ withDb("API routes", () => {
         at.toISOString(),
         opts.sourceIds.length,
         opts.score ?? 0,
+        opts.adjacentTech ?? false,
       ],
     );
     const storyId = Number(s.id);
@@ -748,6 +750,68 @@ withDb("API routes", () => {
   });
 
   // ── Radar ─────────────────────────────────────────────────────────────────
+
+  describe("adjacent tech is kept and not shown by default", () => {
+    /**
+     * The second half of #71's acceptance. The first half — that the item is
+     * STORED rather than discarded — is in run.test.ts against a real ingest,
+     * because a filter test over a planted row cannot tell a working filter
+     * from an item that was never kept.
+     */
+    async function twoStories() {
+      const id = await source("verge-ai");
+      await story({ slug: "an-ai-story", sourceIds: [id], score: 10 });
+      await story({ slug: "a-dev-tool", sourceIds: [id], score: 20, adjacentTech: true });
+    }
+
+    it("leaves adjacent tech out of the brief", async () => {
+      await twoStories();
+      const { GET } = await import("@/app/api/brief/route");
+      const data = await body(await GET(req("/api/brief")));
+      const slugs = (data.stories as { slug: string }[]).map((s) => s.slug);
+      expect(slugs).toContain("an-ai-story");
+      expect(slugs).not.toContain("a-dev-tool");
+    });
+
+    it("leaves it out of Radar, and shows it when the reader asks", async () => {
+      await twoStories();
+      const { GET } = await import("@/app/api/radar/route");
+
+      const def = await body(await GET(req("/api/radar")));
+      const defaultSlugs = (def.stories as { slug: string }[]).map((s) => s.slug);
+      expect(defaultSlugs).toEqual(["an-ai-story"]);
+
+      const all = await body(await GET(req("/api/radar?view=everything")));
+      const everySlug = (all.stories as { slug: string }[]).map((s) => s.slug);
+      // Both halves asserted in one call: the adjacent story appears AND the
+      // AI one is still there. A widened view that swapped the set rather than
+      // extending it would pass a test that only looked for the new row.
+      expect(everySlug).toContain("a-dev-tool");
+      expect(everySlug).toContain("an-ai-story");
+    });
+
+    it("refuses an unrecognised view rather than guessing", async () => {
+      // Ruled for the project: an unknown value never widens — the API refuses
+      // it, the page narrows. Refusing is the strict form, and it is what
+      // every other enum parameter in params.ts already does.
+      await twoStories();
+      const { GET } = await import("@/app/api/radar/route");
+      const res = await GET(req("/api/radar?view=evrything"));
+      expect(res.status).toBe(400);
+      expect((await body(res)).error).toMatchObject({ code: "VALIDATION_ERROR" });
+    });
+
+    it("treats an ABSENT view as no preference, not as an error", async () => {
+      // Absent and unrecognised are different answers. Silence is the case
+      // that has to stay backwards compatible: a caller from before any of
+      // this gets what the route answered then.
+      await twoStories();
+      const { GET } = await import("@/app/api/radar/route");
+      const res = await GET(req("/api/radar"));
+      expect(res.status).toBe(200);
+      expect((await body(res)).stories).toHaveLength(1);
+    });
+  });
 
   describe("GET /api/radar", () => {
     it("returns a page with the filters it actually applied", async () => {

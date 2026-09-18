@@ -4,7 +4,7 @@ import { stories } from "@/db/schema";
 import { ApiError } from "./http";
 import type { BriefLength } from "./reading-budget";
 import { BRIEF_LENGTHS } from "./reading-budget";
-import { notHidden } from "./radar";
+import { notAdjacentTech, notHidden } from "./radar";
 import { buildCards, type StoryCard } from "./stories";
 
 // One implementation, in a module with no database imports so the fixtures can
@@ -147,11 +147,40 @@ export const BRIEF_CANDIDATE_LIMIT = 200;
  * scores 0 and this falls back to newest-first by id — which is the same
  * degenerate behaviour the radar's importance sort documents.
  */
-export async function storiesInWindow(db: Db, window: BriefWindow): Promise<StoryCard[]> {
+/**
+ * Narrowing options for the brief.
+ *
+ * An object rather than positional arguments because two lanes are adding an
+ * axis to this function from different bases (#105 and #102), and two optional
+ * positionals of different types in an order nobody agreed is how the third
+ * person passes them the wrong way round. A third axis is another key here, not
+ * another argument.
+ *
+ * Every key defaults NARROW, and omitting the object entirely is exactly the
+ * behaviour this function had before any of them existed.
+ */
+export interface BriefOptions {
+  /** Include adjacent tech — stories kept deliberately that never used AI
+   *  vocabulary. False is the front door: the app is an AI radar. */
+  includeAdjacent?: boolean;
+}
+
+export async function storiesInWindow(
+  db: Db,
+  window: BriefWindow,
+  options: BriefOptions = {},
+): Promise<StoryCard[]> {
+  const { includeAdjacent = false } = options;
   const rows = await db
     .select()
     .from(stories)
-    .where(and(gte(stories.lastActivityAt, window.from), notHidden()))
+    .where(
+      and(
+        gte(stories.lastActivityAt, window.from),
+        notHidden(),
+        ...(includeAdjacent ? [] : [notAdjacentTech()]),
+      ),
+    )
     .orderBy(desc(stories.score), desc(stories.id))
     .limit(BRIEF_CANDIDATE_LIMIT);
   return buildCards(db, rows);

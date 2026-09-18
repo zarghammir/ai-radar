@@ -164,6 +164,7 @@ export async function refreshStory(tx: Tx, storyId: number): Promise<void> {
       excerpt: rawItems.excerpt,
       publishedAt: rawItems.publishedAt,
       contentType: rawItems.contentType,
+      matchedAiVocabulary: rawItems.matchedAiVocabulary,
       tier: sources.tier,
       sourceConfig: sources.config,
     })
@@ -175,6 +176,25 @@ export async function refreshStory(tx: Tx, storyId: number): Promise<void> {
   // Primary item: a first-party source if there is one, earliest otherwise.
   const byAge = [...items].sort((a, b) => a.publishedAt.getTime() - b.publishedAt.getTime());
   const primaryItem = byAge.find((i) => i.tier === "PRIMARY") ?? byAge[0];
+
+  /**
+   * Adjacent tech: kept, but not in the default view (#71).
+   *
+   * True only when BOTH hold — no item used AI vocabulary, and every item came
+   * from a source that carries more than AI. Either half alone is not enough:
+   * one matching item makes the story AI, and one item from an AI-curated feed
+   * makes it AI by provenance even if that headline never says the word.
+   *
+   * A null match is NOT a miss. Rows written before #71 were never evaluated,
+   * and reading "unknown" as "did not match" would quietly hide stories that
+   * have been visible all along.
+   */
+  const knownMiss = (i: (typeof items)[number]) => i.matchedAiVocabulary === false;
+  // Keyed on the same literal the adapter keys on, so the two halves of this
+  // rule cannot disagree about an unrecognised value.
+  const fromLabelSource = (i: (typeof items)[number]) =>
+    String((i.sourceConfig as Record<string, unknown> | null)?.keywordPolicy ?? "gate") === "label";
+  const adjacentTech = items.every(knownMiss) && items.every(fromLabelSource);
 
   const attached = await storySources(tx, storyId);
   const verification = deriveVerification(attached);
@@ -194,6 +214,7 @@ export async function refreshStory(tx: Tx, storyId: number): Promise<void> {
       firstSeenAt: byAge[0].publishedAt,
       sourceCount: attached.length,
       lastActivityAt,
+      adjacentTech,
       verification: verification.level,
       verificationNote: verification.note,
       updatedAt: new Date(),

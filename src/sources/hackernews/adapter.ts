@@ -1,5 +1,6 @@
 import type { SourceAdapter, FetchedItem } from "../types";
 import { matchesAnyKeyword } from "@/pipeline/normalize/keywords";
+import { DEFAULT_AI_KEYWORDS } from "@/pipeline/normalize/ai-vocabulary";
 import { fetchJson } from "../http";
 
 /**
@@ -9,6 +10,13 @@ import { fetchJson } from "../http";
  *   - limit?: number                  (default 120 ids scanned)
  *   - minPoints?: number              (default 20)
  *   - keywords?: string[]             AI filter; defaults to a built-in list
+ *   - keywordPolicy?: "gate" | "label"  (default "gate")
+ *       gate  — drop an item whose title never mentions AI. Right for the
+ *               front page, which is a general technology firehose.
+ *       label — keep it and record that it did not match, so a reader can
+ *               choose to see it. Right for a discovery list like Show HN,
+ *               where a growing developer tool that never says "AI" is
+ *               exactly what the owner asked to be findable (#71).
  */
 interface HnItem {
   id: number;
@@ -24,48 +32,7 @@ interface HnItem {
   dead?: boolean;
 }
 
-export const DEFAULT_AI_KEYWORDS = [
-  "ai",
-  "a.i.",
-  "llm",
-  "gpt",
-  "openai",
-  "anthropic",
-  "claude",
-  "gemini",
-  "deepmind",
-  "mistral",
-  "llama",
-  "transformer",
-  "diffusion",
-  "machine learning",
-  "deep learning",
-  "neural",
-  "agent",
-  "agentic",
-  "model",
-  "inference",
-  "nvidia",
-  "gpu",
-  "cuda",
-  "hugging face",
-  "huggingface",
-  "reinforcement learning",
-  "rag",
-  "embedding",
-  "copilot",
-  "cursor",
-  "xai",
-  "grok",
-  "benchmark",
-  "multimodal",
-  "text-to-video",
-  "text-to-image",
-  "speech",
-  "whisper",
-  "robotics",
-  "humanoid",
-];
+export { DEFAULT_AI_KEYWORDS } from "@/pipeline/normalize/ai-vocabulary";
 
 /** Kept as the adapter's own name for the shared matcher; see keywords.ts. */
 export function matchesKeywords(title: string, keywords: string[]): boolean {
@@ -82,6 +49,9 @@ export const hackerNewsAdapter: SourceAdapter = {
     const isShowList = list === "show";
     const limit = Number(source.config.limit ?? 120);
     const minPoints = Number(source.config.minPoints ?? 20);
+    // "gate" keeps today's behaviour for every source that does not ask
+    // otherwise, so this change adds nothing to the default view on its own.
+    const keywordPolicy = String(source.config.keywordPolicy ?? "gate");
     const keywords = Array.isArray(source.config.keywords)
       ? (source.config.keywords as string[])
       : DEFAULT_AI_KEYWORDS;
@@ -120,7 +90,27 @@ export const hackerNewsAdapter: SourceAdapter = {
     for (const it of items) {
       if (!it || it.deleted || it.dead || it.type !== "story" || !it.title) continue;
       if ((it.score ?? 0) < minPoints) continue;
-      if (!matchesKeywords(it.title, keywords)) continue;
+      const matched = matchesKeywords(it.title, keywords);
+      // The gate that #71 turns into a label. Under "label" the item is kept
+      // and the miss is recorded instead: you cannot offer a reader
+      // "everything" over items you threw away.
+      //
+      // Keyed on "label" rather than on "gate" so that an UNRECOGNISED value
+      // gates. The other half of this rule, in run.ts, asks whether the policy
+      // is "label"; if this asked whether it is "gate", the two halves would
+      // key on different literals in opposite directions and a typo would fail
+      // OPEN here and NARROW there — the gate off, and the resulting non-AI
+      // items in the default view. One misspelling in operator config, nothing
+      // raised.
+      //
+      // Narrowed rather than refused, and the difference from parseView is
+      // deliberate rather than an inconsistency. parseView rejects a value a
+      // READER supplied in a query string: refusing gives that caller feedback
+      // and costs one request. This is OPERATOR config read at fetch time,
+      // where throwing takes the whole source dark on a typo. Both obey "an
+      // unknown value must never widen"; refusing here would trade a wide
+      // failure for a dark one.
+      if (keywordPolicy !== "label" && !matched) continue;
       const hnUrl = `https://news.ycombinator.com/item?id=${it.id}`;
       out.push({
         externalId: String(it.id),
@@ -135,6 +125,7 @@ export const hackerNewsAdapter: SourceAdapter = {
         // and describing it rather than linking to it — a debut, not a
         // conversation — so it falls through to the source default instead.
         contentType: it.url || isShowList ? undefined : "DISCUSSION",
+        matchedAiVocabulary: matched,
         metadata: {
           hnId: it.id,
           hnUrl,
