@@ -1,7 +1,13 @@
 import "dotenv/config";
 import { getDb, getSql } from "@/db/client";
 import { ingestOnce } from "./ingest";
-import { exitCodeFor, formatSourceLine, formatTotalLine, readIntervalMinutes } from "./report";
+import {
+  exitCodeFor,
+  formatSourceLine,
+  formatTotalLine,
+  formatWorkerFailure,
+  readIntervalMinutes,
+} from "./report";
 import { readInternalSecret } from "./secret";
 
 /**
@@ -89,7 +95,11 @@ async function main(): Promise<void> {
 
 main()
   .catch((error: unknown) => {
-    console.error(`[worker] ${error instanceof Error ? error.message : String(error)}`);
+    // Redacted, and via a named function so a test can assert it (#92). This
+    // line printed `.message` until then, publishing the database's hostname
+    // on every failed pass of a schedule that runs against the real
+    // DATABASE_URL in a public repository.
+    console.error(formatWorkerFailure(error));
     process.exitCode = 1;
   })
   .finally(async () => {

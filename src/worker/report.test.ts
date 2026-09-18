@@ -1,10 +1,11 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { IngestResult, SourceRunResult } from "@/pipeline/run";
 import {
   exitCodeFor,
   formatSourceLine,
   formatTotalLine,
+  formatWorkerFailure,
   MINIMUM_INTERVAL_MINUTES,
   readIntervalMinutes,
 } from "./report";
@@ -76,6 +77,71 @@ describe("formatTotalLine", () => {
 
   it("reports how long the run took", () => {
     expect(formatTotalLine(result, 2_300)).toContain("2.3s");
+  });
+});
+
+describe("formatWorkerFailure", () => {
+  /**
+   * #92. This is the worker's last line before it exits non-zero, printed by
+   * a schedule that runs against the real DATABASE_URL in a public repository.
+   * It used to print `error.message`, and `npm run worker:once` against an
+   * unreachable host put `getaddrinfo ENOTFOUND <host>` in the clear.
+   *
+   * Every message below was CAPTURED from that probe, not invented.
+   */
+  const URL_ =
+    "postgres://UsrSweep9q7x:PwSweep9q7x@zz-sweep-9q7x.example.invalid:59999/DbSweep9q7x";
+  const FRAGMENTS = [
+    "zz-sweep-9q7x.example.invalid",
+    "59999",
+    "UsrSweep9q7x",
+    "PwSweep9q7x",
+    "DbSweep9q7x",
+  ];
+
+  let saved: string | undefined;
+  beforeEach(() => {
+    saved = process.env.DATABASE_URL;
+    process.env.DATABASE_URL = URL_;
+  });
+  afterEach(() => {
+    if (saved === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = saved;
+  });
+
+  for (const [shape, message, keeps] of [
+    ["ENOTFOUND", "getaddrinfo ENOTFOUND zz-sweep-9q7x.example.invalid", "ENOTFOUND"],
+    [
+      "CONNECT_TIMEOUT",
+      "write CONNECT_TIMEOUT zz-sweep-9q7x.example.invalid:59999",
+      "CONNECT_TIMEOUT",
+    ],
+    ["the server's own sentence", 'role "UsrSweep9q7x" does not exist', "does not exist"],
+  ] as const) {
+    it(`redacts every credential fragment: ${shape}`, () => {
+      // The fixture must carry something worth redacting, or a clean result
+      // below proves nothing.
+      expect(FRAGMENTS.some((f) => message.includes(f))).toBe(true);
+
+      const line = formatWorkerFailure(new Error(message));
+      for (const fragment of FRAGMENTS) expect(line).not.toContain(fragment);
+
+      // The positive beside the negatives: an operator still learns what broke.
+      expect(line).toContain(keeps);
+      expect(line).toContain("[worker]");
+    });
+  }
+
+  it("leaves an ordinary failure untouched", () => {
+    // Most worker failures are not database failures. This is the case that
+    // would notice a redaction aggressive enough to mangle unrelated text.
+    expect(formatWorkerFailure(new Error("HTTP 403 from the publisher"))).toBe(
+      "[worker] HTTP 403 from the publisher",
+    );
+  });
+
+  it("handles a non-Error without throwing, because the catch takes unknown", () => {
+    expect(formatWorkerFailure("plain string")).toBe("[worker] plain string");
   });
 });
 
