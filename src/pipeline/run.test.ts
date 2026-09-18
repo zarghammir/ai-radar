@@ -892,7 +892,6 @@ withDb("pipeline orchestration", () => {
     expect(result.bySource.map((s) => s.sourceKey)).toEqual(["openai-blog"]);
   });
 
-<<<<<<< HEAD
   // ── #99 ────────────────────────────────────────────────────────────────────
   // Asserted at the point the value is WRITTEN, not at the API that serves it.
   // GET /api/sources is one consumer; #86's health reads the same row, and the
@@ -942,7 +941,8 @@ withDb("pipeline orchestration", () => {
     for (const run of runs) {
       for (const fragment of fragments) expect(run.error ?? "").not.toContain(fragment);
     }
-=======
+  });
+
   // ── Adjacent tech: kept, not shown by default (#71) ────────────────────────
 
   describe("a source that labels instead of gating", () => {
@@ -1033,6 +1033,5 @@ withDb("pipeline orchestration", () => {
       expect(rows).toHaveLength(1);
       expect(rows[0].adjacentTech).toBe(false);
     });
->>>>>>> 3ebeb60 (Keep what the AI gate used to discard, and label it instead (#71))
   });
 });

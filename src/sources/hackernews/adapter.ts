@@ -104,16 +104,12 @@ export const hackerNewsAdapter: SourceAdapter = {
         excerpt: it.text ?? null,
         author: it.by ?? null,
         publishedAt: it.time ? new Date(it.time * 1000) : null,
-<<<<<<< HEAD
         // A self-post on the front page is a discussion: someone is asking
         // or arguing. A self-post on Show HN is a person launching a thing
         // and describing it rather than linking to it — a debut, not a
         // conversation — so it falls through to the source default instead.
         contentType: it.url || isShowList ? undefined : "DISCUSSION",
-=======
-        contentType: it.url ? undefined : "DISCUSSION",
         matchedAiVocabulary: matched,
->>>>>>> 3ebeb60 (Keep what the AI gate used to discard, and label it instead (#71))
         metadata: {
           hnId: it.id,
           hnUrl,
