@@ -18,7 +18,7 @@ Today page and the sentence was false before it merged.
 ```
  feeds and APIs          the worker              the database            the app
 ┌───────────────┐      ┌──────────────┐        ┌──────────────┐      ┌─────────────┐
-│ rss · arxiv   │─────▶│ fetch        │───────▶│ raw_items    │◀─────│ 13 route    │
+│ rss · arxiv   │─────▶│ fetch        │───────▶│ raw_items    │◀─────│ the route   │
 │ hackernews    │      │ normalize    │        │ stories      │      │ handlers    │
 └───────────────┘      │ dedupe       │        │ topics …     │      └─────────────┘
                        │ cluster      │        └──────────────┘             │
@@ -144,9 +144,10 @@ being imported.
 if any can reach a feed adapter, the HTTP client or an LLM SDK. It has no
 exceptions list.
 
-> **Why it exists** (measured at the time, and kept as history rather than as a
-> current count — `npm run routes:check` is the live number): nine of the twelve
-> routes then present transitively imported the
+> **Why it exists** (measured 2026-09-16 at `7f5df14`, when this paragraph was
+> written — kept as history rather than
+> as a current count; `npm run routes:check` is the live number): nine of the
+> twelve routes then present transitively imported the
 > adapters, through a single import line — `stories.ts` → `rank-all.ts` →
 > `run.ts` → the source registry → all three adapters → `src/sources/http.ts`,
 > where `fetch` lives. No route _called_ any of it, so the rule held; what did

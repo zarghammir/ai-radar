@@ -6,6 +6,11 @@ implemented against it in the second half of issue #10.
 
 Status: **final, signed off by PM and UI lane on 2026-09-16.**
 
+**Amended 2026-09-17 (#103)** — the source write moved under `internal/` and is
+no longer part of this client API. The sign-off above covers the contract as it
+stood on 09-16; the amended sections say what changed and why. A sign-off line
+that silently covers later edits is a claim nobody re-checks.
+
 ---
 
 ## Ground rules
