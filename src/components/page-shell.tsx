@@ -62,12 +62,49 @@ export function PageShell({
 /**
  * An honest empty state. It says what is missing and what will fill it, rather
  * than pretending the surface is finished.
+ *
+ * THE TWO DATA ATTRIBUTES ARE FOR CI AND ARE NOT DECORATION. The check that an
+ * empty Today explains itself used to grep the page for a phrase, so a correct
+ * copy edit reddened it — twice. An assertion can now ask whether the reader
+ * was told ANYTHING, by finding this block and measuring the length of its
+ * body, without any opinion about the words in it. Marker-without-explanation
+ * is the defect worth catching; a rewritten sentence is not.
+ *
+ * THEY CARRY AN EXPLICIT "true" RATHER THAN BEING BARE, for two reasons that
+ * are both about the reader and neither about React.
+ *
+ * It matches `data-screen-state={state}` a few lines up, and every other data
+ * attribute in this codebase, all of which are written with a value.
+ *
+ * And the literal `="true"` is what lets a text search tell this attribute
+ * apart from its own escaped twin. A Next.js document carries the page TWICE:
+ * once as DOM HTML, once as the RSC flight payload, JSON-escaped inside a
+ * script tag. So `data-empty-body` occurs twice in one response — as
+ * `data-empty-body="true"` and as `data-empty-body\":\"true\"` — and the
+ * payload copy comes FIRST. A pattern loose enough to match both, taking the
+ * first hit, reads the payload and captures nothing. Requiring `="true"`
+ * cannot match the escaped form, because that one has `\":\"` between the
+ * name and the value. See the check in .github/workflows/ci.yml and #115.
+ *
+ * WHAT THIS COMMENT USED TO SAY, AND WHY IT IS NOT SAYING IT ANY MORE. It
+ * claimed that a bare `data-empty-body` never reaches the server-rendered
+ * HTML. THAT IS FALSE — React renders the bare form as `data-empty-body="true"`
+ * exactly as the explicit one, and changing it altered no output at all. The
+ * zero-length reading that prompted it had the other cause above. The
+ * retraction is here rather than only in the commit that made it, because a
+ * commit message is read once by whoever opens that commit and a docblock on
+ * an exported component is read by everyone who touches it — and this one was
+ * phrased as an evidenced finding, which is the kind of wrong sentence that
+ * gets believed and propagated. Anyone meeting a bare boolean data attribute
+ * elsewhere should not "fix" working markup on this comment's authority.
  */
 export function EmptyState({ title, body }: { title: string; body: string }) {
   return (
-    <div className="border-edge text-ash border border-dashed p-6">
+    <div data-empty-state="true" className="border-edge text-ash border border-dashed p-6">
       <p className="text-ash-hi text-[15px] font-semibold">{title}</p>
-      <p className="mt-2 max-w-prose text-[14px] leading-relaxed">{body}</p>
+      <p data-empty-body="true" className="mt-2 max-w-prose text-[14px] leading-relaxed">
+        {body}
+      </p>
     </div>
   );
 }

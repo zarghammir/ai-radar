@@ -15,6 +15,12 @@ import { launchBrowser, requireServer } from "./lib/browser.mjs";
 import { bailIfBroken, isFloorBail, sectionStart } from "./lib/floor.mjs";
 import { markOnboarded } from "./lib/seed.mjs";
 
+// VIEW PINNED TO "all" THROUGHOUT THIS FILE. #102 made the app open on built
+// things, which is 4 of the 7 fixture stories — and a 5-minute budget cannot
+// shorten a 4-story list, so the reading-length assertions below started failing
+// on a filter that was working perfectly. The two are separate axes: this file
+// measures LENGTH, so it holds the view still. The default view is exercised by
+// the accessibility sweep and by the empty-state step in CI.
 const base = process.argv[2] || process.env.VERIFY_URL || "http://127.0.0.1:3210";
 await requireServer(base);
 
@@ -34,6 +40,7 @@ const cards = (page) => page.locator("article h2 a");
 try {
   /* ---- 1. the reading-length switch actually shortens the list ---------- */
   {
+    const mark = sectionStart(floor);
     const ctx = await browser.newContext({ viewport: { width: 390, height: 780 } });
     // The first-run gate is in the root layout, so an unseeded context asking
     // for Today is sent to /welcome and every locator below waits on a page
@@ -41,16 +48,38 @@ try {
     onboardedOnServer = await markOnboarded(ctx, base);
     const page = await ctx.newPage();
 
-    await page.goto(`${base}/?length=all`, { waitUntil: "networkidle" });
+    await page.goto(`${base}/?length=all&view=all`, { waitUntil: "networkidle" });
     const all = await cards(page).count();
-    await page.goto(`${base}/?length=10`, { waitUntil: "networkidle" });
+    await page.goto(`${base}/?length=10&view=all`, { waitUntil: "networkidle" });
     const ten = await cards(page).count();
-    await page.goto(`${base}/?length=5`, { waitUntil: "networkidle" });
+    await page.goto(`${base}/?length=5&view=all`, { waitUntil: "networkidle" });
     const five = await cards(page).count();
 
     if (all < MIN_STORIES)
       floor.push(`only ${all} stories at length=all; the page is effectively empty`);
     if (five < 1) floor.push("length=5 rendered no stories at all");
+
+    // A COUNT FLOOR IS NOT ENOUGH HERE, and that gap is why this file went red
+    // on a working build. MIN_STORIES guards against an empty page, but the
+    // assertion below needs something stronger: the brief has to run LONGER
+    // than five minutes before a five-minute budget can shorten anything. Five
+    // one-minute stories clear MIN_STORIES easily and still leave `five < all`
+    // impossible to satisfy, so the check reports that the reading-length
+    // switch is broken on a switch that is working.
+    //
+    // The same hole existed in verify-saved-settings.mjs and is fixed there
+    // too. The general shape: a test whose quantity cannot vary across the
+    // defect is vacuous, and a vacuous test that FAILS is worse than one that
+    // passes, because it sends the next person hunting a bug that is not there.
+    const wholeBrief = await fetch(`${base}/api/brief?view=all&length=all`).then((r) => r.json());
+    if (!(wholeBrief.readingMinutes > 5)) {
+      floor.push(
+        `the corpus is too short to measure the reading-length switch: the whole brief runs ` +
+          `${wholeBrief.readingMinutes} minute(s), so a 5-minute budget has nothing to cut. ` +
+          `Seed more stories rather than relaxing the assertion below.`,
+      );
+    }
+    bailIfBroken(floor, mark);
 
     out.readingLength = {
       all,
@@ -61,7 +90,10 @@ try {
       neverEmpty: five >= 1,
     };
     if (!(five < all))
-      floor.push(`the 5-minute brief did not shorten the list (${five} vs ${all})`);
+      floor.push(
+        `the 5-minute brief did not shorten the list (${five} vs ${all}) and the whole brief runs ` +
+          `${wholeBrief.readingMinutes} minutes, so the budget HAD something to cut`,
+      );
     await ctx.close();
   }
 
@@ -74,7 +106,7 @@ try {
     onboardedOnServer = await markOnboarded(ctx, base);
     const mark = sectionStart(floor);
     const page = await ctx.newPage();
-    await page.goto(`${base}/?length=all`, { waitUntil: "networkidle" });
+    await page.goto(`${base}/?length=all&view=all`, { waitUntil: "networkidle" });
 
     const saveButtons = page.getByRole("button", { name: /^Save$/ });
     const before = await saveButtons.count();
@@ -111,7 +143,7 @@ try {
     onboardedOnServer = await markOnboarded(ctx, base);
     const mark = sectionStart(floor);
     const page = await ctx.newPage();
-    await page.goto(`${base}/?length=all`, { waitUntil: "networkidle" });
+    await page.goto(`${base}/?length=all&view=all`, { waitUntil: "networkidle" });
 
     const before = await cards(page).count();
     if (before < MIN_STORIES)
@@ -165,7 +197,7 @@ try {
     onboardedOnServer = await markOnboarded(ctx, base);
     const mark = sectionStart(floor);
     const page = await ctx.newPage();
-    await page.goto(`${base}/?length=all`, { waitUntil: "networkidle" });
+    await page.goto(`${base}/?length=all&view=all`, { waitUntil: "networkidle" });
     const landed = new URL(page.url()).pathname;
     if (landed !== "/") floor.push(`the screen-state check asked for / and landed on ${landed}`);
     bailIfBroken(floor, mark);
@@ -219,7 +251,7 @@ try {
             localStorage.setItem("ai-radar-theme", t);
           } catch {}
         }, theme);
-        await page.goto(`${base}/?length=all`, { waitUntil: "networkidle" });
+        await page.goto(`${base}/?length=all&view=all`, { waitUntil: "networkidle" });
         await page.evaluate(() => document.fonts.ready);
         const count = await cards(page).count();
         const overflow = await page.evaluate(

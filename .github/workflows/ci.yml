@@ -227,21 +227,75 @@ jobs:
       # than a browser: the state names itself in the DOM, so no interaction is
       # needed to read it. Without this step, seeding would quietly retire a
       # state the product deliberately distinguishes.
-      - name: A reachable, empty database is a quiet morning
+      - name: A reachable, empty database is a quiet day, not a failure
         run: |
           HTML="$(curl -s http://127.0.0.1:3210/)"
           STATE="$(printf '%s' "$HTML" | grep -o 'data-screen-state="[a-z]*"' | head -1)"
           echo "state before seeding: ${STATE:-<none>}"
           if [ "$STATE" != 'data-screen-state="quiet"' ]; then
-            echo "an empty database rendered ${STATE:-no state at all}, not the quiet morning" >&2
-            printf '%s' "$HTML" | grep -oiE "cannot reach your stories|quiet morning" >&2 || true
+            echo "an empty database rendered ${STATE:-no state at all}, not the quiet state" >&2
+            printf '%s' "$HTML" | grep -oiE "cannot reach your stories|quiet (morning|day)" >&2 || true
             exit 1
           fi
-          # And the words, not only the marker: a reader never sees the marker.
-          printf '%s' "$HTML" | grep -qi "quiet morning" || {
-            echo "state=quiet but the screen does not say it is a quiet morning" >&2
+          # The reader was told SOMETHING, not only the marker: a reader never
+          # sees the marker.
+          #
+          # THIS DELIBERATELY ASSERTS NOTHING ABOUT THE WORDS. Two earlier
+          # versions pinned a wording and both reddened on a page that was
+          # behaving perfectly: first "quiet morning", which #102's copy changed
+          # to "a quiet day", then "quiet (morning|day)", which was a wider pin
+          # and still a pin — its own comment claimed "in whichever words suit
+          # them" while the pattern said otherwise, which is worse, because the
+          # comment tells the next person the check is safe to edit around.
+          #
+          # The property that actually matters is that the empty state rendered
+          # an EXPLANATION at all. A screen that shows the marker and no prose
+          # is the defect; a rewritten sentence is not. So: find the block, take
+          # its body, and require it to be long enough to be an explanation.
+          # MATCHES THE REAL ATTRIBUTE, NOT ITS ESCAPED TWIN. A Next.js document
+          # carries the page TWICE: once as DOM HTML, and once as the RSC flight
+          # payload, JSON-escaped inside a script tag. So `data-empty-body`
+          # occurs twice, and the payload copy — data-empty-body\":\"true\" —
+          # comes first. A `head -1` over a loose pattern reads the payload,
+          # runs [^>]* to some unrelated bracket, and captures nothing.
+          #
+          # That cost three CI rounds and two wrong hypotheses, both of mine, so
+          # it is written here rather than left as a clever pattern: requiring
+          # the literal `="true"` cannot match the escaped form, because that
+          # one has \":\" between the name and the value.
+          #
+          # This applies to EVERY curl-and-grep assertion against this app, not
+          # just to this one.
+          EXPLANATION="$(printf '%s' "$HTML" | tr -d '\n' \
+            | grep -o 'data-empty-body="true"[^>]*>[^<]*' | head -1 | sed 's/.*>//')"
+          if [ "${#EXPLANATION}" -lt 60 ]; then
+            echo "state=quiet but the screen explained itself in ${#EXPLANATION} characters" >&2
+            echo "  found: ${EXPLANATION:-<no empty-state body at all>}" >&2
+            # DIAGNOSTICS, because two rounds were spent guessing at this from
+            # a length alone. A failure that cannot say WHY costs a full CI
+            # round per hypothesis; these four lines cost nothing and end it.
+            echo "  --- diagnostics ---" >&2
+            echo "  html bytes: ${#HTML}" >&2
+            # grep -c counts LINES, and this HTML is one line — so it answers
+            # "at least once" for anything, which is not the question. -o | wc -l
+            # counts occurrences.
+            echo "  occurrences of 'data-empty': $(printf '%s' "$HTML" | grep -o 'data-empty' | wc -l | tr -d ' ')" >&2
+            echo "  occurrences of 'data-empty-body': $(printf '%s' "$HTML" | grep -o 'data-empty-body' | wc -l | tr -d ' ')" >&2
+            echo "  the empty-state markup as rendered:" >&2
+            printf '%s' "$HTML" | tr -d '\n' | grep -o 'data-empty.\{0,500\}' | head -1 | sed 's/^/    /' >&2
+            echo "  DO NOT lower this threshold to make this pass. It is red because" >&2
+            echo "  the empty screen stopped telling the reader what happened, which" >&2
+            echo "  is the one thing this state exists to do. Fix the page." >&2
             exit 1
-          }
+          fi
+          echo "the empty state explained itself in ${#EXPLANATION} characters"
+          # And the half that actually matters: a quiet day must never be
+          # described as a failure. This is the pair the product exists to keep
+          # apart, and it is the assertion that would catch them being confused.
+          if printf '%s' "$HTML" | grep -qi "cannot reach your stories"; then
+            echo "state=quiet but the screen says it cannot reach the stories" >&2
+            exit 1
+          fi
 
       # Stories, through the REAL pipeline rather than inserted rows, because a
       # story that never went through it has no sources, no clustering and no
@@ -250,6 +304,52 @@ jobs:
       # empty seed cannot be discovered later by whatever runs next.
       - name: Seed stories for the browser checks
         run: npm run db:seed:stories
+
+      # THE ACCEPTANCE OF #102, ASSERTED RATHER THAN PHOTOGRAPHED.
+      #
+      # "One feed, one filter" is only true if the two positions return
+      # DIFFERENT SETS. #108 carries a screenshot pair, and a screenshot proves
+      # that ONCE, on whatever corpus that machine happened to hold — the same
+      # pair refused to be taken at all on a dev database whose stories were
+      # every one of them a RELEASE. This proves it on every run, against rows
+      # the real pipeline wrote.
+      #
+      # THROUGH THE JSON API AND NOT THE PAGE, and this is the reason rather
+      # than a preference. A Next.js document carries the page TWICE: the DOM
+      # HTML and the RSC flight payload, JSON-escaped in a script tag. Counting
+      # `<article` in that HTML counts both copies — and TWO EQUALLY DOUBLED
+      # NUMBERS COMPARE FINE while measuring something other than what you
+      # think. #115 owns sweeping the checks that already do this; this one is
+      # written not to need sweeping.
+      - name: The two view positions return different sets
+        run: |
+          set -euo pipefail
+          read_count() {
+            curl -s "http://127.0.0.1:3210/api/brief?view=$1&length=all" \
+              | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+                  const b=JSON.parse(s);
+                  const types=[...new Set(b.stories.map(x=>x.contentType))].sort().join(",");
+                  console.log(`${b.count} ${types}`);
+                })'
+          }
+          BUILT="$(read_count built)"; ALL="$(read_count all)"
+          built="${BUILT%% *}"; all="${ALL%% *}"
+          echo "MEASURED: view=built -> $built  [${BUILT#* }]"
+          echo "MEASURED: view=all   -> $all  [${ALL#* }]"
+
+          # THE FLOOR, AND IT COMES FIRST so the error text can tell the two
+          # causes apart. Two empty sets are not "different", and 0 < 0 is
+          # false, so an empty corpus would otherwise fail the assertion below
+          # and read exactly like a broken filter.
+          if [ "$built" -lt 1 ] || [ "$all" -lt 1 ]; then
+            echo "::error::one or both positions returned nothing (built=$built all=$all) — this is the SEED, not the filter" >&2
+            exit 1
+          fi
+          if [ "$built" -ge "$all" ]; then
+            echo "::error::both positions returned the same set (built=$built all=$all). Either the filter is not filtering, or the seeded corpus contains only built things — check the content types above before touching the filter." >&2
+            exit 1
+          fi
+          echo "RESULT: the two positions return different sets ($built built of $all total)."
 
       # Both checks go through one wrapper, which owns the exit-code contract:
       # 0 passed, 1 the checks ran and failed, 2 the instrument could not run.
@@ -354,7 +454,16 @@ jobs:
           # shoot-filter.mjs will import launchBrowser and is deliberately not
           # a check, so it adds one line here when it lands — deciding rather
           # than forgetting.
-          NOT_A_CHECK=""   # e.g. scripts/shoot-filter.mjs (#108), a capture script
+          # DECIDED, not forgotten — this is the line the comment above predicted.
+          #
+          # shoot-filter.mjs drives a browser and is NOT a check: it captures the
+          # screenshots for #102's two filter positions. It asserts plenty before
+          # each shutter (route, screen state, the control's own position) and
+          # refuses to write files when the two views return the same count, but
+          # those assertions guard the PICTURES, not the product. Running it here
+          # would also make CI depend on a corpus that differs by view, which is
+          # a property of the seed rather than of the app.
+          NOT_A_CHECK="scripts/shoot-filter.mjs"
 
           DRIVERS="$(grep -rl "launchBrowser" scripts --include='*.mjs' 2>/dev/null | grep -v '^scripts/lib/' | sort || true)"
           SELECTED_FILES="$(while IFS= read -r c; do

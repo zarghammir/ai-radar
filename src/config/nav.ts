@@ -1,9 +1,16 @@
-import { Bookmark, FlaskConical, Package, Radar, Settings, Sun } from "lucide-react";
+import { Bookmark, Radar, Settings, Sun } from "lucide-react";
 
 /**
- * The six surfaces. Order is the reading order: the brief first, then
- * everything arriving, then the two filtered views, then your own pile,
- * then configuration.
+ * The surfaces, in reading order: the brief first, then everything arriving,
+ * then your own pile, then configuration. Deliberately not counted here — the
+ * count is the thing that rotted when #102 removed two of them, and a number
+ * in a comment is a claim that has to be re-checked on every edit.
+ *
+ * NO Research and NO Releases, since #102. The owner ruled one feed and one
+ * filter rather than sections — "I don't want to have another page… it's just
+ * a filter" — so those two are positions on Today's view control now, not
+ * destinations. Adding them back here would restore exactly the sections the
+ * ruling removed.
  */
 export const navItems = [
   {
@@ -17,18 +24,6 @@ export const navItems = [
     label: "Radar",
     icon: Radar,
     description: "Everything arriving",
-  },
-  {
-    href: "/research",
-    label: "Research",
-    icon: FlaskConical,
-    description: "Papers and preprints",
-  },
-  {
-    href: "/releases",
-    label: "Releases",
-    icon: Package,
-    description: "Models and products",
   },
   {
     href: "/saved",

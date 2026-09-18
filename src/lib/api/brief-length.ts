@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
-import { BRIEF_LENGTH_COOKIE } from "@/lib/api/fixture-store";
+import { BRIEF_LENGTH_COOKIE, VIEW_COOKIE } from "@/lib/api/fixture-store";
 import { asBriefLength } from "@/lib/api/preferences";
+import { parseView, type BriefView } from "@/lib/api/views";
 import type { BriefLengthParam } from "@/lib/api/types";
 
 /**
@@ -61,5 +62,29 @@ export async function defaultBriefLength(): Promise<BriefLengthParam> {
   } catch (error) {
     console.error("today: could not read the preferred brief length", error);
     return FALLBACK_BRIEF_LENGTH;
+  }
+}
+
+/** What the app opens on when the reader has never chosen. */
+export const DEFAULT_VIEW: BriefView = "built";
+
+/**
+ * Which view Today opens on, read the way a SERVER component must.
+ *
+ * The same cookie mechanism as the brief length, for the same reason: a value
+ * kept on the device cannot otherwise reach a page rendered before that device
+ * runs any JavaScript. A cookie this build cannot parse falls back to the
+ * default rather than filtering to nothing — it is reader-writable, so it is
+ * untrusted input.
+ */
+export async function defaultView(): Promise<BriefView> {
+  try {
+    const jar = await cookies();
+    const stored = jar.get(VIEW_COOKIE)?.value;
+    if (!stored) return DEFAULT_VIEW;
+    return parseView(decodeURIComponent(stored)) ?? DEFAULT_VIEW;
+  } catch (error) {
+    console.error("today: could not read the preferred view", error);
+    return DEFAULT_VIEW;
   }
 }

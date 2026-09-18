@@ -1,0 +1,10 @@
+{
+  "base": "http://127.0.0.1:3210",
+  "shots": [
+    {
+      "file": "docs/screenshots/filter/today-quiet-phone-dark.png",
+      "what": "A genuinely quiet day: the window opened at 00:52 and nothing has been built since. The database ANSWERED — this is not the unreachable state.",
+      "url": "http://127.0.0.1:3210/?view=built"
+    }
+  ]
+}

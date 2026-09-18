@@ -1,10 +1,12 @@
 import { BriefList } from "@/components/today/brief-list";
 import { ReadingMode } from "@/components/today/reading-mode";
+import { ViewFilter } from "@/components/today/view-filter";
 import { EmptyState, PageShell } from "@/components/page-shell";
 import { LocalDate } from "@/components/local-date";
 import { briefSummary } from "@/lib/api/brief-summary";
 import { loadBrief } from "@/lib/api/brief-server";
-import { defaultBriefLength } from "@/lib/api/brief-length";
+import { defaultBriefLength, defaultView } from "@/lib/api/brief-length";
+import { parseView } from "@/lib/api/views";
 import type { BriefLengthParam } from "@/lib/api/types";
 
 const LENGTHS: BriefLengthParam[] = ["5", "10", "all"];
@@ -22,8 +24,16 @@ export default async function TodayPage({ searchParams }: PageProps<"/">) {
   // when preferences cannot be read, so it cannot be the thing that throws
   // below — an unreachable database shows the unreachable screen, not a page
   // that failed while deciding how long it should be.
-  const chosen = parseLength((await searchParams).length);
+  const params = await searchParams;
+  const chosen = parseLength(params.length);
   const length = chosen ?? (await defaultBriefLength());
+
+  // The URL is this visit's answer; the cookie is what this device chose last
+  // time; "built" is the app's answer for a reader who has said nothing. Same
+  // three-step shape as the length above, and the same reason the durable half
+  // is a cookie: this page is rendered on the server and filters in the query,
+  // so the view has to arrive before the device runs any JavaScript.
+  const view = parseView(params.view) ?? (await defaultView());
 
   /**
    * THREE STATES, and two of them must never look alike.
@@ -44,7 +54,7 @@ export default async function TodayPage({ searchParams }: PageProps<"/">) {
   // read. A clean line-merge can leave code that compiles and means nothing.
   let brief: Awaited<ReturnType<typeof loadBrief>> | null = null;
   try {
-    brief = await loadBrief(length);
+    brief = await loadBrief(length, view);
   } catch (error) {
     // Logged, never rendered. The driver's message is the failed SQL including
     // column names: meaningless to the person looking at the screen, and not
@@ -99,13 +109,25 @@ export default async function TodayPage({ searchParams }: PageProps<"/">) {
           </span>
         )
       }
-      controls={<ReadingMode current={length} />}
+      controls={
+        <>
+          <ViewFilter current={view} />
+          <ReadingMode current={length} />
+        </>
+      }
       state={brief.count === 0 ? "quiet" : "brief"}
     >
       {brief.count === 0 ? (
+        // A quiet day in the DEFAULT view is not the same as a quiet day
+        // overall: the reader is one tap from more, and a screen that does not
+        // say so looks broken rather than narrow.
         <EmptyState
-          title="No brief yet"
-          body={`Nothing has arrived since your brief window opened at ${brief.window.briefTime}. The database answered, so this is a quiet morning rather than a fault. It fills as soon as the worker's next sweep finds something.`}
+          title={view === "built" ? "Nothing built today" : "No brief yet"}
+          body={
+            view === "built"
+              ? `Nobody shipped a model, a tool, a release or a paper since your window opened at ${brief.window.briefTime}. The database answered, so this is a quiet day rather than a fault — switch to Everything above to see the news and discussion around it.`
+              : `Nothing has arrived since your brief window opened at ${brief.window.briefTime}. The database answered, so this is a quiet morning rather than a fault. It fills as soon as the worker's next sweep finds something.`
+          }
         />
       ) : (
         <BriefList stories={brief.stories} />

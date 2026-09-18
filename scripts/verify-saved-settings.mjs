@@ -27,6 +27,12 @@ import { bailIfBroken, isFloorBail, sectionStart } from "./lib/floor.mjs";
 import { saveThroughUi } from "./lib/save-through-ui.mjs";
 import { markOnboarded } from "./lib/seed.mjs";
 
+// VIEW PINNED TO "all" THROUGHOUT THIS FILE. #102 made the app open on built
+// things, which is 4 of the 7 fixture stories — and a 5-minute budget cannot
+// shorten a 4-story list, so the reading-length assertions below started failing
+// on a filter that was working perfectly. The two are separate axes: this file
+// measures LENGTH, so it holds the view still. The default view is exercised by
+// the accessibility sweep and by the empty-state step in CI.
 const base = process.argv[2] || process.env.VERIFY_URL || "http://127.0.0.1:3210";
 await requireServer(base);
 
@@ -272,22 +278,58 @@ try {
      *
      * Five minutes is provably shorter than everything, so a Today that
      * ignored the preference would show the same count for both.
+     *
+     * BOTH SIDES PIN ?view=all AND NEITHER SUPPLIES A LENGTH. This is the
+     * whole assertion, and it was broken between #102 and the review of #108:
+     * the left side read a bare "/", which after #102 also means view=built.
+     * The two sides then differed on TWO axes, and the sentence above stopped
+     * being true of the code under it. With seven fixtures of which four are
+     * built things, a Today that ignored the saved length ENTIRELY would have
+     * shown 4 against 7, and 4 < 7, so the check would have passed while
+     * measuring the filter instead of the preference.
+     *
+     * The rule this file is supposed to demonstrate: vary ONE axis. The right
+     * side may say length=all because that is the axis under test; neither
+     * side may say view, beyond pinning it to the same value.
      */
-    await page.goto(base + "/", { waitUntil: "networkidle" });
+    // THE PRECONDITION, WITHOUT WHICH THE COMPARISON BELOW MEANS NOTHING.
+    //
+    // A 5-minute budget can only shorten a list that runs longer than five
+    // minutes. On a corpus of exactly five one-minute stories the budget cuts
+    // nothing, both sides return the same count, and the assertion below
+    // reports "the preference is not reaching the server" about a server that
+    // is working perfectly. Found by running it: this development database
+    // held 5 stories totalling exactly 5 minutes.
+    //
+    // A vacuous instrument that fails is not better than one that passes. It
+    // is worse, because someone will go looking for a bug in the cookie.
+    const wholeBrief = await fetch(`${base}/api/brief?view=all&length=all`).then((r) => r.json());
+    const budget = 5;
+    if (!(wholeBrief.readingMinutes > budget)) {
+      floor.push(
+        `the corpus is too short to measure the reading-length preference: the whole brief runs ` +
+          `${wholeBrief.readingMinutes} minute(s) against a ${budget}-minute budget, so NOTHING can ` +
+          `be cut and this check cannot tell a working preference from a broken one. Seed more ` +
+          `stories rather than relaxing the assertion below.`,
+      );
+    }
+    bailIfBroken(floor, mark);
+
+    await page.goto(base + "/?view=all", { waitUntil: "networkidle" });
     const atPreference = await page.locator("article h2 a").count();
-    await page.goto(base + "/?length=all", { waitUntil: "networkidle" });
+    await page.goto(base + "/?length=all&view=all", { waitUntil: "networkidle" });
     const atAll = await page.locator("article h2 a").count();
-    out.settings.today = { atPreference, atAll };
+    out.settings.today = { atPreference, atAll, wholeBriefMinutes: wholeBrief.readingMinutes };
     if (atPreference < 1) floor.push("Today rendered nothing at the saved length");
     if (!(atPreference < atAll)) {
       floor.push(
-        `Today showed ${atPreference} stories at the saved 5-minute length and ${atAll} at ?length=all — the preference is not reaching the server`,
+        `Today showed ${atPreference} stories at the saved 5-minute length and ${atAll} at ?length=all — both on view=all, so length is the only axis that differs, and the whole brief runs ${wholeBrief.readingMinutes} minutes so the budget HAD something to cut — the preference is not reaching the server`,
       );
     }
 
     // And the override still wins for one visit, so the cookie has not turned
     // the URL into a suggestion.
-    await page.goto(base + "/?length=all", { waitUntil: "networkidle" });
+    await page.goto(base + "/?length=all&view=all", { waitUntil: "networkidle" });
     const overrideWins = (await page.locator("article h2 a").count()) === atAll;
     out.settings.urlStillOverrides = overrideWins;
     if (!overrideWins) floor.push("?length= no longer overrides the saved preference");
