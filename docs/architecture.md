@@ -144,10 +144,13 @@ being imported.
 if any can reach a feed adapter, the HTTP client or an LLM SDK. It has no
 exceptions list.
 
-> **Why it exists** (measured 2026-09-16 at `7f5df14`, when this paragraph was
-> written — kept as history rather than
-> as a current count; `npm run routes:check` is the live number): nine of the
-> twelve routes then present transitively imported the
+> **Why it exists** — history, not a current count; `npm run routes:check` is
+> the live number. **Measured at `26b7a3c` (2026-09-16)**: 13 routes, 12
+> public, and **nine of them reaching both `src/sources/http.ts` and
+> `rank-all.ts`**. Severed and made checkable by its child **`e1a61f4`**, which
+> changed one import line in `stories.ts` and added
+> `scripts/check-route-cost.ts` in the same commit. Nine of the twelve routes
+> then present transitively imported the
 > adapters, through a single import line — `stories.ts` → `rank-all.ts` →
 > `run.ts` → the source registry → all three adapters → `src/sources/http.ts`,
 > where `fetch` lives. No route _called_ any of it, so the rule held; what did
