@@ -1,5 +1,5 @@
 import { readInternalSecret, secretMatches, type SecretEnv } from "@/worker/secret";
-import { describeError } from "@/pipeline/run";
+import { describeError } from "@/pipeline/describe-error";
 
 /**
  * THE RULE FOR EVERY ROUTE UNDER src/app/api (#103).

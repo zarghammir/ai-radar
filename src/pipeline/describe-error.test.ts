@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { describeError } from "./run";
+import { describeError } from "./describe-error";
 
 /**
  * describeError builds the string that is STORED in sources.lastError and

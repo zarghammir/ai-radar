@@ -16,17 +16,24 @@ adapter is invoked, no feed or API is fetched, nothing is summarised on demand.
 This is what keeps a page load cheap, predictable and free, and it is why a slow
 upstream feed can never make the app slow.
 
-One **internal** route is the exception, and it is not part of this client API:
-`POST /api/internal/ingest` triggers an ingestion pass. It is guarded by a shared
-secret (`INTERNAL_API_SECRET`) and **refuses before it reads or writes
-anything** — an unauthenticated caller leaves no row in `ingest_runs` and costs
-nothing to turn away. It exists for a scheduler or an operator, is documented
-with the worker rather than here, and does not change the rule above for
+Routes under **`internal/`** are the exception and are not part of this client
+API. The boundary is a rule rather than a list: **`internal/` means
+operator-only and is secret-guarded; everything outside it is reader-facing and
+must not mutate operator state.** Both are guarded by a shared secret
+(`INTERNAL_API_SECRET`) and **refuse before they read or write anything** — an
+unauthenticated caller leaves no trace and costs nothing to turn away.
+
+`POST /api/internal/ingest` triggers an ingestion pass; `PUT
+/api/internal/sources/:key` switches a source on or off (#103 — it was
+`PUT /api/sources/:key`, unguarded, until then). They exist for a scheduler or
+an operator, are documented with the worker rather than here, and do not change
+the rule above for
 anything a client can reach. Ingestion otherwise happens only in the worker.
 
-The only tables any route writes are `saved_items`, `read_state`,
-`user_preferences`, and `sources` — the last for its `enabled` column only, so
-a reader can switch a source off. No route writes `raw_items` or `stories`.
+The only tables a **client** route writes are `saved_items`, `read_state` and
+`user_preferences`. `sources.enabled` is written too, but **only by an operator
+route under `internal/`** — a reader cannot switch a source off, and could until
+#103. No route writes `raw_items` or `stories`.
 
 This is the product's cost-protection promise, not a style preference. An
 implementation that breaks it is a review finding.
@@ -650,10 +657,18 @@ A run that has started but not finished is neither a success nor a failure, and
 does not clear the count — otherwise a failing source would read healthy for
 the duration of every pass.
 
-### `PUT /api/sources/:key`
+### `PUT /api/internal/sources/:key`
+
+**Operator-only, not part of this client API.** Requires the
+`x-internal-secret` header; an unauthenticated caller gets `401` and the row is
+unchanged. Listed here beside the source shapes because that is where a reader
+looks for it — the boundary rule is in Ground rules above.
 
 Switches one source on or off. The only write any route makes to `sources`, and
 only to this column.
+
+It was `PUT /api/sources/:key` with no guard of any kind until #103, which is
+why the old path is **gone rather than redirected**.
 
 ```json
 { "enabled": false }
@@ -673,31 +688,31 @@ skipped by the next worker run. The seed deliberately never overwrites
 Every response field, and what backs it. A field cannot be added to this
 contract without filling a row here.
 
-| field                                         | source                                                                                      |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `id`, `slug`, `title`, `contentType`          | `stories` columns                                                                           |
-| `whyItMatters`                                | `stories.why_it_matters`, on both the card and the detail                                   |
-| `verification`, `verificationNote`            | `stories`, written by `deriveVerification` in the pipeline                                  |
-| `sourceCount`                                 | `stories.source_count`, recomputed by the pipeline                                          |
-| `firstSeenAt`, `lastActivityAt`               | `stories` columns                                                                           |
-| `score`                                       | `stories.score`                                                                             |
-| `scoreComponents[].key/value`                 | `stories.score_components`                                                                  |
-| `scoreComponents[].label`                     | `COMPONENT_LABELS` in `src/pipeline/ranking/score.ts`, falling back to the key if unmapped  |
-| `sources[]`                                   | `raw_items` joined to `sources`, de-duplicated by source key                                |
-| `primarySource`, `url`, `publishedAt`         | the item at `stories.primary_item_id`, joined to its source                                 |
-| `excerpt`                                     | primary item's `raw_items.excerpt`                                                          |
-| `topics[]`                                    | `story_topics` joined to `topics`                                                           |
-| `readingMinutes`                              | `readingMinutes()` in `src/pipeline/normalize/text.ts`, over the story's summary or excerpt |
-| `items[]`                                     | `raw_items` for the story, joined to `sources`                                              |
-| `items[].engagement`                          | `raw_items.metadata.points` / `.comments`, null when absent                                 |
-| `timeline[]`                                  | derived: `items` ordered by `publishedAt` ascending                                         |
-| `saved`, `note`, `tags`, `savedAt`            | `saved_items`                                                                               |
-| `read`, `readAt`                              | `read_state.read_at`                                                                        |
-| `hidden`                                      | `read_state.hidden`                                                                         |
-| preferences fields                            | `user_preferences` row 1                                                                    |
-| `topics[].storyCount`, `sources[].storyCount` | counted per request from `story_topics` / `raw_items`, over 7 days                          |
-| `buckets[].hour`, `buckets[].count`           | `stories.last_activity_at` grouped by hour, empty hours filled in                           |
-| `sources[].enabled` (write)                   | `sources.enabled`, the only column any route writes on that table                           |
+| field                                         | source                                                                                                            |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `id`, `slug`, `title`, `contentType`          | `stories` columns                                                                                                 |
+| `whyItMatters`                                | `stories.why_it_matters`, on both the card and the detail                                                         |
+| `verification`, `verificationNote`            | `stories`, written by `deriveVerification` in the pipeline                                                        |
+| `sourceCount`                                 | `stories.source_count`, recomputed by the pipeline                                                                |
+| `firstSeenAt`, `lastActivityAt`               | `stories` columns                                                                                                 |
+| `score`                                       | `stories.score`                                                                                                   |
+| `scoreComponents[].key/value`                 | `stories.score_components`                                                                                        |
+| `scoreComponents[].label`                     | `COMPONENT_LABELS` in `src/pipeline/ranking/score.ts`, falling back to the key if unmapped                        |
+| `sources[]`                                   | `raw_items` joined to `sources`, de-duplicated by source key                                                      |
+| `primarySource`, `url`, `publishedAt`         | the item at `stories.primary_item_id`, joined to its source                                                       |
+| `excerpt`                                     | primary item's `raw_items.excerpt`                                                                                |
+| `topics[]`                                    | `story_topics` joined to `topics`                                                                                 |
+| `readingMinutes`                              | `readingMinutes()` in `src/pipeline/normalize/text.ts`, over the story's summary or excerpt                       |
+| `items[]`                                     | `raw_items` for the story, joined to `sources`                                                                    |
+| `items[].engagement`                          | `raw_items.metadata.points` / `.comments`, null when absent                                                       |
+| `timeline[]`                                  | derived: `items` ordered by `publishedAt` ascending                                                               |
+| `saved`, `note`, `tags`, `savedAt`            | `saved_items`                                                                                                     |
+| `read`, `readAt`                              | `read_state.read_at`                                                                                              |
+| `hidden`                                      | `read_state.hidden`                                                                                               |
+| preferences fields                            | `user_preferences` row 1                                                                                          |
+| `topics[].storyCount`, `sources[].storyCount` | counted per request from `story_topics` / `raw_items`, over 7 days                                                |
+| `buckets[].hour`, `buckets[].count`           | `stories.last_activity_at` grouped by hour, empty hours filled in                                                 |
+| `sources[].enabled` (write)                   | `sources.enabled`, the only column any route writes on that table — and only the operator route under `internal/` |
 
 ## Not filled yet
 
@@ -762,9 +777,10 @@ curl -s -X POST 'http://localhost:3000/api/hide/412'
 # Arrivals by hour, same filters as the list above it
 curl -s 'http://localhost:3000/api/radar/histogram?topic=openai&since=24h'
 
-# Switch a source off
-curl -s -X PUT 'http://localhost:3000/api/sources/venturebeat-ai' \
+# Switch a source off — OPERATOR ONLY, needs the secret
+curl -s -X PUT 'http://localhost:3000/api/internal/sources/venturebeat-ai' \
   -H 'content-type: application/json' \
+  -H "x-internal-secret: $INTERNAL_API_SECRET" \
   -d '{"enabled":false}'
 
 # Preferences

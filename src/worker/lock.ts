@@ -1,5 +1,5 @@
 import type postgres from "postgres";
-import { describeError } from "@/pipeline/run";
+import { describeError } from "@/pipeline/describe-error";
 
 /**
  * The advisory-lock key every AI Radar ingest competes for.

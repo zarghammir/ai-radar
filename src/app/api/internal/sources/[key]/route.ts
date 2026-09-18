@@ -17,9 +17,10 @@ const bodySchema = z.object({ enabled: z.boolean() });
  * silently too: the worker keeps running and keeps exiting 0, because a pass
  * over zero enabled sources is not a failure.
  *
- * Nothing in this repository called the old path — `/api/sources`,
- * `listSources` and `SourceSummary` were grepped across src, and
- * settings/page.tsx and lib/api/client.ts were read directly. So this is a
+ * Nothing in this repository called the old path, measured 2026-09-17 at
+ * 6aca5c5 — `/api/sources`, `listSources` and `SourceSummary` were grepped
+ * across src, and settings/page.tsx and lib/api/client.ts were read directly.
+ * Dated because an absence is a claim about a tree at a moment, not a property. So this is a
  * move rather than a removal of capability and no UI changed. That search
  * cannot see a caller OUTSIDE this repository hitting the deployed URL; if one
  * exists it now needs the x-internal-secret header.

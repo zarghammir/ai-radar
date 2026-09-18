@@ -110,9 +110,9 @@ describe("the internal/ boundary is guarded", () => {
    * but outside src/app/api is never walked, so it is not exempt from this
    * rule — it is invisible to it, and to the cost rule in
    * scripts/check-route-cost.ts, which has a floor of the same shape. Measured
-   * 2026-09-17 across the whole of src/app: 13 route files, all inside
-   * src/app/api, 2 internal and 11 public, zero outside. The gap is real and
-   * currently empty.
+   * 2026-09-17 at 6aca5c5 across the whole of src/app: 13 route files, all
+   * inside src/app/api, 2 internal and 11 public, zero outside. The gap is real
+   * and currently empty — dated because an absence is only ever true of a tree.
    *
    * #106 owns replacing this with a count taken from an INDEPENDENT source of
    * truth — every route.ts under src/app — so the floor bounds the repository
@@ -120,7 +120,13 @@ describe("the internal/ boundary is guarded", () => {
    */
   it("found routes to check at all", () => {
     expect(routes.length).toBeGreaterThanOrEqual(8);
-    expect(internal.length).toBeGreaterThanOrEqual(1);
+    // 2, not 1, for the same reason routes is 8 and not 1: the partial break
+    // is ONE internal route going missing while it.each silently generates one
+    // fewer test. A floor of 1 is blind to exactly that, and defending 8 over 1
+    // one level up while accepting 1 here would be the argument applied to one
+    // level and dropped for the next. Measured 2026-09-17 at 6aca5c5: two
+    // internal routes, ingest and sources/[key].
+    expect(internal.length).toBeGreaterThanOrEqual(2);
   });
 
   it.each(internal)("%s reaches the internal guard", (route) => {

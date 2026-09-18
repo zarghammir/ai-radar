@@ -144,7 +144,9 @@ being imported.
 if any can reach a feed adapter, the HTTP client or an LLM SDK. It has no
 exceptions list.
 
-> **Why it exists:** nine of the twelve routes once transitively imported the
+> **Why it exists** (measured at the time, and kept as history rather than as a
+> current count — `npm run routes:check` is the live number): nine of the twelve
+> routes then present transitively imported the
 > adapters, through a single import line — `stories.ts` → `rank-all.ts` →
 > `run.ts` → the source registry → all three adapters → `src/sources/http.ts`,
 > where `fetch` lives. No route _called_ any of it, so the rule held; what did
