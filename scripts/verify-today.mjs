@@ -30,22 +30,46 @@ await requireServer(base);
  * pull request, which turns "we do not know" into "we believe" without
  * anything changing about the instrument.
  *
- * VERIFY_CONTROL=no-budget asks for `length=all` on the leg that is supposed
- * to ask for five minutes. The budget is then never applied, the short list is
- * the long list, and the reading-length assertion MUST fail. It changes an
- * input to the app in the same way AUDIT_CONTROL=narrow changes the viewport —
- * it does not edit the assertion, which would prove nothing about it.
+ * VERIFY_CONTROL=no-budget asks for `length=all` on BOTH legs that are
+ * supposed to ask for a budget — the five-minute one and the ten-minute one.
+ * Neither budget is then applied, each short list is the long list, and both
+ * named assertions MUST fail. It changes an input to the app in the same way
+ * AUDIT_CONTROL=narrow changes the viewport; it does not edit the assertions,
+ * which would prove nothing about them.
+ *
+ * ONE ENV VAR COVERING TWO FLOORS, because ci.yml's map allows exactly one
+ * control value per check. So this control is held to reddening BOTH — see the
+ * array passed to reportControl, which fails the control if either stayed
+ * green rather than crediting it with the first hit.
  *
  * Deliberately NOT done by shrinking the corpus: that trips the reading-time
  * precondition instead, which is a different floor. A control has to redden
  * the assertion it names.
  */
 const CONTROL = process.env.VERIFY_CONTROL === "no-budget";
-/** The needle identifying THIS file's named assertion, kept beside the control. */
-const CONTROL_NEEDLE = "did not shorten the list";
+/** The needles identifying THIS file's named assertions, kept beside the control. */
+const CONTROL_NEEDLES = [
+  "the 5-minute brief did not shorten the list",
+  "the ten-minute brief did not shorten the list",
+];
 
 /** The brief must never be emptier than this for the assertions to mean anything. */
 const MIN_STORIES = 2;
+
+/**
+ * The finite reading budgets this file actually requests, and therefore the
+ * ones its corpus has to be able to exercise. `all` is not a budget, it is the
+ * absence of one.
+ *
+ * DERIVED FROM WHAT THIS FILE TESTS rather than copied from BRIEF_LENGTHS,
+ * because a .mjs script cannot import the TypeScript source and a hand-copied
+ * list is exactly the enumeration that rots. What matters here is that the
+ * precondition below cannot drift from the assertions in THIS file — add a
+ * budget to the assertions without adding it here and the precondition stops
+ * covering it, which is the defect #114 was filed about one level up.
+ */
+const BUDGETS_TESTED = [5, 10];
+const LONGEST_BUDGET_TESTED = Math.max(...BUDGETS_TESTED);
 
 const out = {};
 const floor = [];
@@ -70,7 +94,11 @@ try {
 
     await page.goto(`${base}/?length=all&view=all`, { waitUntil: "networkidle" });
     const all = await cards(page).count();
-    await page.goto(`${base}/?length=10&view=all`, { waitUntil: "networkidle" });
+    // Under the control this asks for `all` too, so BOTH budgeted legs are
+    // unbudgeted and both named assertions must redden — see CONTROL below.
+    await page.goto(`${base}/?length=${CONTROL ? "all" : "10"}&view=all`, {
+      waitUntil: "networkidle",
+    });
     const ten = await cards(page).count();
     // Under the control this asks for `all`, so the "five minute" leg is not a
     // five-minute leg at all and the comparison below cannot hold.
@@ -85,22 +113,29 @@ try {
 
     // A COUNT FLOOR IS NOT ENOUGH HERE, and that gap is why this file went red
     // on a working build. MIN_STORIES guards against an empty page, but the
-    // assertion below needs something stronger: the brief has to run LONGER
-    // than five minutes before a five-minute budget can shorten anything. Five
-    // one-minute stories clear MIN_STORIES easily and still leave `five < all`
-    // impossible to satisfy, so the check reports that the reading-length
-    // switch is broken on a switch that is working.
+    // assertions below need something stronger: the brief has to run LONGER
+    // than the longest budget they test before that budget can shorten
+    // anything. Stories clear MIN_STORIES easily and still leave the
+    // comparisons impossible to satisfy, so the check reports that the
+    // reading-length switch is broken on a switch that is working.
+    //
+    // IT GUARDS THE LONGEST BUDGET TESTED, NOT THE SHORTEST, and that is #114's
+    // correction. Guarding five proves the five-minute setting can cut and says
+    // nothing about the ten — so once `ten < all` existed, a corpus of eight
+    // minutes would have passed this precondition and then failed the ten
+    // assertion, blaming the product for a corpus problem. The longest budget
+    // guards every shorter one by construction.
     //
     // The same hole existed in verify-saved-settings.mjs and is fixed there
     // too. The general shape: a test whose quantity cannot vary across the
     // defect is vacuous, and a vacuous test that FAILS is worse than one that
     // passes, because it sends the next person hunting a bug that is not there.
     const wholeBrief = await fetch(`${base}/api/brief?view=all&length=all`).then((r) => r.json());
-    if (!(wholeBrief.readingMinutes > 5)) {
+    if (!(wholeBrief.readingMinutes > LONGEST_BUDGET_TESTED)) {
       floor.push(
         `the corpus is too short to measure the reading-length switch: the whole brief runs ` +
-          `${wholeBrief.readingMinutes} minute(s), so a 5-minute budget has nothing to cut. ` +
-          `Seed more stories rather than relaxing the assertion below.`,
+          `${wholeBrief.readingMinutes} minute(s), so the ${LONGEST_BUDGET_TESTED}-minute budget has ` +
+          `nothing to cut. Seed more stories rather than relaxing the assertions below.`,
       );
     }
     bailIfBroken(floor, mark);
@@ -110,12 +145,43 @@ try {
       ten,
       five,
       shortens: five < all,
+      narrowsMonotonically: five <= ten && ten <= all,
+      tenIsNotEverything: ten < all,
       // The contract: at least one story even if it exceeds the budget.
       neverEmpty: five >= 1,
     };
     if (!(five < all))
       floor.push(
         `the 5-minute brief did not shorten the list (${five} vs ${all}) and the whole brief runs ` +
+          `${wholeBrief.readingMinutes} minutes, so the budget HAD something to cut`,
+      );
+
+    // THE TEN-MINUTE BUDGET, WHICH THIS FILE MEASURED AND NEVER CHECKED (#114).
+    //
+    // `ten` was computed, written into out.readingLength, and asserted by
+    // nothing — the quietest kind of gap, because the number appears in the
+    // output and reads as though something is watching it. On #112's first CI
+    // run the digest printed all=6 ten=6 and nothing went red.
+    //
+    // TWO PROPERTIES, and they fail for different reasons, so they are two
+    // messages rather than one combined check:
+    //
+    //   five <= ten <= all   the settings narrow in the order a reader expects.
+    //                        A violation means the budget is not ordered by its
+    //                        own number, which is a different defect from it
+    //                        being ignored.
+    //   ten  <  all          STRICT, so ten is provably not "everything". This
+    //                        is the one that could not be written until #65
+    //                        grew the corpus: on the old set it was 6 < 6 and
+    //                        would have reddened a correct build.
+    if (!(five <= ten && ten <= all))
+      floor.push(
+        `the reading-length settings do not narrow in order (five=${five} ten=${ten} all=${all}) — ` +
+          `a longer budget returned fewer stories than a shorter one`,
+      );
+    if (!(ten < all))
+      floor.push(
+        `the ten-minute brief did not shorten the list (${ten} vs ${all}) and the whole brief runs ` +
           `${wholeBrief.readingMinutes} minutes, so the budget HAD something to cut`,
       );
     await ctx.close();
@@ -299,5 +365,5 @@ try {
 out.onboardedOnServer = onboardedOnServer;
 out.floor = { passed: floor.length === 0, failures: floor, minStories: MIN_STORIES };
 console.log(JSON.stringify(out, null, 2));
-if (CONTROL) reportControl(floor, CONTROL_NEEDLE, "verify:today's reading-length floor");
+if (CONTROL) reportControl(floor, CONTROL_NEEDLES, "verify:today's reading-length floors");
 if (floor.length > 0) process.exit(1);

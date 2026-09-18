@@ -27,19 +27,33 @@ import { getDb, getSql } from "@/db/client";
 import { runIngest } from "@/pipeline/run";
 import { rankAllStories } from "@/pipeline/ranking/rank-all";
 import { readingMinutes } from "@/pipeline/normalize/text";
-import { sources, stories } from "@/db/schema";
+import { BRIEF_LENGTHS, sources, stories } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 
 /** Enough for the browser scripts, which ask for three ids and a brief. */
 const MIN_STORIES = 4;
 
 /**
- * The shortest reading budget the product offers, and therefore the one the
- * seeded corpus has to be longer than for `verify:today` and `verify:saved` to
- * mean anything. Keep it in step with the reading-length control's smallest
- * option rather than guessing.
+ * THE LONGEST FINITE READING BUDGET, DERIVED FROM THE PRODUCT'S OWN LIST.
+ *
+ * This guarded the SHORTEST budget until #114, which was the wrong end. A
+ * corpus longer than five minutes proves the five-minute setting can cut and
+ * says nothing about the ten — and `BRIEF_LENGTHS` is ["5", "10", "all"], so
+ * ten is a real choice a reader can make. When #114 added `ten < all`, the
+ * brief ran ELEVEN minutes: a margin of one minute, one story, over the
+ * ten-minute budget. One summary edit from a correct build going red.
+ *
+ * Guarding the longest finite budget guards every shorter one by construction,
+ * which is why this is the end to hold.
+ *
+ * DERIVED rather than written as 10, so adding a longer option to
+ * BRIEF_LENGTHS raises this floor automatically instead of leaving a new
+ * setting the corpus cannot exercise — the exact gap #114 was filed for. "all"
+ * is dropped because it is not a budget: it is the absence of one.
  */
-const SHORTEST_BUDGET_MINUTES = 5;
+const LONGEST_FINITE_BUDGET_MINUTES = Math.max(
+  ...BRIEF_LENGTHS.filter((length) => length !== "all").map(Number),
+);
 
 /**
  * Dealt round-robin across whatever is enabled, so the count does not depend on
@@ -105,6 +119,32 @@ const ITEMS = [
     title: "An open dataset of agent trajectories is released under CC-BY",
     link: "https://huggingface.co/e2e-agent-trajectories",
     minutesAgo: 175,
+  },
+  // FOUR MORE FOR HEADROOM, not for coverage. #114 raised the floor to the
+  // LONGEST finite budget, and at eleven items the brief ran eleven minutes
+  // against a ten-minute budget — a margin of one story. A floor that only
+  // just holds is a floor that fails on the next summary edit, and the whole
+  // point of putting it in the seeder was to stop a corpus problem surfacing
+  // as a confident failure somewhere else.
+  {
+    title: "A safety evaluation suite adds multi-turn jailbreak scenarios",
+    link: "https://www.anthropic.com/e2e-multiturn-evals",
+    minutesAgo: 190,
+  },
+  {
+    title: "Two labs publish conflicting results on scaling inference compute",
+    link: "https://arxiv.org/e2e-conflicting-inference-scaling",
+    minutesAgo: 205,
+  },
+  {
+    title: "A regulator opens consultation on model disclosure requirements",
+    link: "https://www.ft.com/e2e-model-disclosure-consultation",
+    minutesAgo: 220,
+  },
+  {
+    title: "An inference runtime ships speculative decoding by default",
+    link: "https://github.com/e2e-speculative-decoding-default",
+    minutesAgo: 235,
   },
 ];
 
@@ -233,11 +273,13 @@ async function main() {
     (total, story) => total + readingMinutes([story.summary ?? ""]),
     0,
   );
-  if (totalMinutes <= SHORTEST_BUDGET_MINUTES) {
+  if (totalMinutes <= LONGEST_FINITE_BUDGET_MINUTES) {
     throw new Error(
-      `the seeded brief runs ${totalMinutes} minute(s), which the ${SHORTEST_BUDGET_MINUTES}-minute ` +
-        `reading budget cannot shorten — verify:today and verify:saved would both fail and both ` +
-        `would blame the preference. Add items to ITEMS above; do not lower this floor.`,
+      `the seeded brief runs ${totalMinutes} minute(s), which the ${LONGEST_FINITE_BUDGET_MINUTES}-minute ` +
+        `reading budget cannot shorten — verify:today's "ten-minute brief did not shorten the list" ` +
+        `and verify:saved's preference check would both fail, and both would blame the product. ` +
+        `ADD ITEMS TO ITEMS ABOVE. Do not lower this floor: it is derived from BRIEF_LENGTHS so that ` +
+        `every budget the reader can choose is one the corpus can actually exercise.`,
     );
   }
 
@@ -248,7 +290,7 @@ async function main() {
         scored: ranked.ranked,
         minimum: MIN_STORIES,
         briefMinutes: totalMinutes,
-        shortestBudget: SHORTEST_BUDGET_MINUTES,
+        longestFiniteBudget: LONGEST_FINITE_BUDGET_MINUTES,
       },
       null,
       2,
