@@ -18,7 +18,7 @@ Today page and the sentence was false before it merged.
 ```
  feeds and APIs          the worker              the database            the app
 ┌───────────────┐      ┌──────────────┐        ┌──────────────┐      ┌─────────────┐
-│ rss · arxiv   │─────▶│ fetch        │───────▶│ raw_items    │◀─────│ 13 route    │
+│ rss · arxiv   │─────▶│ fetch        │───────▶│ raw_items    │◀─────│ the route   │
 │ hackernews    │      │ normalize    │        │ stories      │      │ handlers    │
 └───────────────┘      │ dedupe       │        │ topics …     │      └─────────────┘
                        │ cluster      │        └──────────────┘             │
@@ -70,11 +70,27 @@ A pass is `runIngest` then `rankAllStories`, in that order, in one call.
 
 ## The read path
 
-Every route handler lives under `src/app/api/`. All but one are the client API;
-the exception is `internal/ingest`, which triggers an ingestion pass and is
-guarded by `INTERNAL_API_SECRET`. At the time of writing that is twelve and one
-— **`npm run routes:check` prints the current pair**, so the number above is a
-convenience and the command is the source of truth.
+Every route handler lives under `src/app/api/`, and the `internal/` path
+segment is the boundary:
+
+> **`internal/` means operator-only and is secret-guarded. Everything outside
+> it is reader-facing and must not mutate operator state.**
+
+That is deliberately a rule and not a list of routes. `PUT /api/sources/[key]`
+sat outside `internal/` with no guard at all until #103, so anyone who could
+reach the port could disable every source by key — and the keys are in
+`src/db/seed-data.ts`, in a public repository. A list of guarded routes would
+not have survived that route being added. The same segment already carries the
+cost rule in `scripts/check-route-cost.ts`, whose own comment says the boundary
+is "a rule rather than a list" — this is the authorisation question answered
+the same way, at the same seam.
+
+"Operator state" means anything that changes what the product _does_: which
+sources run, what gets ingested, how ranking behaves. Reader state — saves,
+read marks, hidden stories — is a separate question tracked in #65 and #95.
+
+**`npm run routes:check` prints the current public/internal pair**, so any
+number written here is a convenience and the command is the source of truth.
 
 A handler is thin. The pattern, from `src/app/api/radar/route.ts`:
 
@@ -128,7 +144,13 @@ being imported.
 if any can reach a feed adapter, the HTTP client or an LLM SDK. It has no
 exceptions list.
 
-> **Why it exists:** nine of the twelve routes once transitively imported the
+> **Why it exists** — history, not a current count; `npm run routes:check` is
+> the live number. **Measured at `26b7a3c` (2026-09-16)**: 13 routes, 12
+> public, and **nine of them reaching both `src/sources/http.ts` and
+> `rank-all.ts`**. Severed and made checkable by its child **`e1a61f4`**, which
+> changed one import line in `stories.ts` and added
+> `scripts/check-route-cost.ts` in the same commit. Nine of the twelve routes
+> then present transitively imported the
 > adapters, through a single import line — `stories.ts` → `rank-all.ts` →
 > `run.ts` → the source registry → all three adapters → `src/sources/http.ts`,
 > where `fetch` lives. No route _called_ any of it, so the rule held; what did

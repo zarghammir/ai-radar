@@ -40,7 +40,10 @@ guards which do not exist is worse than no document.
 - **No code in `src/` calls a paid API.** `@anthropic-ai/sdk` is a dependency, but
   nothing imports it yet. There is currently no way for this app to spend money, and
   `npm run routes:check` is what keeps that true for anything a reader can reach.
-- **Twelve public API routes exist, and none of them can reach a paid service.** This
+- **No public API route can reach a paid service.** The count is deliberately not
+  written here: `npm run routes:check` prints how many public and internal routes it
+  examined, and a number copied beside a command that computes it is the only copy
+  that can rot. (It was 12 public and 1 internal at `a057e5f`; 11 and 2 after #103.) This
   used to hold because there was no public route at all — true, but true for a reason
   that has now gone. It is checked rather than asserted: `npm run routes:check` walks
   the import graph out of every public route handler and fails if any can reach a feed
