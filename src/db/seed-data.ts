@@ -10,6 +10,62 @@ import type { ContentType, SourceKind, SourceTier } from "./schema";
  * Every feed here was fetched and parsed successfully while it was added; see
  * the pull request for the recorded run. Nothing needs a key or a paid plan.
  */
+/**
+ * Every option a source may carry, and the only place they are declared.
+ *
+ * The column is untyped `jsonb`, and `sources.config` has exactly ONE write
+ * path — `db:seed`, fed from the catalogue below. So a wrong key cannot arrive
+ * at runtime from an operator; it arrives at COMPILE TIME, in this file, in a
+ * reviewed diff. Which is why this is a type rather than a runtime validator:
+ * `keywordPolicy: "labl"` is a tsc error before it can be merged, and a
+ * validator would be code maintained forever against input that cannot occur.
+ *
+ * A misspelling was silent for eight of the nine keys, because every reader
+ * takes `config.X ?? default` and a typo simply selects the default. `list` is
+ * the exception and it is an accident of how it is read — it is interpolated
+ * into `${list}stories.json`, so a typo 404s and the run records an error.
+ * That one key is the control group: it shows the other eight are silent
+ * because of how they are consumed rather than by design.
+ */
+export type SourceConfig = {
+  /** Topics every story from this source carries, whatever its headline says. */
+  topicKeys?: string[];
+  /** hackernews: which list, which cutoff, and whether the gate labels. */
+  list?: string;
+  limit?: number;
+  minPoints?: number;
+  keywords?: string[];
+  keywordPolicy?: "gate" | "label";
+  /** rss */
+  maxItems?: number;
+  /** arxiv */
+  categories?: string[];
+  maxResults?: number;
+};
+
+/**
+ * The same keys at runtime, so a test can compare them against the readers.
+ *
+ * The assertion below is what keeps the two in step: adding a key to the type
+ * without adding it here, or the reverse, is a compile error rather than a
+ * list that quietly falls behind.
+ */
+export const SOURCE_CONFIG_KEYS = [
+  "topicKeys",
+  "list",
+  "limit",
+  "minPoints",
+  "keywords",
+  "keywordPolicy",
+  "maxItems",
+  "categories",
+  "maxResults",
+] as const;
+
+type AssertTrue<T extends true> = T;
+type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+type _KeysAgree = AssertTrue<Same<keyof SourceConfig, (typeof SOURCE_CONFIG_KEYS)[number]>>;
+
 export interface SourceSeed {
   key: string;
   name: string;
@@ -29,7 +85,7 @@ export interface SourceSeed {
    * first-party post titled "Introducing our new model" matches no keyword and
    * would carry no company topic at all.
    */
-  config?: Record<string, unknown>;
+  config?: SourceConfig;
   /** Seeded disabled when false. Defaults to true. */
   enabled?: boolean;
 }

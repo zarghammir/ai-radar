@@ -1,6 +1,8 @@
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { CONTENT_TYPES, SOURCE_KINDS, SOURCE_TIERS } from "./schema";
-import { SOURCE_SEEDS, TOPIC_SEEDS } from "./seed-data";
+import { SOURCE_CONFIG_KEYS, SOURCE_SEEDS, TOPIC_SEEDS } from "./seed-data";
 import { getAdapter } from "@/sources/registry";
 import { deriveVerification } from "@/pipeline/clustering/verification";
 import { rankStory } from "@/pipeline/ranking/score";
@@ -11,6 +13,65 @@ import { rankStory } from "@/pipeline/ranking/score";
  * adapter seeds a row nothing can ever read, and a feed URL left null makes the
  * rss adapter throw at fetch time rather than at seed time.
  */
+describe("the declared config shape and the code that reads it", () => {
+  /**
+   * SourceConfig is a TYPE, so a misspelled key is a tsc error before it can
+   * be merged — `sources.config` has exactly one write path, `db:seed`, fed
+   * from this file, so a wrong key arrives at compile time rather than from an
+   * operator at runtime.
+   *
+   * WHAT THE TYPE CANNOT SEE, and this test is for: the type is only as good
+   * as its key list. A key declared and read by nobody is dead config that
+   * reads as configured; a key read by somebody and declared by nobody is
+   * unreachable through the seed. Both directions, because a one-way check
+   * cannot see the extra.
+   *
+   * The reader set is derived from THE READERS — every non-test file under
+   * src/ — rather than from a list of adapters. `topicKeys` is read in
+   * pipeline/run.ts and by no adapter at all, so a scan that assumed
+   * "adapters" would have missed it and the list would have gone stale exactly
+   * the way #101's did.
+   */
+  function readerKeys(): Map<string, string[]> {
+    const found = new Map<string, string[]>();
+    const walk = (dir: string): string[] =>
+      readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+        e.isDirectory()
+          ? walk(join(dir, e.name))
+          : e.name.endsWith(".ts") && !e.name.endsWith(".test.ts")
+            ? [join(dir, e.name)]
+            : [],
+      );
+    for (const file of walk("src")) {
+      for (const m of readFileSync(file, "utf8").matchAll(
+        /(?:source\.config|sourceConfig)\??\.([a-zA-Z_]+)/g,
+      )) {
+        found.set(m[1], [...(found.get(m[1]) ?? []), file]);
+      }
+    }
+    return found;
+  }
+
+  it("declares every key some reader reads, and no key nobody reads", () => {
+    // A floor on the declared side. The bidirectional comparison below floors
+    // the READ side by itself — a scan that broke and matched nothing would
+    // leave every declared key unread and redden — but both sides going empty
+    // together would agree vacuously, and this is what stops that.
+    expect(SOURCE_CONFIG_KEYS.length).toBeGreaterThan(0);
+
+    const read = readerKeys();
+    const declared = new Set<string>(SOURCE_CONFIG_KEYS);
+
+    // Read somewhere and declarable nowhere: the seed cannot set it.
+    const undeclared = [...read.keys()].filter((k) => !declared.has(k));
+    expect(undeclared, `read but not declared: ${undeclared.join(", ")}`).toEqual([]);
+
+    // Declared and read nowhere: dead config that reads as configured.
+    const unread = [...declared].filter((k) => !read.has(k));
+    expect(unread, `declared but nothing reads it: ${unread.join(", ")}`).toEqual([]);
+  });
+});
+
 describe("source catalogue", () => {
   it("has sources across every tier the product uses", () => {
     // NO SIZE FLOOR HERE, deliberately (#90). There was one — `>= 15`, a
