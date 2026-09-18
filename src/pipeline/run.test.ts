@@ -7,6 +7,7 @@ import { eq } from "drizzle-orm";
 import type { Db } from "@/db/client";
 import * as schema from "@/db/schema";
 import { matchedAiVocabulary } from "@/pipeline/normalize/ai-vocabulary";
+import { SOURCE_SEEDS } from "@/db/seed-data";
 import { TRUNCATE_ALL } from "@/db/tables";
 import { rawItems, sources, stories, storyTopics, topics, ingestRuns } from "@/db/schema";
 import { deriveVerification } from "./clustering/verification";
@@ -107,7 +108,9 @@ function fakeNetwork(routes: Record<string, string>, failUrls: string[] = []) {
 
 function hnRoutes(list: HnStory[]): Record<string, string> {
   const routes: Record<string, string> = {
-    "topstories.json": JSON.stringify(list.map((s) => s.id)),
+    // Keyed on the shared suffix so the same builder serves topstories.json
+    // and showstories.json — fakeNetwork matches on `includes`.
+    "stories.json": JSON.stringify(list.map((s) => s.id)),
   };
   for (const s of list) {
     routes[`/item/${s.id}.json`] = JSON.stringify({
@@ -981,6 +984,64 @@ withDb("pipeline orchestration", () => {
       // above would pass just as well if the gate had been removed outright,
       // which would empty the front door instead of widening the back one.
       await hackerNews();
+      await runIngest(db, undefined, {
+        now: NOW,
+        fetchImpl: fakeNetwork(hnRoutes([{ id: 1, title: TITLE, url: "https://example.com/pg" }])),
+        sink: () => {},
+      });
+      expect(await db.select().from(schema.rawItems)).toHaveLength(0);
+    });
+
+    it("stores a non-AI Show HN post using the CATALOGUE's own config", async () => {
+      // #107. Every other test in this file builds its source by hand, so all
+      // of them pass whatever the catalogue says — they prove the mechanism
+      // and say nothing about whether the shipped Show HN row uses it.
+      //
+      // This one drives the real seed. A typo in keywordPolicy makes it fail
+      // here rather than reporting the ticket done while Show HN keeps
+      // discarding, which is the silent failure #111 is about.
+      const seed = SOURCE_SEEDS.find((s) => s.key === "hackernews-show");
+      expect(seed, "the catalogue must still carry Show HN").toBeDefined();
+      expect(matchedAiVocabulary(TITLE), "fixture must genuinely not match").toBe(false);
+
+      await addSource({
+        key: seed!.key,
+        name: seed!.name,
+        kind: seed!.kind,
+        tier: seed!.tier,
+        url: null,
+        defaultContentType: seed!.defaultContentType,
+        config: seed!.config,
+      });
+      await runIngest(db, undefined, {
+        now: NOW,
+        fetchImpl: fakeNetwork(hnRoutes([{ id: 1, title: TITLE, url: "https://example.com/pg" }])),
+        sink: () => {},
+      });
+
+      const items = await db.select().from(schema.rawItems);
+      expect(items).toHaveLength(1);
+      expect(items[0].matchedAiVocabulary).toBe(false);
+      const [story] = await db.select().from(schema.stories);
+      expect(story.adjacentTech).toBe(true);
+    });
+
+    it("leaves the FRONT PAGE discarding the same post", async () => {
+      // The control, and the half that matters. Without it the test above
+      // passes equally well if the gate had simply been deleted — which would
+      // empty the front door rather than widening the back one.
+      const seed = SOURCE_SEEDS.find((s) => s.key === "hackernews-ai");
+      expect(seed!.config?.keywordPolicy, "the front page must not be labelled").toBeUndefined();
+
+      await addSource({
+        key: seed!.key,
+        name: seed!.name,
+        kind: seed!.kind,
+        tier: seed!.tier,
+        url: null,
+        defaultContentType: seed!.defaultContentType,
+        config: seed!.config,
+      });
       await runIngest(db, undefined, {
         now: NOW,
         fetchImpl: fakeNetwork(hnRoutes([{ id: 1, title: TITLE, url: "https://example.com/pg" }])),
