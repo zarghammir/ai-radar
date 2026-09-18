@@ -70,19 +70,33 @@ export function PageShell({
  * body, without any opinion about the words in it. Marker-without-explanation
  * is the defect worth catching; a rewritten sentence is not.
  *
- * THEY CARRY AN EXPLICIT "true" RATHER THAN BEING BARE, and that is the whole
- * reason this comment mentions them twice. Written as `data-empty-body`, JSX
- * passes the boolean `true`, and the attribute was NOT in the server-rendered
- * HTML: CI curled a correctly quiet page and found the body in zero
- * characters. Playwright had found it all along, because it reads the DOM
- * after hydration — so a browser check could not have caught this and a curl
- * did.
+ * THEY CARRY AN EXPLICIT "true" RATHER THAN BEING BARE, for two reasons that
+ * are both about the reader and neither about React.
  *
- * The evidence is a controlled comparison inside that one failing run: the
- * same HTML carried `data-screen-state="quiet"` — a STRING value, three lines
- * up in this file — while the bare boolean was absent. Every other data
- * attribute in this codebase is written with a value; these two were the only
- * exceptions, which is also why nothing else was affected.
+ * It matches `data-screen-state={state}` a few lines up, and every other data
+ * attribute in this codebase, all of which are written with a value.
+ *
+ * And the literal `="true"` is what lets a text search tell this attribute
+ * apart from its own escaped twin. A Next.js document carries the page TWICE:
+ * once as DOM HTML, once as the RSC flight payload, JSON-escaped inside a
+ * script tag. So `data-empty-body` occurs twice in one response — as
+ * `data-empty-body="true"` and as `data-empty-body\":\"true\"` — and the
+ * payload copy comes FIRST. A pattern loose enough to match both, taking the
+ * first hit, reads the payload and captures nothing. Requiring `="true"`
+ * cannot match the escaped form, because that one has `\":\"` between the
+ * name and the value. See the check in .github/workflows/ci.yml and #115.
+ *
+ * WHAT THIS COMMENT USED TO SAY, AND WHY IT IS NOT SAYING IT ANY MORE. It
+ * claimed that a bare `data-empty-body` never reaches the server-rendered
+ * HTML. THAT IS FALSE — React renders the bare form as `data-empty-body="true"`
+ * exactly as the explicit one, and changing it altered no output at all. The
+ * zero-length reading that prompted it had the other cause above. The
+ * retraction is here rather than only in the commit that made it, because a
+ * commit message is read once by whoever opens that commit and a docblock on
+ * an exported component is read by everyone who touches it — and this one was
+ * phrased as an evidenced finding, which is the kind of wrong sentence that
+ * gets believed and propagated. Anyone meeting a bare boolean data attribute
+ * elsewhere should not "fix" working markup on this comment's authority.
  */
 export function EmptyState({ title, body }: { title: string; body: string }) {
   return (
