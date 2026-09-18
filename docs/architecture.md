@@ -195,10 +195,13 @@ fails if they are ever merged.
 Screens are landing week by week, so this document does not list which — the
 Phase 1 milestone does, and it stays current. The durable gaps:
 
-- **Three surfaces are still placeholders.** Radar, Research and Releases have
-  routes and design, and neither reads its data yet. Today, Saved and Settings
-  read the live API — that flip is done, and the sentence that used to sit here
-  saying nothing consumed the API was true until `#62`.
+- **Radar is still a placeholder.** It has a route and design and does not read
+  its data yet. Today, Saved and Settings read the live API — that flip is done,
+  and the sentence that used to sit here saying nothing consumed the API was
+  true until `#62`. This line named three surfaces until `#102`: Research and
+  Releases are not placeholders now, they are gone. The owner ruled one feed and
+  one filter, so what they used to show are two positions of Today's view
+  control rather than two destinations.
 - **AI summaries do not exist.** `LLM_MAX_STORIES_PER_DAY` and `llm_usage` are
   in the schema and nothing reads either; `#35` owns closing that before any
   paid call ships.
