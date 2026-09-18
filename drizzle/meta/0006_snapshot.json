@@ -214,6 +214,12 @@
           "notNull": true,
           "default": "'default'"
         },
+        "matched_ai_vocabulary": {
+          "name": "matched_ai_vocabulary",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
         "metadata": {
           "name": "metadata",
           "type": "jsonb",
@@ -633,6 +639,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'UNVERIFIED'"
+        },
+        "adjacent_tech": {
+          "name": "adjacent_tech",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "verification_note": {
           "name": "verification_note",
