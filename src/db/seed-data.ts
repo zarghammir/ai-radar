@@ -270,7 +270,18 @@ export const SOURCE_SEEDS: SourceSeed[] = [
      * drops the submissions sitting at 2. A threshold calibrated for one list
      * silently empties another.
      */
-    config: { list: "show", limit: 120, minPoints: 3 },
+    /**
+     * keywordPolicy "label" is the whole point of this source, and it is the
+     * one string in this file whose misspelling is silent. The adapter gates
+     * on anything that is not exactly "label" (#111), so "labl" here reports
+     * the ticket done while Show HN keeps discarding — which is why the test
+     * asserts this stored VALUE rather than that the seed ran.
+     *
+     * Without it a growing developer tool that never says "AI" is dropped at
+     * the gate and never stored, and you cannot offer a reader "everything"
+     * over items you threw away (#71).
+     */
+    config: { list: "show", limit: 120, minPoints: 3, keywordPolicy: "label" },
   },
 ];
 

@@ -98,6 +98,20 @@ describe("source catalogue", () => {
     expect(new Set(lists).size).toBe(lists.length);
   });
 
+  it("puts Show HN on the label policy and leaves the front page gating", () => {
+    // #107. The value, not merely that a config exists: the adapter gates on
+    // anything that is not exactly "label", so a misspelling here is silent —
+    // the ticket reads done while Show HN keeps discarding every non-AI post.
+    const show = SOURCE_SEEDS.find((s) => s.config?.list === "show");
+    expect(show?.config?.keywordPolicy).toBe("label");
+
+    // And the other half, which is what stops this being "turn the gate off".
+    // The front page is a general technology firehose; ungated it is the
+    // unfiltered newspaper nobody asked for.
+    const top = SOURCE_SEEDS.find((s) => s.config?.list === "top");
+    expect(top?.config?.keywordPolicy).toBeUndefined();
+  });
+
   it("files a Show HN launch as RELEASE, with a points floor measured for that list", () => {
     const show = SOURCE_SEEDS.find((s) => s.config?.list === "show");
     expect(show).toBeDefined();
