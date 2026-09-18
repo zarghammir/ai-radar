@@ -62,12 +62,21 @@ export function PageShell({
 /**
  * An honest empty state. It says what is missing and what will fill it, rather
  * than pretending the surface is finished.
+ *
+ * THE TWO DATA ATTRIBUTES ARE FOR CI AND ARE NOT DECORATION. The check that an
+ * empty Today explains itself used to grep the page for a phrase, so a correct
+ * copy edit reddened it — twice. An assertion can now ask whether the reader
+ * was told ANYTHING, by finding this block and measuring the length of its
+ * body, without any opinion about the words in it. Marker-without-explanation
+ * is the defect worth catching; a rewritten sentence is not.
  */
 export function EmptyState({ title, body }: { title: string; body: string }) {
   return (
-    <div className="border-edge text-ash border border-dashed p-6">
+    <div data-empty-state className="border-edge text-ash border border-dashed p-6">
       <p className="text-ash-hi text-[15px] font-semibold">{title}</p>
-      <p className="mt-2 max-w-prose text-[14px] leading-relaxed">{body}</p>
+      <p data-empty-body className="mt-2 max-w-prose text-[14px] leading-relaxed">
+        {body}
+      </p>
     </div>
   );
 }

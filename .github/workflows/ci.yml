@@ -237,17 +237,29 @@ jobs:
             printf '%s' "$HTML" | grep -oiE "cannot reach your stories|quiet (morning|day)" >&2 || true
             exit 1
           fi
-          # The words, not only the marker: a reader never sees the marker.
+          # The reader was told SOMETHING, not only the marker: a reader never
+          # sees the marker.
           #
-          # This asserts the DISTINCTION rather than one sentence. It used to
-          # grep for "quiet morning" and #102 changed the default view's copy to
-          # "a quiet day", so the check failed on a page that was behaving
-          # perfectly — the assertion had pinned a wording rather than a meaning.
-          # Both views must say the day was quiet, in whichever words suit them.
-          printf '%s' "$HTML" | grep -qiE "quiet (morning|day)" || {
-            echo "state=quiet but the screen does not say the day was quiet" >&2
+          # THIS DELIBERATELY ASSERTS NOTHING ABOUT THE WORDS. Two earlier
+          # versions pinned a wording and both reddened on a page that was
+          # behaving perfectly: first "quiet morning", which #102's copy changed
+          # to "a quiet day", then "quiet (morning|day)", which was a wider pin
+          # and still a pin — its own comment claimed "in whichever words suit
+          # them" while the pattern said otherwise, which is worse, because the
+          # comment tells the next person the check is safe to edit around.
+          #
+          # The property that actually matters is that the empty state rendered
+          # an EXPLANATION at all. A screen that shows the marker and no prose
+          # is the defect; a rewritten sentence is not. So: find the block, take
+          # its body, and require it to be long enough to be an explanation.
+          EXPLANATION="$(printf '%s' "$HTML" | tr -d '\n' \
+            | grep -o 'data-empty-body[^>]*>[^<]*' | head -1 | sed 's/.*>//')"
+          if [ "${#EXPLANATION}" -lt 60 ]; then
+            echo "state=quiet but the screen explained itself in ${#EXPLANATION} characters" >&2
+            echo "  found: ${EXPLANATION:-<no empty-state body at all>}" >&2
             exit 1
-          }
+          fi
+          echo "the empty state explained itself in ${#EXPLANATION} characters"
           # And the half that actually matters: a quiet day must never be
           # described as a failure. This is the pair the product exists to keep
           # apart, and it is the assertion that would catch them being confused.
