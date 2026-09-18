@@ -264,8 +264,52 @@ jobs:
           # the literal `="true"` cannot match the escaped form, because that
           # one has \":\" between the name and the value.
           #
-          # This applies to EVERY curl-and-grep assertion against this app, not
-          # just to this one.
+          # ─────────────────────────────────────────────────────────────────
+          # THE RULE, FOR WHOEVER ADDS THE NEXT `curl … | grep` STEP (#115).
+          # It lives here, beside the only assertion in this repository that
+          # reads an HTML body, because that is where it will be met.
+          #
+          # The first version of this note said the hazard applied to "every
+          # curl-and-grep assertion". That is a CAUTION, not a finding, and the
+          # population was then measured: three curl sites read STATUS only,
+          # ONE reads an HTML body (this one), one reads JSON from /api/brief,
+          # and every scripts/*.mjs asserts through Playwright DOM locators,
+          # which query the PARSED document and can never see the payload.
+          # A class is a caution; two conditions and a population is a check.
+          #
+          # EXPOSED ONLY IF BOTH ARE TRUE:
+          #   1. first-match (`head -1`) over a pattern that CAN match the
+          #      escaped form — anything containing `="` cannot, because the
+          #      payload writes \":\" between name and value; AND
+          #   2. a POSITIVE assertion. A negative one ("must NOT contain") can
+          #      only over-fire on the second copy: loud, never a silent pass.
+          #
+          # Both surviving patterns here are safe by that test, and neither by
+          # accident: the data-screen-state check is first-match over a loose
+          # pattern but requires `="`; the "cannot reach your stories" grep
+          # matches both copies but is negative.
+          #
+          # TWO MORE FORMS OF THE SAME DEFECT:
+          #
+          #   COUNTS ARE DOUBLED. Every element appears once in the DOM and
+          #   once in the payload, so a count from fetched HTML is twice the
+          #   truth — and two equally doubled counts COMPARE FINE, so a ratio
+          #   or a difference survives the doubling with nothing in the output
+          #   saying the units are wrong. A floor like `>= 1` is satisfiable by
+          #   the payload copy alone, so a page rendering ZERO can clear it.
+          #   Do not count from fetched HTML: read the JSON API, which has one
+          #   representation. The view-split step below does exactly that, and
+          #   says so.
+          #
+          #   ANY DOCUMENT THAT QUOTES ITSELF has this shape. A job log carries
+          #   the step's INSTRUCTIONS as well as its OUTPUT, so `grep -c 'NOTE:'`
+          #   returned 1 on a run that emitted zero — the hit was this file's
+          #   own `echo`. Before grepping a document for evidence of what it
+          #   DID, ask whether it also contains what it was TOLD to do. Anchor
+          #   to something only the executed copy carries: a timestamp prefix
+          #   in a log, the literal `="true"` here. A hit with no such anchor
+          #   is unclassified, not evidence.
+          # ─────────────────────────────────────────────────────────────────
           EXPLANATION="$(printf '%s' "$HTML" | tr -d '\n' \
             | grep -o 'data-empty-body="true"[^>]*>[^<]*' | head -1 | sed 's/.*>//')"
           if [ "${#EXPLANATION}" -lt 60 ]; then
@@ -279,8 +323,15 @@ jobs:
             # grep -c counts LINES, and this HTML is one line — so it answers
             # "at least once" for anything, which is not the question. -o | wc -l
             # counts occurrences.
-            echo "  occurrences of 'data-empty': $(printf '%s' "$HTML" | grep -o 'data-empty' | wc -l | tr -d ' ')" >&2
-            echo "  occurrences of 'data-empty-body': $(printf '%s' "$HTML" | grep -o 'data-empty-body' | wc -l | tr -d ' ')" >&2
+            #
+            # THESE COUNTS ARE DOUBLED AND THE LABEL SAYS SO. They are the only
+            # counts taken from fetched HTML in this repository, and they are
+            # diagnostics rather than assertions — nothing branches on them. But
+            # an unlabelled "2" here reads as "two elements" when it means one
+            # element and its escaped twin, and a reader debugging at speed is
+            # exactly who would halve nothing and conclude wrongly.
+            echo "  occurrences of 'data-empty' (DOM + payload, so ~2x): $(printf '%s' "$HTML" | grep -o 'data-empty' | wc -l | tr -d ' ')" >&2
+            echo "  occurrences of 'data-empty-body' (DOM + payload, so ~2x): $(printf '%s' "$HTML" | grep -o 'data-empty-body' | wc -l | tr -d ' ')" >&2
             echo "  the empty-state markup as rendered:" >&2
             printf '%s' "$HTML" | tr -d '\n' | grep -o 'data-empty.\{0,500\}' | head -1 | sed 's/^/    /' >&2
             echo "  DO NOT lower this threshold to make this pass. It is red because" >&2
@@ -296,6 +347,62 @@ jobs:
             echo "state=quiet but the screen says it cannot reach the stories" >&2
             exit 1
           fi
+
+      # THE CONTROL FOR THE STEP ABOVE (#115), and without it "we fixed the
+      # pattern" is untested.
+      #
+      # The fix claims the production pattern cannot be satisfied by the escaped
+      # payload copy. The proof is that on a document containing BOTH copies it
+      # matches the DOM one and ONLY the DOM one — so the count it finds must
+      # equal the number of real elements, not the number of occurrences of the
+      # attribute name.
+      #
+      # THE FLOOR IS WHAT MAKES THAT A CONTROL. If the escaped copy is not in
+      # the document, the pattern has nothing to be fooled by and matching once
+      # proves nothing. So the step first requires the name to appear MORE times
+      # than the DOM form does — that difference IS the second copy, measured
+      # rather than assumed.
+      #
+      # An earlier version fetched the flight payload alone with an `RSC: 1`
+      # header, on the theory that a payload-only document was the cleaner
+      # subject. That request returned ZERO BYTES, the floor said so, and the
+      # theory was wrong — which is why the floor prints what it received. This
+      # version needs no special request: the ordinary page already carries both
+      # copies, which is the whole problem and therefore the ideal subject.
+      - name: CONTROL — the empty-state pattern matches the DOM copy and not its escaped twin
+        run: |
+          set -euo pipefail
+          DOC="$(curl -s http://127.0.0.1:3210/)"
+          echo "document bytes: ${#DOC}"
+
+          # Every grep carries `|| true`. Under `set -euo pipefail` a grep that
+          # matches nothing exits 1 and the step dies THERE, before the floor
+          # written to explain it — which is how the first run of this control
+          # failed with no message at all. A floor that cannot speak reports as
+          # the failure it exists to describe.
+          NAME="$(printf '%s' "$DOC" | grep -o 'data-empty-body' | wc -l | tr -d ' ' || true)"
+          DOMF="$(printf '%s' "$DOC" | grep -o 'data-empty-body="true"' | wc -l | tr -d ' ' || true)"
+          NAME="${NAME:-0}"; DOMF="${DOMF:-0}"
+          echo "occurrences of the attribute NAME: $NAME    of the DOM form: $DOMF"
+
+          if [ "$DOMF" -lt 1 ]; then
+            echo "::error::the page carries no DOM form of data-empty-body at all ($NAME name occurrence(s)), so this control exercised nothing. Fix the setup; do not delete the control." >&2
+            exit 1
+          fi
+          if [ "$NAME" -le "$DOMF" ]; then
+            echo "::error::the attribute name appears $NAME time(s) and the DOM form $DOMF — there is NO second copy in this document, so the pattern had nothing to be fooled by and matching it proves nothing. If Next has stopped embedding the RSC payload, this control needs rewriting rather than deleting." >&2
+            exit 1
+          fi
+
+          # THE ASSERTION. The production pattern must match exactly the DOM
+          # occurrences — never the extra ones, which are the escaped copy.
+          HITS="$(printf '%s' "$DOC" | tr -d '\n' | grep -o 'data-empty-body="true"[^>]*>[^<]*' | wc -l | tr -d ' ' || true)"
+          HITS="${HITS:-0}"
+          if [ "$HITS" -ne "$DOMF" ]; then
+            echo "::error::the pattern matched $HITS time(s) against $DOMF real element(s) — it is reading the escaped copy, which is the defect this rule exists to prevent." >&2
+            exit 1
+          fi
+          echo "RESULT: the attribute name appears $NAME times, the DOM form $DOMF, and the pattern matched $DOMF — it discriminated against $(( NAME - DOMF )) escaped occurrence(s)."
 
       # Stories, through the REAL pipeline rather than inserted rows, because a
       # story that never went through it has no sources, no clustering and no
