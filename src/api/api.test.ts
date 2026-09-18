@@ -236,11 +236,72 @@ withDb("API routes", () => {
       expect(list).toHaveLength(1);
       expect(list[0].key).toBe("verge-ai");
       expect(list[0].enabled).toBe(true);
-      // The two fields the contract deliberately withholds. The feed url is
-      // the one field here that could carry a credential in a query string.
+      // The fields the contract deliberately withholds, under one RULE rather
+      // than a list: fields that can carry operator-supplied or
+      // component-written text stay out, because this response is
+      // unauthenticated (#101).
       expect(list[0]).not.toHaveProperty("config");
       expect(list[0]).not.toHaveProperty("url");
       expect(JSON.stringify(list[0])).not.toContain("must not be exposed");
+    });
+
+    /**
+     * #101. `sources.lastError` holds arbitrary text written by the worker,
+     * and #99 measured that text carrying `getaddrinfo ENOTFOUND <host>` and
+     * `role "<user>" does not exist`. This route has no authentication, so
+     * every byte of it is public.
+     *
+     * ASSERTED AT THE API BOUNDARY, NOT AT THE WRITE SITES. The writers keep
+     * changing; a per-writer assertion is a sweep whose predicate is narrower
+     * than its claim, and it goes stale the first time someone adds a writer.
+     * This is the one place every writer's output must pass through to become
+     * public.
+     */
+    it("never serves lastError, whatever the worker wrote into it", async () => {
+      const CANARY = 'zz-canary-9q7x.example.invalid:59999 role "leaked-user"';
+      await source("verge-ai");
+      await sql.unsafe(`update sources set last_error = $1 where key = 'verge-ai'`, [CANARY]);
+
+      // The fixture must actually carry the string, or a clean result below
+      // proves nothing about the route.
+      const [stored] = await sql.unsafe(`select last_error from sources where key='verge-ai'`);
+      expect(stored.last_error).toBe(CANARY);
+
+      const { GET } = await import("@/app/api/sources/route");
+      const payload = await body(await GET());
+      const raw = JSON.stringify(payload);
+
+      expect(raw).not.toContain("zz-canary-9q7x.example.invalid");
+      expect(raw).not.toContain("leaked-user");
+      const list = payload.sources as unknown as Record<string, unknown>[];
+      expect(list[0]).not.toHaveProperty("lastError");
+    });
+
+    /**
+     * The positive beside it, and the reason #101 is not a silent trade.
+     * Removing the TEXT must not remove the FACT that a source is broken, or
+     * this swaps one silent failure for another — a reader who can see neither
+     * the error nor the failure is worse off than before.
+     */
+    it("still shows a failing source AS failing once the text is gone", async () => {
+      await source("blocked-feed");
+      await sql.unsafe(`update sources set last_error='anything at all' where key='blocked-feed'`);
+      const [src] = await sql.unsafe(`select id from sources where key='blocked-feed'`);
+      for (let i = 0; i < 3; i++) {
+        await sql.unsafe(
+          `insert into ingest_runs (source_id, started_at, finished_at, error)
+           values ($1, now() - interval '1 hour', now(), 'a failure')`,
+          [src.id],
+        );
+      }
+
+      const { GET } = await import("@/app/api/sources/route");
+      const list = (await body(await GET())).sources as unknown as Record<string, unknown>[];
+      const row = list.find((r) => r.key === "blocked-feed")!;
+
+      expect(row).not.toHaveProperty("lastError"); // the text is gone
+      expect(row.health).toBe("FAILING"); // the fact is not
+      expect(row.consecutiveFailures).toBe(3);
     });
 
     /**

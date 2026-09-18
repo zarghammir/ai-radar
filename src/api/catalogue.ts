@@ -23,12 +23,19 @@ export interface SourceSummary {
   homepage: string | null;
   enabled: boolean;
   lastFetchedAt: string | null;
-  lastError: string | null;
   storyCount: number;
   /**
-   * Whether the source is working, which `lastError` alone cannot say: a
-   * single stale error is indistinguishable from a feed that has been refused
-   * on every run for a week. UNKNOWN is a real state, not a placeholder.
+   * Whether the source is working. `sources.lastError` is NOT here and must
+   * not be added (#101): it holds arbitrary text written by the worker, this
+   * response is served unauthenticated, and #99 measured that text carrying
+   * `getaddrinfo ENOTFOUND <host>` and `role "<user>" does not exist`.
+   *
+   * Nothing is lost that a reader could act on. `health` and
+   * `consecutiveFailures` say a source is broken, which is the actionable
+   * fact; the error TEXT is an operator diagnostic and stays in the database
+   * where an operator can read it. A single stale error was never
+   * distinguishable from a feed refused on every run for a week, which is why
+   * this field exists at all.
    */
   health: SourceHealth;
   /** Failures since this source last succeeded. Zero when it is working. */
@@ -55,15 +62,25 @@ export async function listTopics(db: Db, now: Date): Promise<TopicSummary[]> {
 /**
  * The catalogue as a reader sees it.
  *
- * `config` and the feed `url` are deliberately absent: they are operational
- * settings, not display data, and a feed URL is the one field here that could
- * carry a credential in a query string.
+ * THE RULE, not a list: FIELDS THAT CAN CARRY OPERATOR-SUPPLIED OR
+ * COMPONENT-WRITTEN TEXT STAY OUT. This response is unauthenticated, so
+ * anything in it is public, and any such field is one incident away from
+ * carrying something that should not be.
+ *
+ * `config`, the feed `url` and `lastError` are absent under that rule.
+ *
+ * IT USED TO SAY a feed URL "is the one field here that could carry a
+ * credential in a query string". The rule was right, the reasoning was right,
+ * and THE CENSUS WAS WRONG — `lastError` was on the included side and #99
+ * measured it carrying a hostname and a database username. A list of excluded
+ * fields does not survive a new field; a rule does. That is why this is
+ * phrased as a property rather than as three names (#101).
  */
 export async function listSources(db: Db, now: Date): Promise<SourceSummary[]> {
   const rows = await db.execute(
     sql`
     select s.key, s.name, s.kind, s.tier, s.homepage, s.enabled,
-           s.last_fetched_at, s.last_error,
+           s.last_fetched_at,
            count(distinct st.id) filter (where st.last_activity_at >= ${since(now).toISOString()}::timestamptz)::int as story_count,
            -- Runs that finished either way. An in-flight run (finished_at null,
            -- no error) is neither a success nor a failure, and counting it as
@@ -84,7 +101,7 @@ export async function listSources(db: Db, now: Date): Promise<SourceSummary[]> {
     from sources s
     left join raw_items ri on ri.source_id = s.id
     left join stories st on st.id = ri.story_id
-    group by s.id, s.key, s.name, s.kind, s.tier, s.homepage, s.enabled, s.last_fetched_at, s.last_error
+    group by s.id, s.key, s.name, s.kind, s.tier, s.homepage, s.enabled, s.last_fetched_at
     order by s.tier asc, s.name asc
   `,
   );
@@ -97,7 +114,6 @@ export async function listSources(db: Db, now: Date): Promise<SourceSummary[]> {
       homepage: string | null;
       enabled: boolean;
       last_fetched_at: Date | null;
-      last_error: string | null;
       story_count: number;
       completed_runs: number;
       consecutive_failures: number;
@@ -110,7 +126,6 @@ export async function listSources(db: Db, now: Date): Promise<SourceSummary[]> {
     homepage: r.homepage,
     enabled: r.enabled,
     lastFetchedAt: r.last_fetched_at ? new Date(r.last_fetched_at).toISOString() : null,
-    lastError: r.last_error,
     storyCount: Number(r.story_count),
     health: classifySourceHealth({
       completedRuns: Number(r.completed_runs),
