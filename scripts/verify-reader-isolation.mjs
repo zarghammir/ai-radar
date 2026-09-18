@@ -18,7 +18,7 @@
  */
 import { launchBrowser, requireServer } from "./lib/browser.mjs";
 import { collectStoryIds } from "./lib/fixture-ids.mjs";
-import { bailIfBroken, isFloorBail, sectionStart } from "./lib/floor.mjs";
+import { bailIfBroken, isFloorBail, reportControl, sectionStart } from "./lib/floor.mjs";
 import { markOnboarded } from "./lib/seed.mjs";
 
 const base = process.argv[2] || process.env.VERIFY_URL || "http://127.0.0.1:3210";
@@ -242,34 +242,15 @@ try {
 
 out.floor = { passed: floor.length === 0, failures: floor };
 console.log(JSON.stringify(out, null, 2));
-// UNDER THE CONTROL THIS EXITS 1 WHEN THE CONTROL WORKED, AND THAT IS NOT A
-// TYPO — it is the contract CI enforces, and the previous version had it
-// exactly backwards in the one direction that cannot be noticed.
+// The control's verdict, and its exit code, now live in reportControl — the
+// contract is identical for every controlled script and this file is where
+// getting it backwards was discovered, so it is the last place that should
+// keep a private copy. The reasoning, including what the inversion would have
+// certified, is in scripts/lib/floor.mjs beside the code it governs.
 //
-// The shared contract, from .github/workflows/ci.yml: run the check under its
-// control env and require EXIT 1 — "the checks ran and failed". 0 means the
-// floor could not fail and the control proves nothing; 2 means the instrument
-// never ran. That is the same contract `a11y` obeys under AUDIT_CONTROL.
-//
-// This file used to invert it: 0 when the isolation floor went red as it must,
-// 1 when it stayed green. Lined up against CI the two conventions cancel, and
-// the failure mode is the dangerous direction — **CI would have reported this
-// control healthy precisely when it was broken**, because a control that
-// failed to redden exited 1 and CI reads 1 as "failed as it must". A vacuous
-// instrument inside the mechanism built to detect vacuous instruments, which
-// is the hazard #112's own comment warns about three lines from where it
-// enforces this.
-//
-// The message still decides, not the mere presence of a failure: only the
-// isolation sentence counts, so a control that reddened some OTHER floor exits
-// 0 and CI calls it out rather than accepting a red for the wrong reason.
-if (CONTROL) {
-  const caught = floor.some((f) => f.includes("can see the"));
-  console.log(
-    caught
-      ? "CONTROL OK: isolation went red as it must (exiting 1, which is this contract's PASS)"
-      : "CONTROL FAILED: the isolation floor stayed green, so it has not been shown able to fail",
-  );
-  process.exit(caught ? 1 : 0);
-}
+// What stays here is the only part that is this file's own: WHICH assertion
+// counts. "can see the" is the saves-isolation sentence, so a control that
+// reddened some other floor is reported as the wrong assertion rather than
+// accepted as a pass.
+if (CONTROL) reportControl(floor, "can see the", "verify:isolation's saves-isolation floor");
 if (floor.length > 0) process.exit(1);

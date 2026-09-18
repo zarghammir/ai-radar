@@ -501,11 +501,16 @@ jobs:
           # silently go stale — adding a control to a script demands it be
           # exercised here, which is the property a bare list would not have.
           #
-          # KNOWN GAP, named rather than absorbed: verify:today and
-          # verify:shell declare no control at all, so nothing here proves they
-          # can fail. That is a gap in those scripts, not in this job, and it
-          # belongs to their author — this file must not invent one by editing
-          # another lane's script.
+          # THAT GAP IS NOW CLOSED. This comment used to say verify:today and
+          # verify:shell declared no control, so nothing here proved they could
+          # fail — half of what this job runs. #113 closed it in their author's
+          # own scripts, which is where it had to happen: this file could name
+          # the gap but must not invent a control by editing another lane's
+          # code, because a control's mechanism is a script-specific fact.
+          #
+          # The floor below is what made that self-enforcing rather than
+          # remembered. The moment those two scripts declared a control, the
+          # job began FAILING until this map exercised it.
           #
           # verify:isolation joined this map when its script was added, which is
           # the floor below working as designed: it declared VERIFY_CONTROL and
@@ -514,7 +519,13 @@ jobs:
           # contract — it exited 0 when its floor went red and 1 when it stayed
           # green, so this loop would have read a BROKEN control as "failed as
           # it must". The script was corrected rather than this map relaxed.
-          declare -A CONTROL_ENV=( [a11y]="AUDIT_CONTROL=narrow" [verify:saved]="VERIFY_CONTROL=skip-seed" [verify:isolation]="VERIFY_CONTROL=shared-identity" )
+          declare -A CONTROL_ENV=(
+            [a11y]="AUDIT_CONTROL=narrow"
+            [verify:saved]="VERIFY_CONTROL=skip-seed"
+            [verify:isolation]="VERIFY_CONTROL=shared-identity"
+            [verify:today]="VERIFY_CONTROL=no-budget"
+            [verify:shell]="VERIFY_CONTROL=no-service-worker"
+          )
 
           while IFS= read -r check; do
             [ -n "$check" ] || continue
