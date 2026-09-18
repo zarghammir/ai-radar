@@ -323,7 +323,13 @@ jobs:
             FILE="$(node -e 'const s=require("./package.json").scripts[process.argv[1]]||"";
               const m=s.match(/scripts\/[A-Za-z0-9._-]+/); console.log(m?m[0]:"");' "$check")"
             [ -n "$FILE" ] || continue
-            DECLARED="$(grep -oE 'process\.env\.[A-Z_]+_CONTROL' "$FILE" | sed 's/process\.env\.//' | sort -u)"
+            # `|| true` is load-bearing: grep exits 1 when it finds NOTHING,
+            # which is the ORDINARY case here — a script with no control. Under
+            # `set -euo pipefail` that non-match aborts the whole step, which is
+            # exactly what CI caught on the first run: both controls passed and
+            # then the job died on verify:shell for having none. Grep's exit
+            # status is a RESULT, not an error.
+            DECLARED="$(grep -oE 'process\.env\.[A-Z_]+_CONTROL' "$FILE" | sed 's/process\.env\.//' | sort -u || true)"
             [ -n "$DECLARED" ] || continue
             MAPPED="${CONTROL_ENV[$check]:-}"
             if [ -z "$MAPPED" ]; then
