@@ -397,7 +397,15 @@ jobs:
           # can fail. That is a gap in those scripts, not in this job, and it
           # belongs to their author — this file must not invent one by editing
           # another lane's script.
-          declare -A CONTROL_ENV=( [a11y]="AUDIT_CONTROL=narrow" [verify:saved]="VERIFY_CONTROL=skip-seed" )
+          #
+          # verify:isolation joined this map when its script was added, which is
+          # the floor below working as designed: it declared VERIFY_CONTROL and
+          # this job refused to run until the control was exercised. Adding it
+          # also surfaced that the script's exit code was INVERTED against this
+          # contract — it exited 0 when its floor went red and 1 when it stayed
+          # green, so this loop would have read a BROKEN control as "failed as
+          # it must". The script was corrected rather than this map relaxed.
+          declare -A CONTROL_ENV=( [a11y]="AUDIT_CONTROL=narrow" [verify:saved]="VERIFY_CONTROL=skip-seed" [verify:isolation]="VERIFY_CONTROL=shared-identity" )
 
           while IFS= read -r check; do
             [ -n "$check" ] || continue
