@@ -20,12 +20,21 @@ import type { ContentType, SourceKind, SourceTier } from "./schema";
  * `keywordPolicy: "labl"` is a tsc error before it can be merged, and a
  * validator would be code maintained forever against input that cannot occur.
  *
- * A misspelling was silent for eight of the nine keys, because every reader
- * takes `config.X ?? default` and a typo simply selects the default. `list` is
- * the exception and it is an accident of how it is read — it is interpolated
- * into `${list}stories.json`, so a typo 404s and the run records an error.
- * That one key is the control group: it shows the other eight are silent
- * because of how they are consumed rather than by design.
+ * A MISSPELLED KEY WAS SILENT FOR ALL NINE, with no exception. Every reader
+ * takes `config.X ?? default`, so a key nobody spelled right is simply absent
+ * and the default is selected — `lst: "show"` leaves `config.list` undefined,
+ * the adapter reads "top", and it fetches the front page perfectly happily.
+ * The type now catches all nine uniformly, because an unknown property on
+ * these object literals is an error.
+ *
+ * A misspelled VALUE is a different dimension and the type covers only part of
+ * it: where the shape is narrow it is caught — `keywordPolicy` is a union and
+ * `minPoints` is a number — while a correctly-typed wrong value stays silent.
+ * `list` is the one exception there, and it is an accident of how it is read
+ * rather than a design: it is interpolated into `${list}stories.json`, so
+ * `list: "shw"` 404s and the run records an error where `list: "best"` would
+ * not. One key differing only in HOW IT IS CONSUMED is what shows the rest are
+ * silent by consequence rather than by choice.
  */
 export type SourceConfig = {
   /** Topics every story from this source carries, whatever its headline says. */
