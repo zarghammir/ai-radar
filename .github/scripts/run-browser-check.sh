@@ -27,13 +27,23 @@ LABEL="$1"
 NPM_SCRIPT="$2"
 URL="$3"
 
+# stdout is captured so the measurement digest can read the script's trailing
+# JSON summary; stderr is left alone so a crash still reaches the log in real
+# time. The captured stream is printed either way, before anything is judged.
+OUT="$(mktemp)"
 set +e
-npm run "$NPM_SCRIPT" -- "$URL"
+npm run "$NPM_SCRIPT" -- "$URL" > "$OUT"
 CODE=$?
 set -e
+cat "$OUT"
 
 case "$CODE" in
   0)
+    # A check that exits 0 having measured NOTHING is the defect #83 is about,
+    # and adding jobs without this would reproduce it inside its own fix. Run
+    # only on success: on a failure the failure is the story, and demanding a
+    # summary from a crashed run would bury the real error under a second one.
+    node "$(dirname "$0")/measured-digest.mjs" "$LABEL" < "$OUT"
     echo "RESULT: ${LABEL} ran against ${URL} and passed."
     ;;
   2)
