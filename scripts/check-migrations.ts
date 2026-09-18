@@ -78,11 +78,29 @@ for (const file of files) {
 // `idx` changes nothing at migrate time. It is checked because a duplicate or
 // a gap is the fingerprint of a badly resolved collision, and that collision
 // is usually accompanied by something that DOES matter.
+//
+// THE FAILURE TEXT MATTERS MORE THAN THE CHECK HERE. The cheapest way to make
+// an idx red go away is to renumber — and renumbering is the operation that
+// touches `when`, which is the one field whose mistake is unrecoverable. A red
+// whose obvious remedy is the fatal action is worse than no red, so the remedy
+// is forbidden by name in the OUTPUT, where someone in a hurry will read it. A
+// docblock is read by whoever is investigating; the failure message is read by
+// whoever is trying to get on with something.
+const IDX_NOTE =
+  "\n      DO NOT renumber to silence this. A gap or a duplicate means a merge " +
+  "order slipped — report it rather than tidying it away.\n      `idx` is INERT: " +
+  "drizzle reads only `tag` and `when`, so renumbering changes nothing the " +
+  "migrator sees, and it edits `when`, where a mistake can never be recovered " +
+  "by a later migrate. This check is telling you about OUR process, not about " +
+  "drizzle.";
+
 const idxs = entries.map((e) => e.idx);
 for (const [i, idx] of idxs.entries()) {
-  if (idx !== i) fail(`entry ${i} ("${entries[i].tag}") has idx ${idx}; expected ${i}`);
+  if (idx !== i) fail(`entry ${i} ("${entries[i].tag}") has idx ${idx}; expected ${i}${IDX_NOTE}`);
 }
-if (new Set(idxs).size !== idxs.length) fail(`duplicate idx values: ${idxs.join(", ")}`);
+if (new Set(idxs).size !== idxs.length) {
+  fail(`duplicate idx values: ${idxs.join(", ")}${IDX_NOTE}`);
+}
 
 // ── 3. `when` strictly ascending, in array order ──────────────────────────
 // The migrator iterates the array, so array order is execution order, while
