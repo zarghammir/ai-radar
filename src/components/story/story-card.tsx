@@ -110,6 +110,32 @@ export function StoryCardView({
           <span>{detectedAt(story.firstSeenAt)}</span>
           <span>·</span>
           <span>{story.readingMinutes} min</span>
+          {/* THE SECOND LINK, AND IT IS ABSENT RATHER THAN DISABLED (#84).
+              The standing rule that a gated control stays visible and says why
+              is for a control the reader could EARN — a thing they cannot do
+              yet. This is different: for most stories there is no discussion
+              to link to and there never will be, so a greyed "Discussion" would
+              describe nothing. An affordance for something that does not exist
+              is not honesty, it is furniture.
+
+              The title above links to the thing; this links to the argument
+              about it. The accessible name carries the story's title because a
+              reader tabbing a brief would otherwise hear "Discussion" a dozen
+              times with nothing to tell them apart. */}
+          {story.discussionUrl ? (
+            <>
+              <span>·</span>
+              <a
+                href={story.discussionUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`Discussion of ${story.title}`}
+                className="focus-visible:ring-org rounded-xs underline underline-offset-2 hover:no-underline focus-visible:ring-2 focus-visible:outline-none"
+              >
+                Discussion
+              </a>
+            </>
+          ) : null}
         </div>
 
         {actions ?? <StoryActions story={story} />}

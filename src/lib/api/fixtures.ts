@@ -113,6 +113,7 @@ export const FIXTURE_STORIES: StoryCard[] = [
     excerpt:
       "The managed harness that runs Codex is now available to every developer, with durable sessions that carry agent work across turns and support for your own tools and MCP servers.",
     url: "https://openai.com/index/introducing-the-agents-api/",
+    discussionUrl: null,
     contentType: "RELEASE",
     verification: "PRIMARY_SOURCE",
     verificationNote: "Published directly by OpenAI and picked up by 2 other sources.",
@@ -136,6 +137,10 @@ export const FIXTURE_STORIES: StoryCard[] = [
     excerpt:
       "Engineers ship roughly eight times more code per quarter than in 2021-25, test count grew tenfold, and test selection had to be rebuilt to scale horizontally.",
     url: "https://claude.com/blog/agentic-coding-is-straining-ci-heres-how-we-scaled-test-impact-analysis-at-anthropic",
+    // THE BOTH-LINKS CASE, which is the one #84 was about: the thing
+    // someone published, and the argument about it. Every other fixture
+    // has no second link, because most stories do not.
+    discussionUrl: "https://news.ycombinator.com/item?id=45210417",
     contentType: "DISCUSSION",
     verification: "PRIMARY_SOURCE",
     verificationNote: "Published by Anthropic with its own figures.",
@@ -162,6 +167,7 @@ export const FIXTURE_STORIES: StoryCard[] = [
     excerpt:
       "Siri AI arrived in beta alongside iOS 27, running on-device and on Private Cloud Compute, with Apple Foundation Models built together with Google under a multi-year deal.",
     url: "https://www.apple.com/newsroom/2026/09/siri-ai-a-profoundly-more-capable-and-personal-assistant-is-here/",
+    discussionUrl: null,
     contentType: "RELEASE",
     // A PRIMARY source outranks any amount of pickup: deriveVerification
     // returns PRIMARY_SOURCE the moment the originator published it.
@@ -187,6 +193,7 @@ export const FIXTURE_STORIES: StoryCard[] = [
     excerpt:
       "Shanghai AI Laboratory posted the technical report to arXiv: a 744B mixture-of-experts base, 256K context, MIT-licensed checkpoints, and 769 task records from 56 users.",
     url: "https://arxiv.org/abs/2609.15818",
+    discussionUrl: null,
     contentType: "PAPER",
     verification: "EMERGING",
     verificationNote: "One discovery feed so far; no newsroom has picked it up.",
@@ -212,6 +219,7 @@ export const FIXTURE_STORIES: StoryCard[] = [
     excerpt:
       "Reports say OpenAI is considering a new private round. Outlets disagree by $300 billion on the figure and the sourcing is anonymous throughout.",
     url: "https://www.bloomberg.com/news/articles/2026-09-15/openai-weighing-funding-round-at-over-1-2-trillion-valuation",
+    discussionUrl: null,
     // BUSINESS since #41: content type is now classified from the item's own
     // title, and this one carries "valuation". It was NEWS while the type came
     // only from the source default and no seeded source emitted BUSINESS —
@@ -248,6 +256,7 @@ export const FIXTURE_STORIES: StoryCard[] = [
     excerpt:
       "Eight months of disrupted operations across seven harm areas, including a suspected state operation that automated malware and exfiltration through a multi-agent framework.",
     url: "https://www.anthropic.com/threat-intelligence-report-september-2026",
+    discussionUrl: null,
     // RESEARCH is reachable from real data TODAY — four seeded lab blogs
     // default to it — and until this fixture existed no screen had ever drawn
     // the badge. It could have appeared on the owner's screen the first time
@@ -275,6 +284,7 @@ export const FIXTURE_STORIES: StoryCard[] = [
     excerpt:
       "Spokesperson Guo Jiakun called the chip-restriction argument fearmongering, days before US-China talks in Washington.",
     url: "https://www.npr.org/2026/09/14/nx-s1-5968456/china-hits-back-ai-development",
+    discussionUrl: null,
     // Still NEWS, but no longer because REGULATION is unreachable — #41 made it
     // reachable. This headline simply trips none of the rules: "curb" and
     // "Foreign Ministry" are not in the vocabulary, and no rule fires on the
