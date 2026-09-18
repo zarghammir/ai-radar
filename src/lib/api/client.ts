@@ -33,6 +33,27 @@ import type {
  */
 export const USING_FIXTURES = process.env.NEXT_PUBLIC_USE_FIXTURES === "1";
 
+/**
+ * THE NAME IS WRONG AND IT STAYS. This is the reader's REAL saved store, on
+ * every device, in production — not test scaffolding. It was named when the
+ * app only ever ran on fixtures, and #91 made localStorage the permanent home
+ * for a reader's saves rather than a stand-in for a database.
+ *
+ * DO NOT RENAME IT WITHOUT A MIGRATION. It is a persisted key: anyone who has
+ * saved anything in the shipped build has it under this exact string, and a
+ * find-and-replace empties their list with no error, no warning and nothing on
+ * screen to notice — the reader simply opens Saved one day and it is empty.
+ * That is indistinguishable from the app losing their data, which is precisely
+ * the fear the #91 ruling had to correct as false.
+ *
+ * A rename needs a read-BOTH-keys transition: read the new key, fall back to
+ * this one, write the new one, and only drop this after a release in which
+ * every reader has opened the app. The same applies to the three keys below.
+ *
+ * The cost of keeping a misleading name is this comment. The cost of getting
+ * the rename wrong is somebody's saved list, silently. Those are not
+ * comparable, which is why the ugly name wins.
+ */
 const SAVED_KEY = "ai-radar-fixture-saved";
 const HIDDEN_KEY = "ai-radar-fixture-hidden";
 
