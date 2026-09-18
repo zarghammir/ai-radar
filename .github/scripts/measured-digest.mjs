@@ -31,12 +31,16 @@ const label = process.argv[2] || "the check";
 function trailingJson(text) {
   const lines = text.split("\n");
   for (let i = lines.length - 1; i >= 0; i--) {
-    if (lines[i].trim() === "{") {
-      try {
-        return JSON.parse(lines.slice(i).join("\n"));
-      } catch {
-        return null;
-      }
+    if (lines[i].trim() !== "{") continue;
+    try {
+      return JSON.parse(lines.slice(i).join("\n"));
+    } catch {
+      // KEEP SCANNING. A summary containing an array of objects has inner `{`
+      // lines that are not the start of the block, and returning null at the
+      // first one would report "printed no parseable JSON" about a script that
+      // printed a perfectly good summary. Latent today; reachable the first
+      // time any check reports a list of objects on a PASSING run.
+      continue;
     }
   }
   return null;

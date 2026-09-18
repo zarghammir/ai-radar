@@ -296,6 +296,51 @@ jobs:
           fi
           echo "RESULT: $COUNT browser checks derived."
 
+          # THE CLOSURE, because the convention REDUCES the class rather than
+          # closing it. A naming convention turns "remember to edit a list"
+          # into "remember to use a prefix" — much better, one word at
+          # authoring time — but a lane naming its script `check:foo` is
+          # silently out of CI exactly as verify:today was, and the count floor
+          # above catches a MASS failure, not a single omission.
+          #
+          # So: every script that drives a browser must be SELECTED, or
+          # DECLARED here as not a check. `launchBrowser` from
+          # scripts/lib/browser.mjs is the thing a browser check cannot avoid
+          # importing, so it is the independent source of truth the naming
+          # convention can be measured against. Measured 2026-09-18 at bdd76ca:
+          # the set of importers is EXACTLY the four selected, no more and no
+          # less.
+          #
+          # This does not eliminate the enumeration, it SHRINKS it and changes
+          # what forgetting costs: an unlisted, unselected browser script makes
+          # the job LOUD instead of quiet. The author still declares; the floor
+          # only makes an ABSENCE of declaration audible. #108's
+          # shoot-filter.mjs will import launchBrowser and is deliberately not
+          # a check, so it adds one line here when it lands — deciding rather
+          # than forgetting.
+          NOT_A_CHECK=""   # e.g. scripts/shoot-filter.mjs (#108), a capture script
+
+          DRIVERS="$(grep -rl "launchBrowser" scripts --include='*.mjs' 2>/dev/null | grep -v '^scripts/lib/' | sort || true)"
+          SELECTED_FILES="$(while IFS= read -r c; do
+            [ -n "$c" ] || continue
+            node -e 'const s=require("./package.json").scripts[process.argv[1]]||"";
+              const m=s.match(/scripts\/[A-Za-z0-9._-]+/); if (m) console.log(m[0]);' "$c"
+          done <<< "$CHECKS" | sort)"
+
+          UNCLAIMED=""
+          while IFS= read -r d; do
+            [ -n "$d" ] || continue
+            printf '%s\n' "$SELECTED_FILES" | grep -qx "$d" && continue
+            printf '%s\n' "$NOT_A_CHECK" | grep -qx "$d" && continue
+            UNCLAIMED="$UNCLAIMED $d"
+          done <<< "$DRIVERS"
+
+          if [ -n "$UNCLAIMED" ]; then
+            echo "::error::these scripts drive a browser but are neither selected by the naming convention nor declared as non-checks:$UNCLAIMED — rename to verify:* to run them in CI, or add them to NOT_A_CHECK with a reason" >&2
+            exit 1
+          fi
+          echo "RESULT: every browser-driving script is accounted for ($(printf '%s\n' "$DRIVERS" | grep -c . || true) found)." 
+
           # THE CONTROLS, run before the checks themselves.
           #
           # #83's acceptance: "a script added to CI without its control being
@@ -330,10 +375,28 @@ jobs:
             # then the job died on verify:shell for having none. Grep's exit
             # status is a RESULT, not an error.
             DECLARED="$(grep -oE 'process\.env\.[A-Z_]+_CONTROL' "$FILE" | sed 's/process\.env\.//' | sort -u || true)"
-            [ -n "$DECLARED" ] || continue
+            # SAID OUT LOUD rather than skipped. This loop's floor bounds what
+            # was DECLARED, not what SHOULD have been — a script with no
+            # control is invisible to it, which is the registry-test shape this
+            # job exists to argue against, sitting in the job itself. The job
+            # cannot know a control is missing; it can refuse to be quiet about
+            # it. #113 owns closing the gap.
+            if [ -z "$DECLARED" ]; then
+              echo "NOTE: $check declares no control, so nothing here proves it can fail (#113)."
+              continue
+            fi
             MAPPED="${CONTROL_ENV[$check]:-}"
             if [ -z "$MAPPED" ]; then
               echo "::error::$check declares $DECLARED but this job exercises no control for it — a check nobody has seen fail is an unreported unknown" >&2
+              exit 1
+            fi
+            # The name the SCRIPT reads must be the name this job SETS. Without
+            # this, renaming AUDIT_CONTROL while keeping its value leaves the
+            # job setting a variable nothing reads: the control then "fails"
+            # because the script ran normally and its floor happened to hold,
+            # and the red would point at the floor rather than at the rename.
+            if [ "$DECLARED" != "${MAPPED%%=*}" ]; then
+              echo "::error::$check reads \$$DECLARED but this job sets ${MAPPED%%=*}; the control is a variable the script ignores" >&2
               exit 1
             fi
             # The value must still exist in the script, or the control is a
@@ -348,11 +411,29 @@ jobs:
             CC=$?
             set -e
             tail -20 /tmp/control.log
+            # EXACTLY 1, not merely non-zero. run-browser-check.sh defines the
+            # contract three lines below this loop and says why: 0 passed, 1
+            # the checks RAN and FAILED, 2 THE INSTRUMENT COULD NOT RUN — "non-
+            # zero for a reason that looks environmental rather than like a
+            # defect". This loop bypasses that wrapper, so accepting any
+            # non-zero would let a control that died with NO BROWSER RESOLVED
+            # print "failed as it must" — asserting a floor was seen going red
+            # on a run where the script never started. That is a vacuous
+            # instrument inside the mechanism built to detect vacuous
+            # instruments.
             if [ "$CC" -eq 0 ]; then
               echo "::error::$check PASSED under $MAPPED. Its floor cannot fail, so its green tells you nothing." >&2
               exit 1
             fi
-            echo "RESULT: $check failed under $MAPPED as it must (exit $CC)."
+            if [ "$CC" -eq 2 ]; then
+              echo "::error::$check exited 2 under $MAPPED — THE INSTRUMENT COULD NOT RUN (no browser, or nothing serving $VERIFY_URL). That is not the floor failing and it proves nothing about the control." >&2
+              exit 1
+            fi
+            if [ "$CC" -ne 1 ]; then
+              echo "::error::$check exited $CC under $MAPPED, which is neither a pass (0), a failed check (1) nor an unusable instrument (2). The exit-code contract has changed." >&2
+              exit 1
+            fi
+            echo "RESULT: $check failed under $MAPPED as it must (exit 1 — the checks ran and the floor failed)."
             echo "::endgroup::"
           done <<< "$CHECKS"
 
