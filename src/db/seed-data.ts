@@ -64,6 +64,13 @@ export const SOURCE_CONFIG_KEYS = [
 
 type AssertTrue<T extends true> = T;
 type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+
+// LOAD-BEARING DESPITE LOOKING UNUSED. eslint cannot see that this is
+// evaluated by the compiler: if the type above and the array above stop
+// listing the same keys, `Same<...>` becomes false and `AssertTrue` refuses it,
+// so tsc fails. Deleting it to clear the warning disarms the only thing keeping
+// the runtime list and the type in step, and nothing would go red afterwards.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type _KeysAgree = AssertTrue<Same<keyof SourceConfig, (typeof SOURCE_CONFIG_KEYS)[number]>>;
 
 export interface SourceSeed {
