@@ -26,11 +26,20 @@
 import { getDb, getSql } from "@/db/client";
 import { runIngest } from "@/pipeline/run";
 import { rankAllStories } from "@/pipeline/ranking/rank-all";
+import { readingMinutes } from "@/pipeline/normalize/text";
 import { sources, stories } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 
 /** Enough for the browser scripts, which ask for three ids and a brief. */
 const MIN_STORIES = 4;
+
+/**
+ * The shortest reading budget the product offers, and therefore the one the
+ * seeded corpus has to be longer than for `verify:today` and `verify:saved` to
+ * mean anything. Keep it in step with the reading-length control's smallest
+ * option rather than guessing.
+ */
+const SHORTEST_BUDGET_MINUTES = 5;
 
 /**
  * Dealt round-robin across whatever is enabled, so the count does not depend on
@@ -62,6 +71,40 @@ const ITEMS = [
     title: "A developer tool for tracing agent runs reaches version 1.0",
     link: "https://techcrunch.com/e2e-agent-tracing-1-0",
     minutesAgo: 85,
+  },
+  // SIX MORE, AND THE COUNT IS LOAD-BEARING RATHER THAN GENEROUS. See
+  // MIN_BRIEF_MINUTES below: with five items the whole brief ran exactly five
+  // minutes, so the five-minute reading budget had nothing to cut and
+  // verify:saved reported the preference broken on a working build.
+  {
+    title: "Cloud providers report AI capacity sold out through next year",
+    link: "https://www.reuters.com/e2e-capacity-sold-out",
+    minutesAgo: 100,
+  },
+  {
+    title: "Researchers publish a replication of long-context retrieval claims",
+    link: "https://www.nature.com/e2e-long-context-replication",
+    minutesAgo: 115,
+  },
+  {
+    title: "A court declines to block training on licensed news archives",
+    link: "https://www.theguardian.com/e2e-training-archives-ruling",
+    minutesAgo: 130,
+  },
+  {
+    title: "Practitioners argue evaluation harnesses measure the harness",
+    link: "https://news.ycombinator.com/e2e-harness-measures-harness",
+    minutesAgo: 145,
+  },
+  {
+    title: "A funding round values an inference startup at eleven billion",
+    link: "https://www.bloomberg.com/e2e-inference-round",
+    minutesAgo: 160,
+  },
+  {
+    title: "An open dataset of agent trajectories is released under CC-BY",
+    link: "https://huggingface.co/e2e-agent-trajectories",
+    minutesAgo: 175,
   },
 ];
 
@@ -139,7 +182,9 @@ async function main() {
   await runIngest(db, undefined, { now, fetchImpl, sink: () => {} });
   const ranked = await rankAllStories(db, now);
 
-  const written = await db.select({ id: stories.id }).from(stories);
+  const written = await db
+    .select({ id: stories.id, title: stories.title, summary: stories.summary })
+    .from(stories);
 
   // THE FLOOR ON THE SEED ITSELF. Without it the problem moves one step
   // earlier and gets quieter: a seed that silently wrote nothing would hand the
@@ -158,9 +203,41 @@ async function main() {
     );
   }
 
+  // THE CORPUS FLOOR THE BROWSER CHECKS DEPEND ON, asserted here rather than
+  // discovered there.
+  //
+  // verify:today and verify:saved both prove that the FIVE-MINUTE reading
+  // budget shortens the brief. That can only be true if the whole brief runs
+  // longer than five minutes. With the original five items it ran exactly
+  // five: readingMinutes is max(1, round(words / 220)) and each seeded summary
+  // is short, so five items meant five minutes, the budget cut nothing, and
+  // both scripts reported the reading-length preference broken on a build
+  // where it worked perfectly.
+  //
+  // Asserting it HERE is the point. A seeder that quietly produces a corpus
+  // its consumers cannot measure against turns into two confident failures
+  // naming the wrong subject, in two different files, neither of which can see
+  // why. This floor names the real cause once, at the place that can fix it.
+  const totalMinutes = readingMinutes(
+    written.flatMap((story) => [story.title ?? "", story.summary ?? ""]),
+  );
+  if (totalMinutes <= SHORTEST_BUDGET_MINUTES) {
+    throw new Error(
+      `the seeded brief runs ${totalMinutes} minute(s), which the ${SHORTEST_BUDGET_MINUTES}-minute ` +
+        `reading budget cannot shorten — verify:today and verify:saved would both fail and both ` +
+        `would blame the preference. Add items to ITEMS above; do not lower this floor.`,
+    );
+  }
+
   console.log(
     JSON.stringify(
-      { seeded: written.length, scored: ranked.ranked, minimum: MIN_STORIES },
+      {
+        seeded: written.length,
+        scored: ranked.ranked,
+        minimum: MIN_STORIES,
+        briefMinutes: totalMinutes,
+        shortestBudget: SHORTEST_BUDGET_MINUTES,
+      },
       null,
       2,
     ),
