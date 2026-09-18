@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { IngestResult, SourceRunResult } from "@/pipeline/run";
 import {
+  describeEmptyPass,
   exitCodeFor,
   formatSourceLine,
   formatTotalLine,
@@ -53,6 +54,8 @@ describe("formatTotalLine", () => {
     bySource: [ok(), ok({ sourceKey: "hackernews", fetched: 30, inserted: 0 })],
     itemsInserted: 4,
     storiesCreated: 2,
+    sourcesConfigured: 2,
+    sourcesEnabled: 2,
   };
 
   it("totals the sources, the items and the stories", () => {
@@ -208,10 +211,20 @@ describe("readIntervalMinutes", () => {
 });
 
 describe("exitCodeFor", () => {
-  const result = (bySource: SourceRunResult[]): IngestResult => ({
+  /**
+   * Defaults describe a HEALTHY catalogue that ran, so a test about failing
+   * sources is not accidentally also a test about an empty catalogue. #104's
+   * cases pass their counts explicitly.
+   */
+  const result = (
+    bySource: SourceRunResult[],
+    catalogue: { configured?: number; enabled?: number } = {},
+  ): IngestResult => ({
     bySource,
     itemsInserted: 0,
     storiesCreated: 0,
+    sourcesConfigured: catalogue.configured ?? Math.max(bySource.length, 1),
+    sourcesEnabled: catalogue.enabled ?? Math.max(bySource.length, 1),
   });
 
   it("succeeds when every source worked", () => {
@@ -232,9 +245,74 @@ describe("exitCodeFor", () => {
     ).toBe(1);
   });
 
-  it("succeeds when there were no sources to run", () => {
-    // An empty catalogue is a seeding question, not a failed run, and dividing
-    // by zero here would report every empty database as broken.
-    expect(exitCodeFor(result([]))).toBe(0);
+  /**
+   * #104. An empty `bySource` has THREE causes and the old docblock named one.
+   * These four cases are the whole contract, kept together so the next person
+   * changing one sees what the others cost.
+   */
+  it("succeeds on a FRESH database, where nothing is seeded yet", () => {
+    // Nothing is wrong. This is the case that gets a check deleted rather than
+    // fixed if it goes red on first boot.
+    expect(exitCodeFor(result([], { configured: 0, enabled: 0 }))).toBe(0);
+  });
+
+  it("FAILS when the catalogue exists and every source is switched off", () => {
+    // The one the old code could not see. Until #110 this did not need an
+    // operator: the route was unauthenticated and the keys are public.
+    expect(exitCodeFor(result([], { configured: 17, enabled: 0 }))).toBe(1);
+  });
+
+  it("succeeds when a FILTER matched nothing, though sources are enabled", () => {
+    // runIngest(db, sourceIds) with ids matching no enabled source. The caller
+    // asked for a subset and got it. This is why the counts are UNFILTERED.
+    expect(exitCodeFor(result([], { configured: 17, enabled: 17 }))).toBe(0);
+  });
+
+  it("re-enabling one source returns the run to green", () => {
+    // The control as a test rather than a manual step: the same empty pass
+    // that fails with 0 enabled passes with 1, so the red is caused by the
+    // COUNT and not by the emptiness.
+    expect(exitCodeFor(result([], { configured: 17, enabled: 0 }))).toBe(1);
+    expect(exitCodeFor(result([], { configured: 17, enabled: 1 }))).toBe(0);
+  });
+});
+
+describe("describeEmptyPass", () => {
+  const result = (
+    bySource: SourceRunResult[],
+    catalogue: { configured?: number; enabled?: number } = {},
+  ): IngestResult => ({
+    bySource,
+    itemsInserted: 0,
+    storiesCreated: 0,
+    sourcesConfigured: catalogue.configured ?? Math.max(bySource.length, 1),
+    sourcesEnabled: catalogue.enabled ?? Math.max(bySource.length, 1),
+  });
+
+  it("says nothing at all when the pass actually ran sources", () => {
+    expect(
+      describeEmptyPass(result([{ sourceKey: "a", fetched: 1, inserted: 1, error: null }])),
+    ).toBeNull();
+  });
+
+  it("names seeding when the catalogue is empty", () => {
+    const why = describeEmptyPass(result([], { configured: 0, enabled: 0 }))!;
+    expect(why).toContain("no sources are seeded");
+    expect(why).toContain("db:seed");
+  });
+
+  it("names the switch-off, with the count, when everything is disabled", () => {
+    const why = describeEmptyPass(result([], { configured: 17, enabled: 0 }))!;
+    expect(why).toContain("0 of 17");
+    expect(why).toContain("switched off");
+    // The consequence, not only the state — that is what a reader notices.
+    expect(why).toContain("stop growing");
+  });
+
+  it("distinguishes a filter that matched nothing from both of those", () => {
+    const why = describeEmptyPass(result([], { configured: 17, enabled: 17 }))!;
+    expect(why).toContain("no source matched this pass");
+    expect(why).not.toContain("switched off");
+    expect(why).not.toContain("seeded");
   });
 });

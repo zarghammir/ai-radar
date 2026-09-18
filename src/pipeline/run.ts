@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, isNotNull, ne } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, ne, sql } from "drizzle-orm";
 import type { Db } from "@/db/client";
 import { redactConnectionParts } from "@/db/redact";
 import { describeError } from "./describe-error";
@@ -46,6 +46,21 @@ export interface IngestResult {
   bySource: SourceRunResult[];
   itemsInserted: number;
   storiesCreated: number;
+  /**
+   * The CATALOGUE's size, not this pass's. Both counts are taken without the
+   * `sourceIds` filter on purpose (#104).
+   *
+   * `bySource` being empty has two unrelated causes — nothing is seeded yet, or
+   * everything has been switched off — and a pass cannot tell them apart from
+   * its own results. These two numbers are the fact that separates them, and
+   * `exitCodeFor` is the only consumer.
+   *
+   * Unfiltered because "has someone turned the product off" is a question about
+   * the catalogue. A filtered run matching nothing is a different thing and
+   * must stay green.
+   */
+  sourcesConfigured: number;
+  sourcesEnabled: number;
 }
 
 export interface RunIngestOptions extends FetchContextOptions {
@@ -303,7 +318,22 @@ export async function runIngest(
         : eq(sources.enabled, true),
     );
 
-  const result: IngestResult = { bySource: [], itemsInserted: 0, storiesCreated: 0 };
+  // One query, in the place that already has the handle. Unfiltered: see the
+  // note on IngestResult.
+  const [catalogue] = await db
+    .select({
+      configured: sql<number>`count(*)::int`,
+      enabled: sql<number>`count(*) filter (where ${sources.enabled})::int`,
+    })
+    .from(sources);
+
+  const result: IngestResult = {
+    bySource: [],
+    itemsInserted: 0,
+    storiesCreated: 0,
+    sourcesConfigured: Number(catalogue?.configured ?? 0),
+    sourcesEnabled: Number(catalogue?.enabled ?? 0),
+  };
 
   for (const source of enabled) {
     const [run] = await db
