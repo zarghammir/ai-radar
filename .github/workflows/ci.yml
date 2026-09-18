@@ -408,7 +408,16 @@ jobs:
           # shoot-filter.mjs will import launchBrowser and is deliberately not
           # a check, so it adds one line here when it lands — deciding rather
           # than forgetting.
-          NOT_A_CHECK=""   # e.g. scripts/shoot-filter.mjs (#108), a capture script
+          # DECIDED, not forgotten — this is the line the comment above predicted.
+          #
+          # shoot-filter.mjs drives a browser and is NOT a check: it captures the
+          # screenshots for #102's two filter positions. It asserts plenty before
+          # each shutter (route, screen state, the control's own position) and
+          # refuses to write files when the two views return the same count, but
+          # those assertions guard the PICTURES, not the product. Running it here
+          # would also make CI depend on a corpus that differs by view, which is
+          # a property of the seed rather than of the app.
+          NOT_A_CHECK="scripts/shoot-filter.mjs"
 
           DRIVERS="$(grep -rl "launchBrowser" scripts --include='*.mjs' 2>/dev/null | grep -v '^scripts/lib/' | sort || true)"
           SELECTED_FILES="$(while IFS= read -r c; do
