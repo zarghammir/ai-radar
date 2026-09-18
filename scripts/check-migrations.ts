@@ -98,9 +98,12 @@ const idxs = entries.map((e) => e.idx);
 for (const [i, idx] of idxs.entries()) {
   if (idx !== i) fail(`entry ${i} ("${entries[i].tag}") has idx ${idx}; expected ${i}${IDX_NOTE}`);
 }
-if (new Set(idxs).size !== idxs.length) {
-  fail(`duplicate idx values: ${idxs.join(", ")}${IDX_NOTE}`);
-}
+// NO SEPARATE DUPLICATE CHECK. `idx[i] === i` for every i already implies all
+// of them are distinct, so a `new Set(idxs).size !== idxs.length` test could
+// never be the reason for a failure. It was here, it read as belt and braces,
+// and running the controls showed a duplicated idx reddening the CONTIGUITY
+// line instead — an instrument that cannot fail, inside the check written to
+// find instruments that cannot fail. Deleted rather than kept.
 
 // ── 3. `when` strictly ascending, in array order ──────────────────────────
 // The migrator iterates the array, so array order is execution order, while
@@ -136,6 +139,23 @@ if (baseRef) {
     const base = readJournal(baseText, baseRef);
     const baseByTag = new Map(base.map((e) => [e.tag, e]));
     const baseMaxWhen = Math.max(...base.map((e) => e.when));
+
+    // A migration that exists on the base and NOT here is the "take ours"
+    // resolution: the base's entry vanishes, an applied migration looks
+    // unapplied, and a later migrate re-runs it. #100's is not idempotent —
+    // it writes a placeholder over NULL — so that re-run is not a no-op.
+    //
+    // Found by reading a control's own baseline output: the check reported
+    // "base: 5 migrations" against a branch with 4 and said nothing.
+    const branchTags = new Set(entries.map((e) => e.tag));
+    for (const b of base) {
+      if (!branchTags.has(b.tag)) {
+        fail(
+          `"${b.tag}" exists on ${baseRef} and is missing here. An applied migration ` +
+            `would look unapplied and be re-run, which is not always a no-op.`,
+        );
+      }
+    }
 
     for (const e of entries) {
       const already = baseByTag.get(e.tag);
