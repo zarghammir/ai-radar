@@ -96,6 +96,23 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # The journal decides what runs, and every bad resolution of a migration
+      # collision is silent at the moment it is made. On a pull request this
+      # also compares against the BASE branch, which is the only place a
+      # cross-branch timestamp collision is visible — neither branch can see
+      # the other's `when`, the merge result sees both.
+      - name: Migration journal
+        env:
+          BASE: ${{ github.base_ref }}
+        run: |
+          if [ -n "$BASE" ]; then
+            git fetch --no-tags --depth=1 origin \
+              "+refs/heads/$BASE:refs/remotes/origin/$BASE"
+            npm run migrations:check -- "origin/$BASE"
+          else
+            npm run migrations:check
+          fi
+
       - name: Unit tests
         run: npm test
 
