@@ -1,6 +1,9 @@
 /**
- * Fixtures for the Today page, standing in for /api/brief until the routes on
- * feat/api-routes merge.
+ * Fixtures for the Today page. The real /api/brief is what Today reads; these
+ * are opt-in via NEXT_PUBLIC_USE_FIXTURES=1, for working on the screen without
+ * a database. They are also the fixed content the browser checks run against,
+ * because a screen check that fails when a publisher rate-limits us is a red
+ * that teaches people to ignore reds.
  *
  * The content is REAL: genuine AI stories from 9-16 September 2026, with real
  * outlets and working URLs. No lorem.
@@ -236,6 +239,33 @@ export const FIXTURE_STORIES: StoryCard[] = [
     lastActivityAt: "2026-09-16T10:12:00.000Z",
     readingMinutes: 1,
     score: 21.7,
+  }),
+  story({
+    id: 462,
+    slug: "anthropic-threat-intelligence-september",
+    title: "Anthropic details how state and criminal groups are misusing Claude",
+    excerpt:
+      "Eight months of disrupted operations across seven harm areas, including a suspected state operation that automated malware and exfiltration through a multi-agent framework.",
+    url: "https://www.anthropic.com/threat-intelligence-report-september-2026",
+    // RESEARCH is reachable from real data TODAY — four seeded lab blogs
+    // default to it — and until this fixture existed no screen had ever drawn
+    // the badge. It could have appeared on the owner's screen the first time
+    // the worker ran, having been seen by nobody.
+    contentType: "RESEARCH",
+    verification: "PRIMARY_SOURCE",
+    verificationNote: "Published directly by Anthropic and picked up by 1 other source.",
+    sourceCount: 2,
+    sources: [anthropic, npr],
+    primarySource: anthropic,
+    topics: [
+      { key: "safety", name: "Safety", group: "field" },
+      { key: "agents", name: "Agents", group: "field" },
+    ],
+    publishedAt: "2026-09-10T15:05:00.000Z",
+    firstSeenAt: "2026-09-10T15:22:00.000Z",
+    lastActivityAt: "2026-09-15T18:30:00.000Z",
+    readingMinutes: 1,
+    score: 30.8,
   }),
   story({
     id: 451,

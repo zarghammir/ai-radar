@@ -179,3 +179,24 @@ describe("fixture reading times are what the pipeline would compute", () => {
     expect(wrong).toEqual([]);
   });
 });
+
+/**
+ * Which badges a screen has actually DRAWN, as opposed to which the label map
+ * covers. The label test proves every content type has a word; it cannot prove
+ * anyone has ever seen one rendered.
+ *
+ * RESEARCH is the case that prompted this: it has been reachable from real data
+ * all along — several seeded lab blogs default to it — and no fixture drew it,
+ * so it could have appeared on a reader's screen having been seen by nobody.
+ */
+describe("content types a screen has actually rendered", () => {
+  it("draws every content type the fixtures claim to cover", () => {
+    const drawn = new Set(FIXTURE_STORIES.map((s) => s.contentType));
+    // A floor: this is meaningless if the fixture set is empty.
+    expect(drawn.size).toBeGreaterThanOrEqual(4);
+    // The ones a reader will meet first from live sources today.
+    for (const type of ["NEWS", "RESEARCH"] as const) {
+      expect(drawn.has(type), `no fixture draws the ${type} badge`).toBe(true);
+    }
+  });
+});

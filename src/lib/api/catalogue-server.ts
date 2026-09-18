@@ -1,10 +1,13 @@
+import { getDb } from "@/db/client";
+import { listTopics } from "@/api/catalogue";
 import { getTopics, USING_FIXTURES } from "@/lib/api/client";
 import type { TopicSummary } from "@/lib/api/types";
 
 /**
- * SERVER ONLY. Nothing with "use client" may import this module — see the same
- * note on brief-length.ts. The dynamic import below keeps the database client
- * out of browser bundles; it is not a guard against being imported from one.
+ * SERVER ONLY. Nothing with "use client" may import this module, and there is
+ * no `server-only` package here to enforce it — this comment and the two server
+ * pages that import it are the enforcement. Shaped like brief-server.ts, which
+ * is the convention the live flip established.
  *
  * The catalogue of subjects, read the way a SERVER component must.
  *
@@ -22,11 +25,7 @@ import type { TopicSummary } from "@/lib/api/types";
  */
 async function readTopics(): Promise<TopicSummary[]> {
   if (USING_FIXTURES) return getTopics();
-  const [{ getDb }, catalogue] = await Promise.all([
-    import("@/db/client"),
-    import("@/api/catalogue"),
-  ]);
-  return catalogue.listTopics(getDb(), new Date());
+  return listTopics(getDb(), new Date());
 }
 
 /**

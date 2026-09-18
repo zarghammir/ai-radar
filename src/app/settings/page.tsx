@@ -67,6 +67,22 @@ export default async function SettingsPage() {
         </Section>
 
         <Section
+          title="Where your saves live"
+          hint="Ruled by the owner on #91: the news is the same for everyone, so it is shared; what you keep is yours, so it is not."
+        >
+          {/* The sentence the ruling requires, in the reader's language. No
+              mention of localStorage, and no apology — the objection that
+              settled the decision was "if they close the browser they lose the
+              saves", which is FALSE, so this must not imply fragility either.
+              It says what is true and what the one real limit is. */}
+          <p className="text-soft text-[14px] leading-relaxed">
+            <b className="text-ink font-semibold">Saved stories are kept in this browser.</b> They
+            survive closing the tab, quitting and restarting your computer. They do not follow you
+            to another browser or another device, and clearing your browsing data clears them.
+          </p>
+        </Section>
+
+        <Section
           title="Starting over"
           hint="The three questions this app asks when it first opens. Nothing you have saved is touched by going through them again."
         >

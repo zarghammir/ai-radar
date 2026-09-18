@@ -1,7 +1,7 @@
-import { getPreferences, USING_FIXTURES } from "@/lib/api/client";
+import { cookies } from "next/headers";
 import { BRIEF_LENGTH_COOKIE } from "@/lib/api/fixture-store";
 import { asBriefLength } from "@/lib/api/preferences";
-import type { BriefLengthParam, Preferences } from "@/lib/api/types";
+import type { BriefLengthParam } from "@/lib/api/types";
 
 /**
  * SERVER ONLY. Nothing with "use client" may import this module: the live path
@@ -17,8 +17,10 @@ export const FALLBACK_BRIEF_LENGTH: BriefLengthParam = "10";
 /**
  * Reads preferences the way a SERVER component must.
  *
- * Against the real API it calls the same function the route calls, through a
- * dynamic import so no database code reaches a browser bundle. It does NOT
+ * Against the real API it calls the same function the route calls, the way
+ * brief-server.ts does — static imports, one fixture guard at the top, then the
+ * live path. Two modules solving one problem in two shapes is how they drift,
+ * so this follows the one that arrived with the live flip. It does NOT
  * fetch /api/preferences: a server component asking its own app for a relative
  * URL has no origin to resolve it against, so the request throws on every
  * load. Today already shipped that defect once, and it was invisible — the
@@ -27,21 +29,16 @@ export const FALLBACK_BRIEF_LENGTH: BriefLengthParam = "10";
  *
  * On fixtures there is no database, and the client's own path is right.
  */
-async function readPreferences(): Promise<Preferences> {
-  if (USING_FIXTURES) {
-    // On fixtures the preferences are in localStorage, which the server cannot
-    // read. The chosen length is mirrored into one cookie for exactly this —
-    // see BRIEF_LENGTH_COOKIE in fixture-store.ts and issue #75. Everything
-    // else still comes from the client-side defaults, because nothing else on
-    // this page needs it.
-    const { cookies } = await import("next/headers");
-    const jar = await cookies();
-    const stored = jar.get(BRIEF_LENGTH_COOKIE)?.value;
-    const base = await getPreferences();
-    return stored ? { ...base, briefLength: decodeURIComponent(stored) } : base;
-  }
-  const [{ getDb }, reader] = await Promise.all([import("@/db/client"), import("@/api/reader")]);
-  return reader.getPreferences(getDb());
+async function readBriefLength(): Promise<{ length: BriefLengthParam; recognised: boolean }> {
+  // The reader's length lives in their BROWSER since #94, so the server has no
+  // row to read it from — on either path. The cookie #75 introduced for fixture
+  // builds is now the general mechanism rather than a fixture workaround: it is
+  // the only way a value kept on the device can reach a page rendered on the
+  // server before that device runs any JavaScript.
+  const jar = await cookies();
+  const stored = jar.get(BRIEF_LENGTH_COOKIE)?.value;
+  if (!stored) return { length: FALLBACK_BRIEF_LENGTH, recognised: true };
+  return asBriefLength(decodeURIComponent(stored));
 }
 
 /**
@@ -60,8 +57,7 @@ async function readPreferences(): Promise<Preferences> {
  */
 export async function defaultBriefLength(): Promise<BriefLengthParam> {
   try {
-    const preferences = await readPreferences();
-    return asBriefLength(preferences.briefLength).length;
+    return (await readBriefLength()).length;
   } catch (error) {
     console.error("today: could not read the preferred brief length", error);
     return FALLBACK_BRIEF_LENGTH;

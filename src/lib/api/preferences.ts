@@ -16,24 +16,19 @@ export const BRIEF_LENGTH_LABELS: Record<BriefLength, { label: string; hint: str
   all: { label: "Everything", hint: "No budget. Every story that passed the bar." },
 };
 
-export const NOTIFICATION_LABELS: Record<
-  NotificationChannel,
-  { label: string; hint: string; needsEmail: boolean }
-> = {
-  none: {
-    label: "Nothing",
-    hint: "Open the app when you want it. Nothing is sent to you.",
-    needsEmail: false,
-  },
+export const NOTIFICATION_LABELS: Record<NotificationChannel, { label: string; hint: string }> = {
+  none: { label: "Nothing", hint: "Open the app when you want it. Nothing is sent to you." },
   push: {
     label: "A push notification",
     hint: "On this device, once the brief is ready. You install the app first.",
-    needsEmail: false,
   },
   email: {
+    // No "to the address below" any more: #94 removed the address field,
+    // because storing one for a feature that does not exist (#72) collects
+    // personal data for nothing. The address is asked for when there is
+    // something to send, by whatever identity model that feature needs.
     label: "An email",
-    hint: "One message when the brief is ready, to the address below.",
-    needsEmail: true,
+    hint: "One message when the brief is ready. You will be asked where to send it when sending exists.",
   },
 };
 

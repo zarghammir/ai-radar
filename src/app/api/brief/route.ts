@@ -1,5 +1,11 @@
 import { getDb } from "@/db/client";
-import { briefWindow, parseBriefLength, storiesInWindow, takeWithinReadingTime } from "@/api/brief";
+import {
+  DEFAULT_BRIEF_LENGTH,
+  briefWindow,
+  parseBriefLength,
+  storiesInWindow,
+  takeWithinReadingTime,
+} from "@/api/brief";
 import { getPreferences } from "@/api/reader";
 import { handle, json } from "@/api/http";
 
@@ -7,9 +13,14 @@ export async function GET(request: Request): Promise<Response> {
   return handle(async () => {
     const now = new Date();
     const prefs = await getPreferences(getDb());
+    // The reader's preferred length lives in their BROWSER since #94, so this
+    // route cannot read it and must not pretend to: a shared row would have
+    // meant person 47's choice shortening person 12's brief. Callers that have
+    // a preference send it as ?length=; this is the fallback for callers that
+    // do not, and it is the app default rather than anyone's setting.
     const length = parseBriefLength(
       new URL(request.url).searchParams.get("length"),
-      prefs.briefLength,
+      DEFAULT_BRIEF_LENGTH,
     );
 
     const window = briefWindow(now, prefs.briefTime, prefs.timezone);

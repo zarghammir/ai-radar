@@ -36,6 +36,20 @@
       "when": 1789695986195,
       "tag": "0004_freezing_the_phantom",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1789695987195,
+      "tag": "0005_sleepy_ben_grimm",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789695988195,
+      "tag": "0006_careful_felicia_hardy",
+      "breakpoints": true
     }
   ]
 }

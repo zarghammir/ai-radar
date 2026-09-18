@@ -24,6 +24,7 @@
 import { launchBrowser, requireServer } from "./lib/browser.mjs";
 import { collectStoryIds } from "./lib/fixture-ids.mjs";
 import { bailIfBroken, isFloorBail, sectionStart } from "./lib/floor.mjs";
+import { saveThroughUi } from "./lib/save-through-ui.mjs";
 import { markOnboarded } from "./lib/seed.mjs";
 
 const base = process.argv[2] || process.env.VERIFY_URL || "http://127.0.0.1:3210";
@@ -35,8 +36,6 @@ const MIN_SAVED = 2;
 
 /** Read from the running app, never typed here — see lib/fixture-ids.mjs. */
 const SEED_STORY_COUNT = 3;
-/** Marks a context as already seeded; see seededContext below for why. */
-const SEED_SENTINEL = "verify-saved-seeded";
 const MARKS_TEMPLATE = [
   { note: null, tags: ["ship"], savedAt: "2026-09-15T09:00:00.000Z" },
   { note: null, tags: ["read-later"], savedAt: "2026-09-14T09:00:00.000Z" },
@@ -48,9 +47,9 @@ const out = { control: CONTROL };
 let onboardedOnServer = false;
 const floor = [];
 const browser = await launchBrowser();
-const SEED_IDS = await collectStoryIds(browser, base, SEED_STORY_COUNT);
-const SEED_MARKS = Object.fromEntries(SEED_IDS.map((id, i) => [id, MARKS_TEMPLATE[i]]));
-out.seededIds = SEED_IDS;
+// An early floor rather than seeding: it fails fast, naming the cause, when
+// Today has nothing to save.
+out.seededIds = await collectStoryIds(browser, base, SEED_STORY_COUNT);
 
 /**
  * A browser whose reader has finished onboarding and has a full bin.
@@ -75,21 +74,19 @@ async function seededContext() {
     // call the helper the other three used. Sweep by dependency, not by the
     // files already open.
     onboardedOnServer = await markOnboarded(context, base);
-    await context.addInitScript(
-      ([ids, marks, sentinel]) => {
-        try {
-          if (localStorage.getItem(sentinel) === "1") return;
-          localStorage.setItem(
-            "ai-radar-fixture-preferences",
-            JSON.stringify({ onboardedAt: "2026-09-01T00:00:00.000Z" }),
-          );
-          localStorage.setItem("ai-radar-fixture-saved", JSON.stringify(ids));
-          localStorage.setItem("ai-radar-fixture-marks", JSON.stringify(marks));
-          localStorage.setItem(sentinel, "1");
-        } catch {}
-      },
-      [SEED_IDS, SEED_MARKS, SEED_SENTINEL],
-    );
+    // THE BIN IS FILLED BY CLICKING SAVE. This used to plant ids and marks
+    // straight into storage, which produced a bin that renders EMPTY against a
+    // live database: since #91 a saved story is an id AND a snapshot of the
+    // card, and a planted id resolves to nothing. It passed here only because
+    // fixtures happen to contain the ids it planted. The sweep that found this
+    // was CI's, on the sibling script — same defect, one file over.
+    const filled = await saveThroughUi(context, base, MARKS_TEMPLATE);
+    out.filledBin = filled;
+    if (filled.landed !== "/") {
+      floor.push(`filling the bin asked for Today and landed on ${filled.landed}`);
+    } else if (filled.saved.length < MIN_SAVED) {
+      floor.push(`saved ${filled.saved.length} stories through the UI, floor is ${MIN_SAVED}`);
+    }
   }
   return context;
 }

@@ -1,9 +1,9 @@
-import { FIXTURE_STORIES, fixtureBrief } from "@/lib/api/fixtures";
+import { fixtureBrief } from "@/lib/api/fixtures";
 import {
   fixtureTopics,
   localMarks,
+  savedCards,
   localPreferences,
-  localReadIds,
   patchLocalPreferences,
   writeLocalMarks,
   writeLocalRead,
@@ -21,16 +21,39 @@ import type {
 /**
  * Where the Today page gets its data.
  *
- * The routes on feat/api-routes are not merged, so this reads fixtures. That is
- * an EXPLICIT MODE, not a fallback: a client that tries the network and quietly
- * uses fixtures when it gets a 404 cannot tell "this route does not exist yet"
- * from "this save failed", and would report a failed write as a success. Those
- * are different states and the product treats them differently everywhere else.
+ * It reads the LIVE API. Fixtures are opt-in, for working on the screen without
+ * a database: set NEXT_PUBLIC_USE_FIXTURES=1.
  *
- * Flip by setting NEXT_PUBLIC_USE_FIXTURES=0 once /api/brief exists.
+ * The flag is an EXPLICIT MODE and never a fallback. A client that tries the
+ * network and quietly uses fixtures when it gets a 404 cannot tell "this route
+ * does not exist yet" from "your save failed", and would report a failed write
+ * as a success. Those are different states, and the product distinguishes them
+ * everywhere else. Do not "simplify" this into a try/catch around fetch — that
+ * looks more robust and is the opposite.
  */
-export const USING_FIXTURES = process.env.NEXT_PUBLIC_USE_FIXTURES !== "0";
+export const USING_FIXTURES = process.env.NEXT_PUBLIC_USE_FIXTURES === "1";
 
+/**
+ * THE NAME IS WRONG AND IT STAYS. This is the reader's REAL saved store, on
+ * every device, in production — not test scaffolding. It was named when the
+ * app only ever ran on fixtures, and #91 made localStorage the permanent home
+ * for a reader's saves rather than a stand-in for a database.
+ *
+ * DO NOT RENAME IT WITHOUT A MIGRATION. It is a persisted key: anyone who has
+ * saved anything in the shipped build has it under this exact string, and a
+ * find-and-replace empties their list with no error, no warning and nothing on
+ * screen to notice — the reader simply opens Saved one day and it is empty.
+ * That is indistinguishable from the app losing their data, which is precisely
+ * the fear the #91 ruling had to correct as false.
+ *
+ * A rename needs a read-BOTH-keys transition: read the new key, fall back to
+ * this one, write the new one, and only drop this after a release in which
+ * every reader has opened the app. The same applies to the three keys below.
+ *
+ * The cost of keeping a misleading name is this comment. The cost of getting
+ * the rename wrong is somebody's saved list, silently. Those are not
+ * comparable, which is why the ugly name wins.
+ */
 const SAVED_KEY = "ai-radar-fixture-saved";
 const HIDDEN_KEY = "ai-radar-fixture-hidden";
 
@@ -84,12 +107,15 @@ async function json<T>(input: string, init?: RequestInit): Promise<T> {
 }
 
 /**
- * Applies the reader's own saved/hidden state to a brief. In fixture mode that
- * state lives in localStorage; against the real API it arrives on the card and
- * this is a no-op.
+ * Applies the reader's own saved and hidden state to a brief.
+ *
+ * ON BOTH PATHS SINCE #91. It used to be a no-op against the live API, on the
+ * assumption that the card would carry the reader's state from the database.
+ * The owner ruled that it must not: the catalogue is shared because the news is
+ * the same for everyone, and the reader's state is not. One shared row would
+ * mean person 47 saves a story and person 12 sees it saved.
  */
 export function applyLocalState(brief: BriefResponse): BriefResponse {
-  if (!USING_FIXTURES) return brief;
   const saved = localSavedIds();
   const hidden = localHiddenIds();
   const stories = brief.stories
@@ -109,36 +135,26 @@ export async function getBrief(length: BriefLengthParam): Promise<BriefResponse>
 }
 
 export async function setSaved(story: StoryCard, saved: boolean): Promise<void> {
-  if (USING_FIXTURES) {
-    const ids = localSavedIds();
-    if (saved) ids.add(story.id);
-    else ids.delete(story.id);
-    writeIds(SAVED_KEY, ids);
-    // The note, the tags and the date saved live in a second key. Unsaving
-    // drops them, matching the real route, where DELETE removes the row and
-    // takes the note with it — a note that survives an unsave would come back
-    // attached to a story the reader thought they had cleared.
-    writeLocalMarks(
-      story.id,
-      saved ? { note: null, tags: [], savedAt: new Date().toISOString() } : null,
-    );
-    return;
-  }
-  await json(`/api/saved/${story.id}`, { method: saved ? "POST" : "DELETE" });
+  const ids = localSavedIds();
+  if (saved) ids.add(story.id);
+  else ids.delete(story.id);
+  writeIds(SAVED_KEY, ids);
+  // The note, the tags and the date saved live in a second key. Unsaving drops
+  // them: a note that survived an unsave would come back attached to a story
+  // the reader thought they had cleared.
+  writeLocalMarks(
+    story.id,
+    // The card travels with the save: the ids are this browser's and the
+    // catalogue is shared, and nothing turns one into the other. See SavedMarks.
+    saved ? { note: null, tags: [], savedAt: new Date().toISOString(), card: story } : null,
+  );
 }
 
 export async function setHidden(story: StoryCard, hidden: boolean): Promise<void> {
-  if (USING_FIXTURES) {
-    const ids = localHiddenIds();
-    if (hidden) ids.add(story.id);
-    else ids.delete(story.id);
-    writeIds(HIDDEN_KEY, ids);
-    return;
-  }
-  await json(`/api/hide/${story.id}`, {
-    method: "POST",
-    body: JSON.stringify({ hidden }),
-  });
+  const ids = localHiddenIds();
+  if (hidden) ids.add(story.id);
+  else ids.delete(story.id);
+  writeIds(HIDDEN_KEY, ids);
 }
 
 /**
@@ -150,27 +166,23 @@ export async function setHidden(story: StoryCard, hidden: boolean): Promise<void
  * archived nothing, and no screen may present it as the second thing.
  */
 export async function getSaved(archived = false): Promise<SavedResponse> {
-  if (USING_FIXTURES) {
-    if (archived) return { stories: [], nextCursor: null, hasMore: false };
-    const ids = localSavedIds();
-    const marks = localMarks();
-    const read = localReadIds();
-    const stories: SavedCard[] = FIXTURE_STORIES.filter((story) => ids.has(story.id)).map(
-      (story) => ({
-        ...story,
-        saved: true,
-        read: read.has(story.id),
-        note: marks[String(story.id)]?.note ?? null,
-        tags: marks[String(story.id)]?.tags ?? [],
-        // Empty, not invented, when this id was saved by a build that did not
-        // record the date. The card omits the line rather than guessing.
-        savedAt: marks[String(story.id)]?.savedAt ?? "",
-      }),
-    );
-    stories.sort((a, b) => b.savedAt.localeCompare(a.savedAt));
-    return { stories, nextCursor: null, hasMore: false };
-  }
-  return json<SavedResponse>(`/api/saved?archived=${archived ? "true" : "false"}`);
+  // Built from THIS browser's state on both paths, per the #91 ruling. There is
+  // no request here: /api/saved still exists and still answers, and the screen
+  // no longer asks it anything, because its answer is one list shared by every
+  // reader of the same instance.
+  if (archived) return { stories: [], nextCursor: null, hasMore: false };
+  const marks = localMarks();
+  const { cards } = savedCards(localSavedIds());
+  const stories: SavedCard[] = cards.map((card) => ({
+    ...card,
+    note: marks[String(card.id)]?.note ?? null,
+    tags: marks[String(card.id)]?.tags ?? [],
+    // Empty, not invented, when this id was saved by a build that did not
+    // record the date. The card omits the line rather than guessing.
+    savedAt: marks[String(card.id)]?.savedAt ?? "",
+  }));
+  stories.sort((a, b) => b.savedAt.localeCompare(a.savedAt));
+  return { stories, nextCursor: null, hasMore: false };
 }
 
 /**
@@ -182,43 +194,69 @@ export async function setSavedMarks(
   storyId: number,
   marks: { note: string | null; tags: string[] },
 ): Promise<void> {
-  if (USING_FIXTURES) {
-    const existing = localMarks()[String(storyId)];
-    writeLocalMarks(storyId, {
-      note: marks.note,
-      tags: marks.tags,
-      savedAt: existing?.savedAt ?? new Date().toISOString(),
-    });
-    return;
-  }
-  await json(`/api/saved/${storyId}`, {
-    method: "POST",
-    body: JSON.stringify({ note: marks.note, tags: marks.tags }),
+  const existing = localMarks()[String(storyId)];
+  writeLocalMarks(storyId, {
+    note: marks.note,
+    tags: marks.tags,
+    savedAt: existing?.savedAt ?? new Date().toISOString(),
+    // Editing a note must not discard the snapshot the save took.
+    card: existing?.card,
   });
 }
 
 export async function setRead(storyId: number, read: boolean): Promise<void> {
-  if (USING_FIXTURES) {
-    writeLocalRead(storyId, read);
-    return;
-  }
-  await json(`/api/read/${storyId}`, { method: "POST", body: JSON.stringify({ read }) });
+  writeLocalRead(storyId, read);
 }
 
-/** Only the fields the route accepts: preferencesPatchSchema is `.strict()`. */
 export type PreferencesPatch = Partial<Omit<Preferences, "updatedAt">>;
 
+/**
+ * The preferences that belong to the READER rather than to the deployment, and
+ * therefore live in this browser (#94).
+ *
+ * What is NOT here is as considered as what is: `briefTime` and `timezone` are
+ * the schedule of the instance — the worker computes its sweep and the brief
+ * window from them before anyone opens a page — and `topicKeys` still feeds the
+ * score the worker writes ahead of time, so moving it would mean ranking at
+ * read time. That one is the remaining half of #94.
+ */
+const DEVICE_FIELDS = ["briefLength", "theme", "onboardedAt"] as const;
+
+function splitPatch(patch: PreferencesPatch) {
+  const device: PreferencesPatch = {};
+  const server: PreferencesPatch = {};
+  for (const [key, value] of Object.entries(patch)) {
+    const target = (DEVICE_FIELDS as readonly string[]).includes(key) ? device : server;
+    Object.assign(target, { [key]: value });
+  }
+  return { device, server };
+}
+
+/**
+ * One shape for the screen, two homes behind it. The device's answer is the
+ * base and the server's row is laid over it, so a field the server no longer
+ * stores cannot come back as undefined and blank a control.
+ */
 export async function getPreferences(): Promise<Preferences> {
   if (USING_FIXTURES) return localPreferences();
-  return json<Preferences>("/api/preferences");
+  const server = await json<Partial<Preferences>>("/api/preferences");
+  return { ...localPreferences(), ...server };
 }
 
 export async function putPreferences(patch: PreferencesPatch): Promise<Preferences> {
   if (USING_FIXTURES) return patchLocalPreferences(patch);
-  return json<Preferences>("/api/preferences", {
-    method: "PUT",
-    body: JSON.stringify(patch),
-  });
+  const { device, server } = splitPatch(patch);
+  // Device first: it cannot fail in a way the reader needs to hear about, and
+  // if the server write throws the caller rolls back from the store rather
+  // than from here.
+  if (Object.keys(device).length > 0) patchLocalPreferences(device);
+  if (Object.keys(server).length > 0) {
+    await json<Partial<Preferences>>("/api/preferences", {
+      method: "PUT",
+      body: JSON.stringify(server),
+    });
+  }
+  return getPreferences();
 }
 
 export async function getTopics(): Promise<TopicSummary[]> {

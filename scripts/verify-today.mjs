@@ -144,6 +144,65 @@ try {
     await ctx.close();
   }
 
+  /* ---- 3b. the three screen states are TOLD APART, not inferred ---------
+   *
+   * "No stories rendered" is true of a quiet morning AND of a database we
+   * cannot reach. An assertion that cannot separate them passes for the broken
+   * one, so each state names itself in the DOM and this reads the name.
+   *
+   * Run against a live database:   npm run verify:today
+   * Run against an empty one:      seed nothing, then the same command
+   * Run against no database:       DATABASE_URL=postgres://nope/nope npm start
+   */
+  {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 780 } });
+    // This block was written BEFORE the first-run gate existed and arrived in
+    // this tree through the rebase onto it. Unseeded, it is sent to /welcome,
+    // there is no data-screen-state marker, and the floor below fires "the
+    // states cannot be told apart" — about a page that has no states because
+    // it is the wrong page. A rebase can import a pre-gate assumption into a
+    // post-gate tree, and neither the merge nor the type checker can see it.
+    onboardedOnServer = await markOnboarded(ctx, base);
+    const mark = sectionStart(floor);
+    const page = await ctx.newPage();
+    await page.goto(`${base}/?length=all`, { waitUntil: "networkidle" });
+    const landed = new URL(page.url()).pathname;
+    if (landed !== "/") floor.push(`the screen-state check asked for / and landed on ${landed}`);
+    bailIfBroken(floor, mark);
+    const state = await page.getAttribute("[data-screen-state]", "data-screen-state");
+    const storyCount = await cards(page).count();
+    const text = (await page.locator("main").innerText()).toLowerCase();
+
+    out.screenState = {
+      state,
+      storyCount,
+      // The distinction a reader has to be able to make without knowing what a
+      // database is: one of these says nothing happened, the other says we do
+      // not know what happened.
+      saysQuietMorning: text.includes("quiet morning"),
+      saysCannotReach: text.includes("cannot reach"),
+    };
+
+    if (!state) floor.push("no data-screen-state on the page; the states cannot be told apart");
+    if (!["brief", "quiet", "unreachable"].includes(state ?? "")) {
+      floor.push(`unexpected screen state ${JSON.stringify(state)}`);
+    }
+    // Whatever state it is in, it must be INTERNALLY consistent: the marker,
+    // the story count and the words on screen must agree.
+    if (state === "brief" && storyCount < 1) floor.push("state=brief but no stories rendered");
+    if (state === "quiet" && storyCount > 0) floor.push("state=quiet but stories rendered");
+    if (state === "unreachable" && !out.screenState.saysCannotReach) {
+      floor.push("state=unreachable but the screen does not say it cannot reach anything");
+    }
+    if (state === "quiet" && out.screenState.saysCannotReach) {
+      floor.push("a quiet morning is being described as a failure");
+    }
+    if (state === "unreachable" && out.screenState.saysQuietMorning) {
+      floor.push("an unreachable database is being described as a quiet morning");
+    }
+    await ctx.close();
+  }
+
   /* ---- 4. the story-count floor across every state the ticket names ---- */
   {
     const perState = {};

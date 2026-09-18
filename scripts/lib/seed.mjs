@@ -25,39 +25,6 @@
  */
 
 /**
- * One write per server per process. Three contexts in a script do not need
- * three PUTs, and a memoised promise means concurrent callers share one.
- */
-const serverSeeds = new Map();
-
-async function putOnboarded(base) {
-  try {
-    const response = await fetch(`${base}/api/preferences`, {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ onboardedAt: new Date().toISOString() }),
-    });
-    return response.ok;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * The live half on its own, for a script that seeds its contexts inline rather
- * than through `markOnboarded` — the accessibility sweep does, because it has
- * theme and saved state to write in the same init script.
- *
- * Returns whether it applied, so a caller can REPORT it rather than assume it.
- * A caller that discards this is claiming something it did not check.
- */
-export function markOnboardedOnServer(base) {
-  if (!base) return Promise.resolve(false);
-  if (!serverSeeds.has(base)) serverSeeds.set(base, putOnboarded(base));
-  return serverSeeds.get(base);
-}
-
-/**
  * Writes the fact on both sides for one context and returns whether the live
  * half applied.
  *
@@ -78,5 +45,10 @@ export async function markOnboarded(context, base) {
       localStorage.setItem(key, JSON.stringify({ onboardedAt: "2026-09-01T00:00:00.000Z" }));
     } catch {}
   });
-  return markOnboardedOnServer(base);
+  // No server half any more. onboardedAt moved to the device in #94, so the
+  // localStorage write below IS the whole fact — there is no row to mirror it
+  // into. `base` stays in the signature because every caller passes it and the
+  // day something else needs a server-side seed it belongs here.
+  void base;
+  return true;
 }
