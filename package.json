@@ -32,6 +32,7 @@
     "worker": "tsx src/worker/main.ts",
     "worker:once": "tsx src/worker/main.ts --once",
     "verify:today": "node scripts/verify-today.mjs",
+    "shots:filter": "node scripts/shoot-filter.mjs",
     "backfill:content-types": "tsx scripts/reclassify-content-types.ts",
     "measure:keyword-gate": "tsx scripts/measure-keyword-gate.ts",
     "backfill:ai-vocabulary": "tsx scripts/backfill-ai-vocabulary.ts"
