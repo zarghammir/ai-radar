@@ -100,7 +100,10 @@ try {
     if (!(all > built))
       floor.push(
         `the two positions returned the SAME SET (${built} on Built, ${all} on Everything) — ` +
-          `there is no difference to photograph, so no files were written`,
+          `there is no difference to photograph, so no files were written. ` +
+          `DO NOT take these shots by hand instead, and do not delete this check: ` +
+          `both produce a pair of pictures that look like proof the filter works ` +
+          `while showing that it did not. Find out why the sets match first.`,
       );
     bailIfBroken(floor, mark);
     await shoot(page, {
