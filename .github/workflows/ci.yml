@@ -366,15 +366,28 @@ jobs:
           set -euo pipefail
           PAYLOAD="$(curl -s -H 'RSC: 1' http://127.0.0.1:3210/)"
 
+          # EVERY grep BELOW CARRIES `|| true`, AND THAT IS NOT NOISE. Under
+          # `set -euo pipefail` a grep that matches nothing exits 1, the command
+          # substitution fails, and the step dies THERE — before the floor that
+          # exists to explain it. The first run of this control did exactly
+          # that: exit 1, no message, and the only way to tell a matched pattern
+          # from an empty payload was to add the guard the guard needed. A floor
+          # that cannot speak is worse than no floor, because it reports as the
+          # failure it was written to describe.
+          echo "payload bytes: ${#PAYLOAD}"
+          echo "first 200 bytes: ${PAYLOAD:0:200}"
+
           # FLOOR FIRST, TWICE, because a control that cannot exercise the
           # hazard must say so rather than pass. Both of these would otherwise
           # produce a confident green that proves nothing.
-          ESCAPED="$(printf '%s' "$PAYLOAD" | grep -o 'data-empty-body' | wc -l | tr -d ' ')"
+          ESCAPED="$(printf '%s' "$PAYLOAD" | grep -o 'data-empty-body' | wc -l | tr -d ' ' || true)"
+          ESCAPED="${ESCAPED:-0}"
           if [ "$ESCAPED" -lt 1 ]; then
             echo "::error::the RSC payload carries no 'data-empty-body' at all, so this control exercised nothing. Either the route is not in the empty state or the payload is not being served — fix the setup, do not delete the control." >&2
             exit 1
           fi
-          DOMFORM="$(printf '%s' "$PAYLOAD" | grep -o 'data-empty-body="true"' | wc -l | tr -d ' ')"
+          DOMFORM="$(printf '%s' "$PAYLOAD" | grep -o 'data-empty-body="true"' | wc -l | tr -d ' ' || true)"
+          DOMFORM="${DOMFORM:-0}"
           if [ "$DOMFORM" -ne 0 ]; then
             echo "::error::this document contains the DOM form ($DOMFORM occurrence(s)), so it is not payload-only and proves nothing about the escaped copy. The RSC request probably returned full HTML." >&2
             exit 1
