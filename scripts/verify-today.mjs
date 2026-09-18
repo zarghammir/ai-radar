@@ -15,6 +15,12 @@ import { launchBrowser, requireServer } from "./lib/browser.mjs";
 import { bailIfBroken, isFloorBail, sectionStart } from "./lib/floor.mjs";
 import { markOnboarded } from "./lib/seed.mjs";
 
+// VIEW PINNED TO "all" THROUGHOUT THIS FILE. #102 made the app open on built
+// things, which is 4 of the 7 fixture stories — and a 5-minute budget cannot
+// shorten a 4-story list, so the reading-length assertions below started failing
+// on a filter that was working perfectly. The two are separate axes: this file
+// measures LENGTH, so it holds the view still. The default view is exercised by
+// the accessibility sweep and by the empty-state step in CI.
 const base = process.argv[2] || process.env.VERIFY_URL || "http://127.0.0.1:3210";
 await requireServer(base);
 
@@ -41,11 +47,11 @@ try {
     onboardedOnServer = await markOnboarded(ctx, base);
     const page = await ctx.newPage();
 
-    await page.goto(`${base}/?length=all`, { waitUntil: "networkidle" });
+    await page.goto(`${base}/?length=all&view=all`, { waitUntil: "networkidle" });
     const all = await cards(page).count();
-    await page.goto(`${base}/?length=10`, { waitUntil: "networkidle" });
+    await page.goto(`${base}/?length=10&view=all`, { waitUntil: "networkidle" });
     const ten = await cards(page).count();
-    await page.goto(`${base}/?length=5`, { waitUntil: "networkidle" });
+    await page.goto(`${base}/?length=5&view=all`, { waitUntil: "networkidle" });
     const five = await cards(page).count();
 
     if (all < MIN_STORIES)
@@ -74,7 +80,7 @@ try {
     onboardedOnServer = await markOnboarded(ctx, base);
     const mark = sectionStart(floor);
     const page = await ctx.newPage();
-    await page.goto(`${base}/?length=all`, { waitUntil: "networkidle" });
+    await page.goto(`${base}/?length=all&view=all`, { waitUntil: "networkidle" });
 
     const saveButtons = page.getByRole("button", { name: /^Save$/ });
     const before = await saveButtons.count();
@@ -111,7 +117,7 @@ try {
     onboardedOnServer = await markOnboarded(ctx, base);
     const mark = sectionStart(floor);
     const page = await ctx.newPage();
-    await page.goto(`${base}/?length=all`, { waitUntil: "networkidle" });
+    await page.goto(`${base}/?length=all&view=all`, { waitUntil: "networkidle" });
 
     const before = await cards(page).count();
     if (before < MIN_STORIES)
@@ -165,7 +171,7 @@ try {
     onboardedOnServer = await markOnboarded(ctx, base);
     const mark = sectionStart(floor);
     const page = await ctx.newPage();
-    await page.goto(`${base}/?length=all`, { waitUntil: "networkidle" });
+    await page.goto(`${base}/?length=all&view=all`, { waitUntil: "networkidle" });
     const landed = new URL(page.url()).pathname;
     if (landed !== "/") floor.push(`the screen-state check asked for / and landed on ${landed}`);
     bailIfBroken(floor, mark);
@@ -219,7 +225,7 @@ try {
             localStorage.setItem("ai-radar-theme", t);
           } catch {}
         }, theme);
-        await page.goto(`${base}/?length=all`, { waitUntil: "networkidle" });
+        await page.goto(`${base}/?length=all&view=all`, { waitUntil: "networkidle" });
         await page.evaluate(() => document.fonts.ready);
         const count = await cards(page).count();
         const overflow = await page.evaluate(
