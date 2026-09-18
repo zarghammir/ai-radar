@@ -78,9 +78,17 @@ const CONTROL = process.env.AUDIT_CONTROL || null;
  * gate it guards keeps reporting a pass that nobody can any longer distinguish
  * from an untested one. So the width drops to keep the same pressure per tab.
  *
- * UNVERIFIED AT FOUR TABS. The arithmetic says 160px gives ~40px a tab and must
- * clip; nobody has watched it do so. The next run with a browser has to see
- * this control go red before its green means anything again.
+ * OBSERVED FAILING AT FOUR TABS on 2026-09-17, at this head: 160px produced a
+ * narrowest tab of 40px — the figure the arithmetic above predicts — and
+ * "Settings" clipped in 10 of 10 bars, with the floor still passing, so the red
+ * was the layout rather than an empty instrument. At the real 390px the same
+ * sweep reports 0 clipped and a narrowest tab of 97.5px.
+ *
+ * Written as a dated observation rather than "verified", because the number it
+ * justifies depends on the tab COUNT and on the longest label. Add a fifth tab,
+ * or a word longer than "Settings", and this figure is a prediction again — at
+ * which point this paragraph is evidence about a tree that no longer exists and
+ * should be re-earned rather than trusted.
  */
 const CONTROL_WIDTH = 160;
 const PHONE_WIDTH = CONTROL === "narrow" ? CONTROL_WIDTH : 390;
