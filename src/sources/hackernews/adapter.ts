@@ -94,7 +94,23 @@ export const hackerNewsAdapter: SourceAdapter = {
       // The gate that #71 turns into a label. Under "label" the item is kept
       // and the miss is recorded instead: you cannot offer a reader
       // "everything" over items you threw away.
-      if (keywordPolicy === "gate" && !matched) continue;
+      //
+      // Keyed on "label" rather than on "gate" so that an UNRECOGNISED value
+      // gates. The other half of this rule, in run.ts, asks whether the policy
+      // is "label"; if this asked whether it is "gate", the two halves would
+      // key on different literals in opposite directions and a typo would fail
+      // OPEN here and NARROW there — the gate off, and the resulting non-AI
+      // items in the default view. One misspelling in operator config, nothing
+      // raised.
+      //
+      // Narrowed rather than refused, and the difference from parseView is
+      // deliberate rather than an inconsistency. parseView rejects a value a
+      // READER supplied in a query string: refusing gives that caller feedback
+      // and costs one request. This is OPERATOR config read at fetch time,
+      // where throwing takes the whole source dark on a typo. Both obey "an
+      // unknown value must never widen"; refusing here would trade a wide
+      // failure for a dark one.
+      if (keywordPolicy !== "label" && !matched) continue;
       const hnUrl = `https://news.ycombinator.com/item?id=${it.id}`;
       out.push({
         externalId: String(it.id),

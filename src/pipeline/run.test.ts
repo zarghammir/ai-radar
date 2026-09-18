@@ -11,7 +11,7 @@ import { TRUNCATE_ALL } from "@/db/tables";
 import { rawItems, sources, stories, storyTopics, topics, ingestRuns } from "@/db/schema";
 import { deriveVerification } from "./clustering/verification";
 import { rankStory } from "./ranking/score";
-import { CANDIDATE_LIMIT, assignStory, runIngest, storySources } from "./run";
+import { CANDIDATE_LIMIT, assignStory, refreshStory, runIngest, storySources } from "./run";
 import { matchesAnyKeyword } from "./normalize/keywords";
 
 /**
@@ -987,6 +987,65 @@ withDb("pipeline orchestration", () => {
         sink: () => {},
       });
       expect(await db.select().from(schema.rawItems)).toHaveLength(0);
+    });
+
+    it("gates on an unrecognised policy rather than falling open", async () => {
+      // Every other test in this describe passes the literal "label", so the
+      // asymmetry this pins was invisible: the adapter used to gate only on
+      // the exact literal "gate" while run.ts labels only on the exact literal
+      // "label". A typo therefore turned the gate OFF and, because the story
+      // was then not from a "label" source, put the resulting non-AI items in
+      // the DEFAULT VIEW — the precise inverse of what this change promises.
+      await addSource({
+        key: "hn-typo",
+        name: "Show HN",
+        kind: "hackernews",
+        tier: "COMMUNITY",
+        url: null,
+        config: { list: "top", minPoints: 3, keywordPolicy: "labl" },
+      });
+      await runIngest(db, undefined, {
+        now: NOW,
+        fetchImpl: fakeNetwork(hnRoutes([{ id: 1, title: TITLE, url: "https://example.com/pg" }])),
+        sink: () => {},
+      });
+      expect(await db.select().from(schema.rawItems)).toHaveLength(0);
+    });
+
+    it("does not treat an unevaluated item as a miss", async () => {
+      // The upgrade window, which is the only time this state exists: between
+      // the migration and the MANUAL backfill every pre-existing row is NULL.
+      // `matchedAiVocabulary === false` is what keeps those rows out of
+      // adjacent tech; loosened to `!matchedAiVocabulary`, every story whose
+      // items all come from a label source would flip to adjacent and VANISH
+      // from the default view.
+      //
+      // This doubles as the deletion control for that operator: all three
+      // tests above use booleans, so the mutation passes every one of them.
+      const src = await addSource({
+        key: "hn-discovery",
+        name: "Show HN",
+        kind: "hackernews",
+        tier: "COMMUNITY",
+        url: null,
+        config: { list: "top", minPoints: 3, keywordPolicy: "label" },
+      });
+      await runIngest(db, undefined, {
+        now: NOW,
+        fetchImpl: fakeNetwork(hnRoutes([{ id: 1, title: TITLE, url: "https://example.com/pg" }])),
+        sink: () => {},
+      });
+      void src;
+
+      // Put the row back into the state an upgraded database is in.
+      await db.update(schema.rawItems).set({ matchedAiVocabulary: null });
+      const [before] = await db.select().from(schema.stories);
+      await db.transaction(async (tx) => {
+        await refreshStory(tx, before.id);
+      });
+
+      const [story] = await db.select().from(schema.stories);
+      expect(story.adjacentTech).toBe(false);
     });
 
     it("keeps a story out of adjacent tech when one item does match", async () => {

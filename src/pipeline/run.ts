@@ -226,6 +226,8 @@ export async function refreshStory(tx: Tx, storyId: number): Promise<void> {
    * have been visible all along.
    */
   const knownMiss = (i: (typeof items)[number]) => i.matchedAiVocabulary === false;
+  // Keyed on the same literal the adapter keys on, so the two halves of this
+  // rule cannot disagree about an unrecognised value.
   const fromLabelSource = (i: (typeof items)[number]) =>
     String((i.sourceConfig as Record<string, unknown> | null)?.keywordPolicy ?? "gate") === "label";
   const adjacentTech = items.every(knownMiss) && items.every(fromLabelSource);
