@@ -212,21 +212,40 @@ describe("content-type coverage", () => {
     // The two adapters that declare a type per item; see src/sources/.
     const adapterDeclared: ContentType[] = ["PAPER", "DISCUSSION"];
     expect(sourceDefaults.length).toBe(SOURCE_SEEDS.length);
-    // The corpus floor: without it, an emptied catalogue would satisfy the
-    // coverage assertion below with nothing in it.
+    // THE FLOOR, DERIVED FROM THE FAILURE RATHER THAN FROM THE COUNT (#90).
     //
-    // 18 -> 17 on 2026-09-17, when import-ai was dropped (#38). It mirrors the
-    // catalogue size, so every removal moves it again, and the next person will
-    // lower it by one because that is what the last two did. #90 carries the
-    // fix: pick a floor from the FAILURE it catches — an emptied catalogue —
-    // rather than from today's measurement. Left tracking here because it is
-    // this test's guard to retune, not something to redesign in passing.
+    // It used to be `SOURCE_SEEDS.length >= N`, where N was the catalogue size
+    // on the day it was written. That tracked the quantity it guarded, so
+    // every source added or removed moved it — twice in two days — and a
+    // tripwire that fires on ordinary work teaches people to adjust it without
+    // reading it. It was already stale again: the value said 17 and the
+    // catalogue is 18.
     //
-    // There is a SECOND floor on this same quantity at
-    // src/db/seed-data.test.ts:16, and it did NOT have to move, because 15
-    // leaves headroom under the catalogue instead of matching it. That is the
-    // shape #90 should copy — this one is the outlier, not that one.
-    expect(SOURCE_SEEDS.length).toBeGreaterThanOrEqual(17);
+    // WHAT THIS TEST ACTUALLY NEEDS is that the catalogue's contribution to
+    // `accounted` is load-bearing. If every type carried by `sourceDefaults`
+    // were also in CLASSIFIABLE, NOT_CLASSIFIABLE or adapterDeclared, the
+    // assertion below would pass IDENTICALLY with an empty catalogue, and this
+    // would be a coverage test that says nothing about coverage.
+    //
+    // Measured 2026-09-18 at e709f3e: NEWS, RESEARCH and RELEASE are accounted
+    // for ONLY by source defaults — carried by 11, 4 and 2 sources.
+    //
+    // Note what this DOES NOT need to assert: that an emptied catalogue fails.
+    // It already does, on the coverage assertion itself, because those three
+    // types would go unaccounted. A size floor was never what caught that.
+    //
+    // Ordinary catalogue work cannot trip this. Adding or removing a source
+    // moves nothing unless it removes the LAST carrier of a type nothing else
+    // accounts for — which is precisely the moment someone should stop.
+    const otherwiseAccounted = new Set<ContentType>([
+      ...CLASSIFIABLE,
+      ...NOT_CLASSIFIABLE,
+      ...adapterDeclared,
+    ]);
+    const onlyFromCatalogue = [...new Set(sourceDefaults)].filter(
+      (t) => !otherwiseAccounted.has(t),
+    );
+    expect(onlyFromCatalogue.length).toBeGreaterThan(0);
 
     const accounted = new Set<ContentType>([
       ...CLASSIFIABLE,
