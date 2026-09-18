@@ -53,3 +53,40 @@ export function sectionStart(floor) {
 export function isFloorBail(error) {
   return error instanceof FloorBroken;
 }
+
+/**
+ * The verdict for a CONTROL RUN, in one place because the contract is easy to
+ * get backwards and was, once.
+ *
+ * THE CONTRACT, owned by .github/workflows/ci.yml: a check run under its
+ * control environment variable must exit EXACTLY 1 — "the checks ran and the
+ * floor failed". 0 means the floor could not fail, so the control proves
+ * nothing and the job says so. 2 means the instrument never ran at all.
+ *
+ * SO EXIT 1 IS THIS FUNCTION'S SUCCESS, which reads wrong until you hold it
+ * against the loop that calls it. verify-reader-isolation.mjs originally had
+ * it the other way round — 0 when its floor reddened, 1 when it stayed green —
+ * and lined up against the loop the two conventions cancelled, leaving the
+ * dangerous direction: a control that FAILED to redden exited 1, and the job
+ * read 1 as "failed as it must" and certified a broken control. This helper
+ * exists so that reasoning happens once rather than per script.
+ *
+ * `needle` is what makes this a control rather than a break: the NAMED
+ * assertion has to be the one that failed. A control that reddens some other
+ * line has proved a different floor can fail, which is the wrong-test problem
+ * and is why this takes a substring instead of counting failures.
+ */
+export function reportControl(floor, needle, label) {
+  const caught = floor.some((f) => f.includes(needle));
+  if (caught) {
+    console.log(`CONTROL OK: ${label} failed as it must (exiting 1, this contract's PASS)`);
+    process.exit(1);
+  }
+  console.log(
+    `CONTROL FAILED: ${label} did not fail. ` +
+      (floor.length > 0
+        ? `Something else did (${floor.length} other floor failure(s)), which is the wrong assertion — see the JSON above.`
+        : "Nothing failed at all, so this floor has not been shown able to fail."),
+  );
+  process.exit(0);
+}

@@ -16,10 +16,29 @@
  * with the reading rather than having to write a fifth version of the probe.
  */
 import { launchBrowser, requireServer } from "./lib/browser.mjs";
-import { bailIfBroken, isFloorBail, sectionStart } from "./lib/floor.mjs";
+import { bailIfBroken, isFloorBail, reportControl, sectionStart } from "./lib/floor.mjs";
 import { markOnboarded } from "./lib/seed.mjs";
 
 const base = process.argv[2] || process.env.VERIFY_URL || "http://127.0.0.1:3210";
+
+/**
+ * THE CONTROL (#113). This file became a required check in #112 without anyone
+ * having ever seen it fail.
+ *
+ * VERIFY_CONTROL=no-service-worker denies the cache section a service worker,
+ * using Playwright's own `serviceWorkers: "block"` rather than any edit to the
+ * app or the assertion. The worker then cannot take control, and the check
+ * that matters most here — and fails most quietly — must fire.
+ *
+ * WHY THAT ASSERTION AND NOT ANOTHER. The section's comment already says it:
+ * with no worker in control NOTHING is cached, so "the 404 was not cached"
+ * passes while proving nothing. The floor guarding against that green is the
+ * one worth showing can go red, because it is the one holding up every other
+ * result in the section.
+ */
+const CONTROL = process.env.VERIFY_CONTROL === "no-service-worker";
+/** The needle identifying THIS file's named assertion, kept beside the control. */
+const CONTROL_NEEDLE = "service worker was not controlling the page";
 await requireServer(base);
 
 const out = {};
@@ -132,7 +151,7 @@ try {
 
   /* ---- C. finding 2: a 404 must not poison the cache ------------------- */
   {
-    const ctx = await browser.newContext();
+    const ctx = await browser.newContext(CONTROL ? { serviceWorkers: "block" } : {});
     // Seeded for a quieter reason than the two above, and a worse one if
     // missed: an unseeded context asking for "/" is sent to /welcome, the
     // worker precaches THAT shell, and every assertion below still passes
@@ -196,4 +215,5 @@ try {
 out.onboardedOnServer = onboardedOnServer;
 out.floor = { passed: floor.length === 0, failures: floor };
 console.log(JSON.stringify(out, null, 2));
+if (CONTROL) reportControl(floor, CONTROL_NEEDLE, "verify:shell's service-worker floor");
 if (floor.length > 0) process.exit(1);

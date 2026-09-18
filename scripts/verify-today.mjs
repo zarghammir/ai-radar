@@ -12,7 +12,7 @@
  * card), and the whole run would sweep clean while the page was blank.
  */
 import { launchBrowser, requireServer } from "./lib/browser.mjs";
-import { bailIfBroken, isFloorBail, sectionStart } from "./lib/floor.mjs";
+import { bailIfBroken, isFloorBail, reportControl, sectionStart } from "./lib/floor.mjs";
 import { markOnboarded } from "./lib/seed.mjs";
 
 // VIEW PINNED TO "all" THROUGHOUT THIS FILE. #102 made the app open on built
@@ -23,6 +23,26 @@ import { markOnboarded } from "./lib/seed.mjs";
 // the accessibility sweep and by the empty-state step in CI.
 const base = process.argv[2] || process.env.VERIFY_URL || "http://127.0.0.1:3210";
 await requireServer(base);
+
+/**
+ * THE CONTROL (#113). Until this existed, nothing had ever shown this file
+ * capable of reporting a problem — and #112 made it a required check on every
+ * pull request, which turns "we do not know" into "we believe" without
+ * anything changing about the instrument.
+ *
+ * VERIFY_CONTROL=no-budget asks for `length=all` on the leg that is supposed
+ * to ask for five minutes. The budget is then never applied, the short list is
+ * the long list, and the reading-length assertion MUST fail. It changes an
+ * input to the app in the same way AUDIT_CONTROL=narrow changes the viewport —
+ * it does not edit the assertion, which would prove nothing about it.
+ *
+ * Deliberately NOT done by shrinking the corpus: that trips the reading-time
+ * precondition instead, which is a different floor. A control has to redden
+ * the assertion it names.
+ */
+const CONTROL = process.env.VERIFY_CONTROL === "no-budget";
+/** The needle identifying THIS file's named assertion, kept beside the control. */
+const CONTROL_NEEDLE = "did not shorten the list";
 
 /** The brief must never be emptier than this for the assertions to mean anything. */
 const MIN_STORIES = 2;
@@ -52,7 +72,11 @@ try {
     const all = await cards(page).count();
     await page.goto(`${base}/?length=10&view=all`, { waitUntil: "networkidle" });
     const ten = await cards(page).count();
-    await page.goto(`${base}/?length=5&view=all`, { waitUntil: "networkidle" });
+    // Under the control this asks for `all`, so the "five minute" leg is not a
+    // five-minute leg at all and the comparison below cannot hold.
+    await page.goto(`${base}/?length=${CONTROL ? "all" : "5"}&view=all`, {
+      waitUntil: "networkidle",
+    });
     const five = await cards(page).count();
 
     if (all < MIN_STORIES)
@@ -275,4 +299,5 @@ try {
 out.onboardedOnServer = onboardedOnServer;
 out.floor = { passed: floor.length === 0, failures: floor, minStories: MIN_STORIES };
 console.log(JSON.stringify(out, null, 2));
+if (CONTROL) reportControl(floor, CONTROL_NEEDLE, "verify:today's reading-length floor");
 if (floor.length > 0) process.exit(1);
