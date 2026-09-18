@@ -1,4 +1,5 @@
 import type { IngestResult, SourceRunResult } from "@/pipeline/run";
+import { describeError } from "@/pipeline/describe-error";
 import type { SecretEnv } from "./secret";
 
 /** Matches INGEST_INTERVAL_MINUTES in .env.example; report.test.ts pins the two together. */
@@ -67,6 +68,25 @@ export function formatTotalLine(result: IngestResult, elapsedMs: number): string
 export function exitCodeFor(result: IngestResult): number {
   if (result.bySource.length === 0) return 0;
   return result.bySource.every((r) => r.error) ? 1 : 0;
+}
+
+/**
+ * The worker's last line before it exits non-zero.
+ *
+ * A FUNCTION rather than a template in main.ts, because main.ts calls `main()`
+ * at module level and cannot be imported by a test. Inlined there, "does the
+ * worker redact its fatal error" would be assertable only by grepping the
+ * source for a shape — which is the import-versus-call gap #103 documented,
+ * one layer down. Here it is behaviour a test can drive.
+ *
+ * MEASURED BEFORE THE FIX (#92): this line printed `error.message`, and
+ * `npm run worker:once` against an unreachable host put
+ * `getaddrinfo ENOTFOUND <host>` in the clear. ingest.yml runs it on a
+ * schedule with the real DATABASE_URL, and this repository's Actions logs are
+ * public.
+ */
+export function formatWorkerFailure(error: unknown): string {
+  return `[worker] ${describeError(error)}`;
 }
 
 /**
