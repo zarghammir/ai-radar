@@ -113,6 +113,13 @@ jobs:
             npm run migrations:check
           fi
 
+      # ADDED WITH #106. The guard rule used to live in a vitest file, so `npm
+      # test` enforced it. Folding it into this script would have removed it
+      # from CI entirely, because routes:check was never wired in — the rule
+      # would have been better implemented and no longer checked.
+      - name: Route cost and guard rules
+        run: npm run routes:check
+
       - name: Unit tests
         run: npm test
 
