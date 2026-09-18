@@ -257,6 +257,15 @@ jobs:
           if [ "${#EXPLANATION}" -lt 60 ]; then
             echo "state=quiet but the screen explained itself in ${#EXPLANATION} characters" >&2
             echo "  found: ${EXPLANATION:-<no empty-state body at all>}" >&2
+            # DIAGNOSTICS, because two rounds were spent guessing at this from
+            # a length alone. A failure that cannot say WHY costs a full CI
+            # round per hypothesis; these four lines cost nothing and end it.
+            echo "  --- diagnostics ---" >&2
+            echo "  html bytes: ${#HTML}" >&2
+            echo "  occurrences of 'data-empty': $(printf '%s' "$HTML" | grep -c 'data-empty' || true)" >&2
+            echo "  occurrences of 'Nothing built': $(printf '%s' "$HTML" | grep -c 'Nothing built' || true)" >&2
+            echo "  window around the screen-state marker:" >&2
+            printf '%s' "$HTML" | tr -d '\n' | grep -o 'data-screen-state="[a-z]*".\{0,600\}' | head -1 | sed 's/^/    /' >&2
             echo "  DO NOT lower this threshold to make this pass. It is red because" >&2
             echo "  the empty screen stopped telling the reader what happened, which" >&2
             echo "  is the one thing this state exists to do. Fix the page." >&2
