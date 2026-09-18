@@ -292,15 +292,38 @@ try {
      * side may say length=all because that is the axis under test; neither
      * side may say view, beyond pinning it to the same value.
      */
+    // THE PRECONDITION, WITHOUT WHICH THE COMPARISON BELOW MEANS NOTHING.
+    //
+    // A 5-minute budget can only shorten a list that runs longer than five
+    // minutes. On a corpus of exactly five one-minute stories the budget cuts
+    // nothing, both sides return the same count, and the assertion below
+    // reports "the preference is not reaching the server" about a server that
+    // is working perfectly. Found by running it: this development database
+    // held 5 stories totalling exactly 5 minutes.
+    //
+    // A vacuous instrument that fails is not better than one that passes. It
+    // is worse, because someone will go looking for a bug in the cookie.
+    const wholeBrief = await fetch(`${base}/api/brief?view=all&length=all`).then((r) => r.json());
+    const budget = 5;
+    if (!(wholeBrief.readingMinutes > budget)) {
+      floor.push(
+        `the corpus is too short to measure the reading-length preference: the whole brief runs ` +
+          `${wholeBrief.readingMinutes} minute(s) against a ${budget}-minute budget, so NOTHING can ` +
+          `be cut and this check cannot tell a working preference from a broken one. Seed more ` +
+          `stories rather than relaxing the assertion below.`,
+      );
+    }
+    bailIfBroken(floor, mark);
+
     await page.goto(base + "/?view=all", { waitUntil: "networkidle" });
     const atPreference = await page.locator("article h2 a").count();
     await page.goto(base + "/?length=all&view=all", { waitUntil: "networkidle" });
     const atAll = await page.locator("article h2 a").count();
-    out.settings.today = { atPreference, atAll };
+    out.settings.today = { atPreference, atAll, wholeBriefMinutes: wholeBrief.readingMinutes };
     if (atPreference < 1) floor.push("Today rendered nothing at the saved length");
     if (!(atPreference < atAll)) {
       floor.push(
-        `Today showed ${atPreference} stories at the saved 5-minute length and ${atAll} at ?length=all — both on view=all, so length is the only axis that differs — the preference is not reaching the server`,
+        `Today showed ${atPreference} stories at the saved 5-minute length and ${atAll} at ?length=all — both on view=all, so length is the only axis that differs, and the whole brief runs ${wholeBrief.readingMinutes} minutes so the budget HAD something to cut — the preference is not reaching the server`,
       );
     }
 
