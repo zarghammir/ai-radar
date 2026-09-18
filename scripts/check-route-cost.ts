@@ -176,20 +176,22 @@ if (everyRouteFile.length === 0) {
   failed = true;
 }
 
-// The guarantee's own floor, and an equality for the same reason: removing an
-// internal route legitimately moves both sides, while one ceasing to reach the
-// guard moves only the left.
-const reaching = internalRoutes.filter((r) => reaches(r, GUARD));
-if (reaching.length !== internalRoutes.length) {
-  console.error(
-    `FAIL ${reaching.length} of ${internalRoutes.length} internal routes reach the guard`,
-  );
-  failed = true;
-}
+// NO SEPARATE COUNT OVER THE REACHING SET. It was here, arguing that "one
+// ceasing to reach the guard moves only the left" — a true claim about a
+// failure, and false about which assertion detects it. The per-member loop
+// above fires on exactly the same condition, from the same predicate over the
+// same set, and fires BETTER because it names the route where a count only
+// counts. It could not fire alone, and at zero internal routes the loop runs
+// zero times and 0 === 0 passes, so it did not cover the vacuity it was
+// written for either.
+//
+// That vacuity is covered by the population equality above and the zero floor.
+// Deleted rather than kept: an assertion that cannot detect a failure of its
+// own is the shape this file exists to remove.
 
 if (failed) process.exit(1);
 console.log(
   `OK ${publicRoutes.length} public routes reach no adapter, no HTTP client and no LLM SDK; ` +
-    `${reaching.length}/${internalRoutes.length} internal routes reach the guard; ` +
+    `all ${internalRoutes.length} internal route(s) reach the guard; ` +
     `${all.length}/${everyRouteFile.length} route files under ${APP_ROOT} examined`,
 );
