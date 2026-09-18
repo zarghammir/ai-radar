@@ -262,10 +262,13 @@ jobs:
             # round per hypothesis; these four lines cost nothing and end it.
             echo "  --- diagnostics ---" >&2
             echo "  html bytes: ${#HTML}" >&2
-            echo "  occurrences of 'data-empty': $(printf '%s' "$HTML" | grep -c 'data-empty' || true)" >&2
-            echo "  occurrences of 'Nothing built': $(printf '%s' "$HTML" | grep -c 'Nothing built' || true)" >&2
-            echo "  window around the screen-state marker:" >&2
-            printf '%s' "$HTML" | tr -d '\n' | grep -o 'data-screen-state="[a-z]*".\{0,600\}' | head -1 | sed 's/^/    /' >&2
+            # grep -c counts LINES, and this HTML is one line — so it answers
+            # "at least once" for anything, which is not the question. -o | wc -l
+            # counts occurrences.
+            echo "  occurrences of 'data-empty': $(printf '%s' "$HTML" | grep -o 'data-empty' | wc -l | tr -d ' ')" >&2
+            echo "  occurrences of 'data-empty-body': $(printf '%s' "$HTML" | grep -o 'data-empty-body' | wc -l | tr -d ' ')" >&2
+            echo "  the empty-state markup as rendered:" >&2
+            printf '%s' "$HTML" | tr -d '\n' | grep -o 'data-empty.\{0,500\}' | head -1 | sed 's/^/    /' >&2
             echo "  DO NOT lower this threshold to make this pass. It is red because" >&2
             echo "  the empty screen stopped telling the reader what happened, which" >&2
             echo "  is the one thing this state exists to do. Fix the page." >&2
