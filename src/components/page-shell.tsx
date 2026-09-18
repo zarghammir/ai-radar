@@ -69,12 +69,26 @@ export function PageShell({
  * was told ANYTHING, by finding this block and measuring the length of its
  * body, without any opinion about the words in it. Marker-without-explanation
  * is the defect worth catching; a rewritten sentence is not.
+ *
+ * THEY CARRY AN EXPLICIT "true" RATHER THAN BEING BARE, and that is the whole
+ * reason this comment mentions them twice. Written as `data-empty-body`, JSX
+ * passes the boolean `true`, and the attribute was NOT in the server-rendered
+ * HTML: CI curled a correctly quiet page and found the body in zero
+ * characters. Playwright had found it all along, because it reads the DOM
+ * after hydration — so a browser check could not have caught this and a curl
+ * did.
+ *
+ * The evidence is a controlled comparison inside that one failing run: the
+ * same HTML carried `data-screen-state="quiet"` — a STRING value, three lines
+ * up in this file — while the bare boolean was absent. Every other data
+ * attribute in this codebase is written with a value; these two were the only
+ * exceptions, which is also why nothing else was affected.
  */
 export function EmptyState({ title, body }: { title: string; body: string }) {
   return (
-    <div data-empty-state className="border-edge text-ash border border-dashed p-6">
+    <div data-empty-state="true" className="border-edge text-ash border border-dashed p-6">
       <p className="text-ash-hi text-[15px] font-semibold">{title}</p>
-      <p data-empty-body className="mt-2 max-w-prose text-[14px] leading-relaxed">
+      <p data-empty-body="true" className="mt-2 max-w-prose text-[14px] leading-relaxed">
         {body}
       </p>
     </div>
