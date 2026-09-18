@@ -252,8 +252,22 @@ jobs:
           # an EXPLANATION at all. A screen that shows the marker and no prose
           # is the defect; a rewritten sentence is not. So: find the block, take
           # its body, and require it to be long enough to be an explanation.
+          # MATCHES THE REAL ATTRIBUTE, NOT ITS ESCAPED TWIN. A Next.js document
+          # carries the page TWICE: once as DOM HTML, and once as the RSC flight
+          # payload, JSON-escaped inside a script tag. So `data-empty-body`
+          # occurs twice, and the payload copy — data-empty-body\":\"true\" —
+          # comes first. A `head -1` over a loose pattern reads the payload,
+          # runs [^>]* to some unrelated bracket, and captures nothing.
+          #
+          # That cost three CI rounds and two wrong hypotheses, both of mine, so
+          # it is written here rather than left as a clever pattern: requiring
+          # the literal `="true"` cannot match the escaped form, because that
+          # one has \":\" between the name and the value.
+          #
+          # This applies to EVERY curl-and-grep assertion against this app, not
+          # just to this one.
           EXPLANATION="$(printf '%s' "$HTML" | tr -d '\n' \
-            | grep -o 'data-empty-body[^>]*>[^<]*' | head -1 | sed 's/.*>//')"
+            | grep -o 'data-empty-body="true"[^>]*>[^<]*' | head -1 | sed 's/.*>//')"
           if [ "${#EXPLANATION}" -lt 60 ]; then
             echo "state=quiet but the screen explained itself in ${#EXPLANATION} characters" >&2
             echo "  found: ${EXPLANATION:-<no empty-state body at all>}" >&2
