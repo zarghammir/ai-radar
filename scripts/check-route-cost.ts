@@ -1,5 +1,12 @@
 /**
- * Proves the cost rule: no route a client can reach can cause a paid call.
+ * Proves two rules about routes, from the import graph rather than by reading:
+ *
+ *   THE COST RULE      no route a client can reach can cause a paid call
+ *   THE GUARD RULE     every route under internal/ reaches the secret guard
+ *
+ * Both key on the same `internal/` path segment, so they cannot disagree about
+ * which routes are which — and both are derived from a walk of the repository
+ * rather than from a list that has to be edited.
  *
  * Walks the import graph out of every public route handler and fails if any of
  * them can reach a feed adapter, the HTTP client, or an LLM SDK. The graph is
@@ -19,10 +26,11 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, normalize, relative } from "node:path";
 
 const ROUTE_ROOT = "src/app/api";
+/** Next allows a route handler anywhere under here, not only under ROUTE_ROOT. */
+const APP_ROOT = "src/app";
+const GUARD = "src/api/internal-guard.ts";
 const FORBIDDEN_DIRS = ["src/sources/"];
 const FORBIDDEN_PACKAGES = ["@anthropic-ai/sdk"];
-/** Below this, the walk found too little to be believed. */
-const MINIMUM_ROUTES = 8;
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
@@ -92,6 +100,21 @@ function reachableViolations(route: string): string[] {
   return [...new Set(found)].sort();
 }
 
+/** Transitive, and type-only imports are already stripped: a route that imports
+ *  the guard for its TYPE does not call it, and does not reach it here. */
+function reaches(route: string, target: string): boolean {
+  const seen = new Set<string>();
+  const stack = [route];
+  while (stack.length) {
+    const current = stack.pop()!;
+    if (seen.has(current)) continue;
+    seen.add(current);
+    if (current === target) return true;
+    stack.push(...importsOf(current).local);
+  }
+  return false;
+}
+
 const all = walk(ROUTE_ROOT);
 const publicRoutes = all.filter((r) => !r.includes(`${ROUTE_ROOT}/internal/`));
 const internalRoutes = all.filter((r) => r.includes(`${ROUTE_ROOT}/internal/`));
@@ -106,18 +129,69 @@ for (const route of publicRoutes.sort()) {
   }
 }
 
-// A checker that walked nothing finds nothing. Say what was examined, always.
-if (publicRoutes.length < MINIMUM_ROUTES) {
+// ── Every internal route reaches the secret guard ─────────────────────────
+// Absorbed from src/api/internal-guard.test.ts (#106), which was temporary by
+// instruction: it lived as a TEST rather than a second copy of this traversal
+// because a drifted test goes red where a drifted second checker goes silent.
+// That file is deleted; this is now the only implementation.
+//
+// It proves the guard is REACHABLE, which means imported, and cannot prove it
+// is CALLED or called first. The behavioural assertions in api.test.ts cover
+// that — an unauthenticated PUT returning 401 with the row unchanged — and the
+// two are complementary: this covers every internal route shallowly, that one
+// covers one route deeply.
+for (const route of internalRoutes.sort()) {
+  if (!reaches(route, GUARD)) {
+    failed = true;
+    console.error(`FAIL ${relative(ROUTE_ROOT, route)} does not reach ${GUARD}`);
+  }
+}
+
+// ── Two floors, each on its own failure ───────────────────────────────────
+//
+// The old floor was `publicRoutes.length >= 8`, and it could not see the
+// failure it most needed to: IT BOUNDED WHAT THE WALK FOUND, NOT WHAT EXISTS.
+// A route.ts outside ROUTE_ROOT is not exempt from these rules — it is
+// invisible to them — and a shorter loop looks exactly like a smaller app.
+//
+// Replaced with an INDEPENDENT source of truth: every route.ts in the whole of
+// src/app. And with an equality rather than a threshold, so the value comes
+// from the failure rather than from today's count — adding or removing an
+// ordinary route moves both sides and cannot fire it, while a route the walk
+// never classified fires it immediately (#90).
+const everyRouteFile = walk(APP_ROOT);
+if (everyRouteFile.length === 0) {
+  // The only number here, and it is derived from the failure it catches: a
+  // glob that matched nothing. An app with zero routes does not exist, so this
+  // cannot fire on ordinary work.
+  console.error(`FAIL no route.ts found anywhere under ${APP_ROOT} — the walk matched nothing`);
+  failed = true;
+} else if (everyRouteFile.length !== all.length) {
+  const unexamined = everyRouteFile.filter((r) => !all.includes(r));
   console.error(
-    `FAIL examined only ${publicRoutes.length} public routes, expected at least ${MINIMUM_ROUTES} — the walk found too little to be believed`,
+    `FAIL ${unexamined.length} route(s) exist under ${APP_ROOT} but outside ${ROUTE_ROOT}, ` +
+      `so no rule in this file has examined them:`,
   );
+  for (const r of unexamined) console.error(`       ${r}`);
   failed = true;
 }
 
+// NO SEPARATE COUNT OVER THE REACHING SET. It was here, arguing that "one
+// ceasing to reach the guard moves only the left" — a true claim about a
+// failure, and false about which assertion detects it. The per-member loop
+// above fires on exactly the same condition, from the same predicate over the
+// same set, and fires BETTER because it names the route where a count only
+// counts. It could not fire alone, and at zero internal routes the loop runs
+// zero times and 0 === 0 passes, so it did not cover the vacuity it was
+// written for either.
+//
+// That vacuity is covered by the population equality above and the zero floor.
+// Deleted rather than kept: an assertion that cannot detect a failure of its
+// own is the shape this file exists to remove.
+
 if (failed) process.exit(1);
 console.log(
-  `OK ${publicRoutes.length} public routes reach no adapter, no HTTP client and no LLM SDK` +
-    (internalRoutes.length
-      ? ` (${internalRoutes.length} internal route(s) not subject to this rule)`
-      : ""),
+  `OK ${publicRoutes.length} public routes reach no adapter, no HTTP client and no LLM SDK; ` +
+    `all ${internalRoutes.length} internal route(s) reach the guard; ` +
+    `${all.length}/${everyRouteFile.length} route files under ${APP_ROOT} examined`,
 );
