@@ -13,6 +13,7 @@ import { rawItems, sources, stories, storyTopics, topics, ingestRuns } from "@/d
 import { deriveVerification } from "./clustering/verification";
 import { rankStory } from "./ranking/score";
 import { CANDIDATE_LIMIT, assignStory, refreshStory, runIngest, storySources } from "./run";
+import { describeEmptyPass, exitCodeFor } from "@/worker/report";
 import { matchesAnyKeyword } from "./normalize/keywords";
 
 /**
@@ -893,6 +894,93 @@ withDb("pipeline orchestration", () => {
       sink: () => {},
     });
     expect(result.bySource.map((s) => s.sourceKey)).toEqual(["openai-blog"]);
+  });
+
+  // ── #104 ───────────────────────────────────────────────────────────────────
+  // exitCodeFor's unit tests cover the DECISION. These cover the FACT reaching
+  // it: whether runIngest actually counts the catalogue correctly. That is the
+  // composition, and it is the part a unit test cannot see.
+  describe("the catalogue counts an empty pass needs to explain itself", () => {
+    it("counts what EXISTS, not what ran", async () => {
+      await openAiBlog(); // enabled
+      await addSource({ key: "verge-ai", name: "The Verge", enabled: false });
+
+      const r = await runIngest(db, undefined, {
+        now: NOW,
+        fetchImpl: fakeNetwork({}),
+        sink: () => {},
+      });
+
+      expect(r.bySource).toHaveLength(1); // only the enabled one RAN
+      expect(r.sourcesConfigured).toBe(2); // both EXIST
+      expect(r.sourcesEnabled).toBe(1);
+    });
+
+    it("a fully switched-off catalogue is an empty pass that FAILS", async () => {
+      await addSource({ key: "a", enabled: false });
+      await addSource({ key: "b", enabled: false });
+
+      const r = await runIngest(db, undefined, {
+        now: NOW,
+        fetchImpl: fakeNetwork({}),
+        sink: () => {},
+      });
+
+      expect(r.bySource).toHaveLength(0);
+      expect(r.sourcesConfigured).toBe(2);
+      expect(r.sourcesEnabled).toBe(0);
+      expect(exitCodeFor(r)).toBe(1);
+      expect(describeEmptyPass(r)).toContain("0 of 2");
+    });
+
+    it("re-enabling one source returns the same catalogue to green", async () => {
+      await addSource({ key: "alpha", enabled: false });
+      await addSource({ key: "beta", enabled: false });
+
+      // The re-enabled source is given a WORKING feed on purpose, and the
+      // first version of this test did not do that. Re-enabling a source makes
+      // it RUN, and a source that runs and fails is exit 1 for a completely
+      // different and legitimate reason — "every source failed". The control
+      // then passed while isolating nothing, because both halves were red for
+      // unrelated causes. It has to end genuinely green or it does not show
+      // that the COUNT was what made the first half red.
+      const routes = {
+        "alpha.test/feed": rssFeed([
+          { title: "Alpha ships something", link: "https://alpha.test/1", date: hoursAgo(2) },
+        ]),
+      };
+
+      const off = await runIngest(db, undefined, {
+        now: NOW,
+        fetchImpl: fakeNetwork(routes),
+        sink: () => {},
+      });
+      expect(off.bySource).toHaveLength(0);
+      expect(exitCodeFor(off)).toBe(1);
+
+      await db.update(sources).set({ enabled: true }).where(eq(sources.key, "alpha"));
+      const on = await runIngest(db, undefined, {
+        now: NOW,
+        fetchImpl: fakeNetwork(routes),
+        sink: () => {},
+      });
+      expect(on.sourcesEnabled).toBe(1);
+      expect(on.bySource).toHaveLength(1);
+      expect(on.bySource[0].error).toBeNull(); // it really succeeded
+      expect(exitCodeFor(on)).toBe(0);
+    });
+
+    it("an UNSEEDED catalogue stays green, which is the case that gets checks deleted", async () => {
+      const r = await runIngest(db, undefined, {
+        now: NOW,
+        fetchImpl: fakeNetwork({}),
+        sink: () => {},
+      });
+
+      expect(r.sourcesConfigured).toBe(0);
+      expect(exitCodeFor(r)).toBe(0);
+      expect(describeEmptyPass(r)).toContain("no sources are seeded");
+    });
   });
 
   // ── #99 ────────────────────────────────────────────────────────────────────

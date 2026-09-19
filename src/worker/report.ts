@@ -62,11 +62,41 @@ export function formatTotalLine(result: IngestResult, elapsedMs: number): string
  * A single dead feed is normal and must not turn the scheduled run red, or the
  * notification gets muted and a real outage goes unnoticed with it. Every
  * source failing is not a feed problem — it is the worker, the network or the
- * database — and that is worth failing for. No sources at all is a seeding
- * question, not a failed run.
+ * database — and that is worth failing for.
+ *
+ * THE SENTENCE THAT USED TO BE HERE said "no sources at all is a seeding
+ * question, not a failed run". The rule was right and the CENSUS WAS WRONG
+ * (#104): an empty `bySource` has THREE unrelated causes, and naming one of
+ * them was what let the other through.
+ *
+ *   nothing seeded yet ............... green. Nothing is broken
+ *   a filter matched no sources ...... green. The caller asked for a subset
+ *   EVERY SOURCE SWITCHED OFF ........ RED. Somebody turned the product off
+ *
+ * The third is why this matters. Until #110 it did not even need an operator —
+ * PUT /api/sources/[key] was unauthenticated and the keys are in seed-data.ts,
+ * in a public repository. With every source disabled the worker still runs
+ * every thirty minutes, still finishes, still exits 0, and the brief quietly
+ * stops growing. #86's health reports per-source failures, and a source that
+ * is disabled does not FAIL — it is never run at all — so nothing else covers
+ * this.
+ *
+ * WHY THE EMPTY-RESULT GUARD IS STILL HERE AND MUST STAY. `[].every()` is
+ * true, so without it an empty result exits 1 — on a fresh database before
+ * seeding, and on any filtered run matching nothing. Somebody hit that
+ * vacuous-truth trap and fixed it correctly, and that correct fix is what made
+ * this silent. The function was MISSING A FACT, not carrying a mistake: it
+ * knew how many sources RAN and not how many EXIST. Do not choose between the
+ * two wrong defaults; that is what the counts are for.
  */
 export function exitCodeFor(result: IngestResult): number {
-  if (result.bySource.length === 0) return 0;
+  if (result.bySource.length === 0) {
+    // Configured but none enabled: the catalogue exists and someone has
+    // switched all of it off. Distinguished from "nothing seeded" by a count
+    // the pass itself cannot infer from its own results.
+    if (result.sourcesConfigured > 0 && result.sourcesEnabled === 0) return 1;
+    return 0;
+  }
   return result.bySource.every((r) => r.error) ? 1 : 0;
 }
 
@@ -87,6 +117,22 @@ export function exitCodeFor(result: IngestResult): number {
  */
 export function formatWorkerFailure(error: unknown): string {
   return `[worker] ${describeError(error)}`;
+}
+
+/**
+ * Why a pass collected nothing, in words, because an exit code cannot carry
+ * it. "0 of 17 sources are enabled" and "no sources are seeded" are different
+ * operator actions and the scheduled job's log is where somebody looks first.
+ */
+export function describeEmptyPass(result: IngestResult): string | null {
+  if (result.bySource.length > 0) return null;
+  if (result.sourcesConfigured === 0) {
+    return "no sources are seeded yet, so there was nothing to collect. Run `npm run db:seed`.";
+  }
+  if (result.sourcesEnabled === 0) {
+    return `every source is switched off — 0 of ${result.sourcesConfigured} are enabled, so this pass collected nothing and the brief will stop growing.`;
+  }
+  return `no source matched this pass, though ${result.sourcesEnabled} of ${result.sourcesConfigured} are enabled.`;
 }
 
 /**

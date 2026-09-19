@@ -2,6 +2,7 @@ import "dotenv/config";
 import { getDb, getSql } from "@/db/client";
 import { ingestOnce } from "./ingest";
 import {
+  describeEmptyPass,
   exitCodeFor,
   formatSourceLine,
   formatTotalLine,
@@ -62,6 +63,11 @@ async function runPass(): Promise<number> {
   const { ingest, ranked } = outcome.result;
   for (const source of ingest.bySource) console.log(formatSourceLine(source));
   console.log(formatTotalLine(ingest, Date.now() - started));
+  // A pass that collected nothing says WHY. The exit code can only carry
+  // "wrong" or "fine"; "0 of 17 are enabled" and "nothing is seeded" are
+  // different operator actions, and this log is where somebody looks first.
+  const why = describeEmptyPass(ingest);
+  if (why) console.log(`[worker] ${why}`);
   // Said out loud because ingesting without scoring fills the database and
   // leaves the screen empty, and the two are indistinguishable from the counts
   // above.
