@@ -48,6 +48,19 @@ export interface StoryCard {
    */
   whyItMatters: string | null;
   url: string;
+  /**
+   * A SECOND link when the story has one: `url` is the thing, this is the
+   * conversation about it. Null for most stories, and #84 is why it exists —
+   * a Show HN launch carries both, the adapter built both, and only one could
+   * reach a screen.
+   *
+   * `string | null` rather than optional on purpose: an optional field has two
+   * ways to be absent and every consumer then has to treat them alike with
+   * nothing making it. It is also NEVER equal to `url` — the server drops it
+   * when they match, so "has a discussion" stays a real distinction rather
+   * than something every story satisfies.
+   */
+  discussionUrl: string | null;
   contentType: ContentType;
   verification: VerificationLevel;
   verificationNote: string | null;

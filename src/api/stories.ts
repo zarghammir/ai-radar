@@ -40,6 +40,22 @@ export interface StoryCard {
   whyItMatters: string | null;
   excerpt: string | null;
   url: string | null;
+  /**
+   * A SECOND link, when the story has one — the conversation about the thing,
+   * where `url` is the thing itself. Null when there is none, which is most
+   * stories.
+   *
+   * WHY IT IS `string | null` AND NOT `discussionUrl?: string`. An optional
+   * field has TWO ways to be absent — missing and null — and code downstream
+   * then has to treat them the same without anything making it. This project
+   * has spent a lot of this week on absent-versus-failed values; one absent
+   * value is the cheapest place to stop the next instance.
+   *
+   * IT IS NEVER A COPY OF `url`. A card showing the same link twice is worse
+   * than one showing it once, and it would make "has a discussion" untestable —
+   * every story would have one.
+   */
+  discussionUrl: string | null;
   contentType: ContentType;
   verification: VerificationLevel;
   verificationNote: string | null;
@@ -104,6 +120,31 @@ function engagementOf(
  * a handful per story. A thirty-row page would otherwise be well over a
  * hundred round trips, and the cost would only show up under real data.
  */
+/**
+ * The story's discussion link, read out of the primary item's metadata.
+ *
+ * `metadata` is `Record<string, unknown>` — an adapter can put anything there —
+ * so this VALIDATES rather than casts. A non-string, an empty string or a
+ * missing key are all the same answer: there is no discussion link.
+ *
+ * THE SECOND ARGUMENT IS THE POINT AND NOT A CONVENIENCE. A Show HN post with
+ * no project link has `url: it.url ?? hnUrl`, so the thread becomes the
+ * story's primary url — and returning it here as well would render a card
+ * whose two links are the same link. Worse, every such story would then
+ * "have a discussion", which makes the property untestable: the assertion
+ * that distinguishes the two cases could never fail.
+ *
+ * So: a discussion link that IS the primary url is not a second link, and this
+ * returns null. Deduplicating at the boundary rather than in the component
+ * means every consumer gets the same answer instead of each re-deriving it.
+ */
+function discussionUrlOf(metadata: unknown, primaryUrl: string | null): string | null {
+  if (typeof metadata !== "object" || metadata === null) return null;
+  const candidate = (metadata as Record<string, unknown>).hnUrl;
+  if (typeof candidate !== "string" || candidate.length === 0) return null;
+  return candidate === primaryUrl ? null : candidate;
+}
+
 export async function buildCards(db: Db, storyRows: StoryRow[]): Promise<StoryCard[]> {
   if (storyRows.length === 0) return [];
   const ids = storyRows.map((s) => s.id);
@@ -138,6 +179,10 @@ export async function buildCards(db: Db, storyRows: StoryRow[]): Promise<StoryCa
           id: rawItems.id,
           storyId: rawItems.storyId,
           url: rawItems.url,
+          // #84: the discussion link is written here by the Hacker News
+          // adapter and was never selected, which is the whole of why it could
+          // not reach a screen. The column was always there.
+          metadata: rawItems.metadata,
           excerpt: rawItems.excerpt,
           publishedAt: rawItems.publishedAt,
           key: sources.key,
@@ -198,6 +243,7 @@ export async function buildCards(db: Db, storyRows: StoryRow[]): Promise<StoryCa
       whyItMatters: s.whyItMatters,
       excerpt,
       url: primary?.url ?? null,
+      discussionUrl: discussionUrlOf(primary?.metadata, primary?.url ?? null),
       contentType: s.contentType,
       verification: s.verification,
       verificationNote: s.verificationNote,

@@ -1468,4 +1468,143 @@ withDb("API routes", () => {
       expect((await body(res)).error).toMatchObject({ code: "VALIDATION_ERROR" });
     });
   });
+
+  /**
+   * #84 — A SHOW HN LAUNCH HAS TWO LINKS AND THE CONTRACT CARRIED ONE.
+   *
+   * The adapter built both and kept one: `url: it.url ?? hnUrl`, with the
+   * thread going into `metadata`, which was never selected by buildCards and
+   * so never left the server. The `??` did the damage in the harmful
+   * direction — a post WITH a project link lost its discussion, and a post
+   * WITHOUT one lost nothing, because there was nothing else. The interesting
+   * case was exactly the broken one.
+   *
+   * THESE TESTS DRIVE THE REAL ADAPTER AND THE REAL ROUTE. The rows below are
+   * built from the adapter's OWN OUTPUT — `item.url` and `item.metadata`, not
+   * values typed here — so if the adapter stops writing the thread link, the
+   * input to this test changes and the assertions fail. A test that wrote the
+   * metadata by hand would prove the route can carry a field, which was never
+   * in doubt; the defect was whether this path carries THIS value.
+   */
+  describe("a Show HN launch carries both of its links (#84)", () => {
+    /** The real adapter, over an injected fetch. No network, no fixtures. */
+    async function showHnItems() {
+      const { hackerNewsAdapter } = await import("@/sources/hackernews/adapter");
+      const now = Math.floor(Date.now() / 1000) - 600;
+      const ITEMS: Record<string, unknown> = {
+        // WITH a project link: the case that was broken.
+        "111": {
+          id: 111,
+          type: "story",
+          title: "Show HN: an AI radar that reads your sources for you",
+          by: "builder",
+          time: now,
+          score: 140,
+          descendants: 62,
+          url: "https://example.com/ai-radar",
+        },
+        // WITHOUT one: today's correct behaviour, which must not regress.
+        "222": {
+          id: 222,
+          type: "story",
+          title: "Show HN: I trained a small model on my own notes",
+          by: "another",
+          time: now,
+          score: 95,
+          descendants: 18,
+        },
+      };
+      const fetchImpl = (async (input: RequestInfo | URL) => {
+        const u = String(input);
+        if (u.endsWith("showstories.json")) return Response.json([111, 222]);
+        const m = u.match(/item\/(\d+)\.json/);
+        if (m) return Response.json(ITEMS[m[1]] ?? null);
+        throw new Error(`unexpected fetch: ${u}`);
+      }) as unknown as typeof fetch;
+
+      return hackerNewsAdapter.fetch(
+        { config: { list: "show", minPoints: 1, keywordPolicy: "label" } } as never,
+        { fetch: fetchImpl, log: () => {} } as never,
+      );
+    }
+
+    /** Files one adapter item as a story, using ITS values rather than mine. */
+    async function fileAsStory(
+      item: Awaited<ReturnType<typeof showHnItems>>[number],
+      slug: string,
+    ) {
+      const hn = await source(`hn-${slug}`, { name: "Hacker News", kind: "hackernews" });
+      const when = new Date(Date.now() - 600_000).toISOString();
+      const [st] = await sql.unsafe(
+        `insert into stories (slug,title,content_type,verification,verification_note,first_seen_at,last_activity_at,source_count,score,adjacent_tech)
+         values ($1,$2,'RELEASE','PRIMARY_SOURCE','graded',$3,$3,1,10,false) returning id`,
+        [slug, item.title, when],
+      );
+      const storyId = Number(st.id);
+      const [ri] = await sql.unsafe(
+        `insert into raw_items (source_id,external_id,url,canonical_url,title,excerpt,published_at,fetched_at,content_type,metadata,fingerprint,story_id,role)
+         values ($1,$2,$3,$3,$4,$5,$6,$6,'RELEASE',$7,$8,$9,'primary') returning id`,
+        [
+          hn,
+          item.externalId,
+          item.url,
+          item.title,
+          item.excerpt ?? "a launch",
+          when,
+          JSON.stringify(item.metadata ?? {}),
+          `${slug}-fp`,
+          storyId,
+        ],
+      );
+      await sql.unsafe(`update stories set primary_item_id = $1 where id = $2`, [
+        Number(ri.id),
+        storyId,
+      ]);
+      return slug;
+    }
+
+    async function read(slug: string) {
+      const { GET } = await import("@/app/api/stories/[slug]/route");
+      const res = await GET(req(`/api/stories/${slug}`), {
+        params: Promise.resolve({ slug }),
+      } as never);
+      expect(res.status).toBe(200);
+      return body(res);
+    }
+
+    it("serves the project link AND the discussion link, distinctly", async () => {
+      const items = await showHnItems();
+      const withProject = items.find((i) => i.externalId === "111");
+      // THE FLOOR. If the adapter stopped returning this item the assertions
+      // below would vacuously pass on `undefined`, and the test would report a
+      // healthy contract over an adapter that had stopped producing input.
+      expect(
+        withProject,
+        "the adapter returned no item for the Show HN post with a project link",
+      ).toBeDefined();
+
+      const d = await read(await fileAsStory(withProject!, "show-hn-with-project"));
+
+      expect(d.url).toBe("https://example.com/ai-radar");
+      expect(d.discussionUrl).toBe("https://news.ycombinator.com/item?id=111");
+      // The point of the ticket: two links, and they are not the same link.
+      expect(d.discussionUrl).not.toBe(d.url);
+    });
+
+    it("leaves no second link when the launch has only a thread, and does not repeat the first", async () => {
+      const items = await showHnItems();
+      const threadOnly = items.find((i) => i.externalId === "222");
+      expect(
+        threadOnly,
+        "the adapter returned no item for the Show HN post without a project link",
+      ).toBeDefined();
+
+      const d = await read(await fileAsStory(threadOnly!, "show-hn-thread-only"));
+
+      // Today's correct behaviour, asserted so the fix cannot regress it: the
+      // thread IS the story's link, and there is no second one.
+      expect(d.url).toBe("https://news.ycombinator.com/item?id=222");
+      expect(d.discussionUrl).toBeNull();
+    });
+  });
 });

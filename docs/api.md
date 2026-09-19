@@ -156,6 +156,7 @@ What a list renders. Returned by `/api/brief`, `/api/radar` and `/api/saved`.
   "whyItMatters": null,
   "excerpt": "A new flagship model with a one million token context window…",
   "url": "https://openai.com/index/gpt-6/",
+  "discussionUrl": null,
   "contentType": "NEWS",
   "verification": "PRIMARY_SOURCE",
   "verificationNote": "Published directly by OpenAI and picked up by 2 other sources.",
@@ -705,6 +706,7 @@ contract without filling a row here.
 | `scoreComponents[].label`                     | `COMPONENT_LABELS` in `src/pipeline/ranking/score.ts`, falling back to the key if unmapped                        |
 | `sources[]`                                   | `raw_items` joined to `sources`, de-duplicated by source key                                                      |
 | `primarySource`, `url`, `publishedAt`         | the item at `stories.primary_item_id`, joined to its source                                                       |
+| `discussionUrl`                               | the primary item's `raw_items.metadata.hnUrl`, and `null` when it is absent **or equal to `url`** — see below     |
 | `excerpt`                                     | primary item's `raw_items.excerpt`                                                                                |
 | `topics[]`                                    | `story_topics` joined to `topics`                                                                                 |
 | `readingMinutes`                              | `readingMinutes()` in `src/pipeline/normalize/text.ts`, over the story's summary or excerpt                       |
@@ -718,6 +720,17 @@ contract without filling a row here.
 | `topics[].storyCount`, `sources[].storyCount` | counted per request from `story_topics` / `raw_items`, over 7 days                                                |
 | `buckets[].hour`, `buckets[].count`           | `stories.last_activity_at` grouped by hour, empty hours filled in                                                 |
 | `sources[].enabled` (write)                   | `sources.enabled`, the only column any route writes on that table — and only the operator route under `internal/` |
+
+### `url` and `discussionUrl`: the thing, and the argument about it
+
+`url` is the artefact — the post, the paper, the repo. `discussionUrl` is the conversation about it, and it is **null for most stories**, because most stories have only one link.
+
+It exists because a **Show HN launch has two**, and they are not interchangeable: the thing somebody built, and the thread arguing about it. Carrying only the first delivers the launch and drops half of what the source was added for.
+
+**Two rules the server enforces, so no client has to:**
+
+- **Absent is `null`, never missing.** The field is always present in the response. An optional field would give every consumer two ways to be absent and nothing making them treat the two alike.
+- **It is never a copy of `url`.** A Show HN post with no project link already uses the thread as its `url`; returning it a second time would render a card whose two links are the same link, and would make _"has a discussion"_ true of every such story — which is to say, untestable. The server drops it when they match.
 
 ## Not filled yet
 
