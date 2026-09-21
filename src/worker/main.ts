@@ -10,6 +10,7 @@ import {
   readIntervalMinutes,
 } from "./report";
 import { readInternalSecret } from "./secret";
+import { runSummaries } from "@/llm/run-summaries";
 
 /**
  * The ingestion worker: one pass with --once, otherwise a pass every
@@ -72,6 +73,21 @@ async function runPass(): Promise<number> {
   // leaves the screen empty, and the two are indistinguishable from the counts
   // above.
   console.log(`[worker] scored ${ranked.ranked} stor${ranked.ranked === 1 ? "y" : "ies"}.`);
+
+  // Summaries last, and ONLY HERE. The internal HTTP trigger shares ingestOnce
+  // with this loop but deliberately does not share this call: a paid call
+  // belongs to the process running on a schedule the owner controls, not to a
+  // request handler, even a secret-guarded one (docs/cost-protection.md rule 2).
+  //
+  // Its result does not touch the exit code. A pass that collected and scored
+  // seventeen feeds succeeded; an LLM outage on top of it is a degraded
+  // enhancement, and turning the scheduled run red for it is how a red run
+  // stops meaning anything.
+  const summaries = await runSummaries(getDb());
+  if (summaries.skipped) {
+    console.log(`[worker] summaries off: ${summaries.skipped}.`);
+  }
+
   return exitCodeFor(ingest);
 }
 

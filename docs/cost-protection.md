@@ -37,9 +37,12 @@ number down where it can be recomputed rather than rediscovered from a billing e
 Stated as verified facts rather than intentions, because a document that describes
 guards which do not exist is worse than no document.
 
-- **No code in `src/` calls a paid API.** `@anthropic-ai/sdk` is a dependency, but
-  nothing imports it yet. There is currently no way for this app to spend money, and
-  `npm run routes:check` is what keeps that true for anything a reader can reach.
+- **One module in `src/` can call a paid API: `src/llm/`.** It is reached from
+  `src/worker/main.ts` and from nothing else. `npm run routes:check` is what keeps that
+  true for anything a reader can reach, and it now forbids the whole `src/llm/`
+  directory rather than only the `@anthropic-ai/sdk` package — two of the three
+  providers are plain `fetch` against a base URL and import no package at all, so a
+  package name alone was a tripwire for one provider instead of a rule for the feature.
 - **No public API route can reach a paid service.** The count is deliberately not
   written here: `npm run routes:check` prints how many public and internal routes it
   examined, and a number copied beside a command that computes it is the only copy
@@ -56,10 +59,46 @@ guards which do not exist is worse than no document.
   It is not part of the client API and is not subject to the rule above.
 - **Ingestion is free.** Every source in the seeded catalogue is a public feed or a free
   API. A pass costs bandwidth and nothing else.
-- **The cap is not yet enforced.** `LLM_MAX_STORIES_PER_DAY` is documented in
-  `.env.example` and `llm_usage` is in the schema, but no code reads either, because no
-  code summarises anything yet. Rule 3 is a contract for whoever writes the first paid
-  call, not a description of a guard that is already running.
+- **The cap is enforced, and it refuses.** `src/llm/budget.ts` reads
+  `LLM_MAX_STORIES_PER_DAY`, compares it against today's `llm_usage` rows before every
+  call and returns without calling when the allowance is gone — it does not warn and
+  proceed. `src/llm/run-summaries.test.ts` asserts the provider was **never invoked**
+  rather than asserting a log line, because a test on the message passes for the
+  version that spends the money anyway. That suite needs no `DATABASE_URL`: the one
+  guard here that costs real money when it is wrong must not be a test that skips
+  itself on a machine without a database.
+- **An unreadable cap fails closed.** `LLM_MAX_STORIES_PER_DAY=twenty` reads as **zero**,
+  not as the default. Someone who typed a cap wrong was trying to limit spending, and
+  the default is the one reading that spends money they did not authorise.
+
+## What a day of summaries costs (2026-09-21)
+
+At the shipped default of `LLM_MAX_STORIES_PER_DAY=20` on Claude Haiku 4.5, billed at
+$1 per million input tokens and $5 per million output tokens.
+
+**The ceiling is arithmetic, not an estimate.** Both halves of one call are bounded by
+constants in `src/llm/summarize.ts`: `MAX_OUTPUT_TOKENS = 400` is sent as `max_tokens`,
+so the provider cannot exceed it, and the prompt is clipped to five reports of at most
+600 excerpt characters each — `summarize.test.ts` asserts the built prompt stays under
+6,000 characters, which is about 1,500 tokens.
+
+|                             | per story | per day at the cap | per 30 days |
+| --------------------------- | --------- | ------------------ | ----------- |
+| ceiling (both limits hit)   | $0.0035   | $0.070             | **$2.10**   |
+| typical (~800 in, ~250 out) | $0.0021   | $0.041             | **$1.23**   |
+
+**These are token-count arithmetic, not a measured bill**, because measuring one needs a
+real key and a real day. The code records what the provider actually charged into
+`llm_usage.input_tokens` and `output_tokens`, so after one real day this table can be
+replaced with the measurement instead of the model.
+
+**What happens if volume doubles: nothing happens to the cost.** That is the point of a
+cap, and it is worth saying plainly because the instinct is to expect the bill to move.
+Measured from the last successful pass, 200 stories were scored inside the seven-day
+ranking window, which is about **29 new stories a day**, so a cap of 20 covers roughly
+**70%** of them. Double the volume and the cap covers **35%** — the bill is identical
+and the coverage is what degrades. If that trade is wrong, the number to change is the
+cap, and changing it changes the bill proportionally.
 
 ## What the schedule costs (2026-09-16)
 
@@ -102,18 +141,34 @@ thing a publisher rate-limits or blocks, and this is where a self-hoster would l
 it. It is also why `INGEST_INTERVAL_MINUTES` has a floor: the interval is a request rate
 against other people's servers, not just a local loop.
 
-## When the first paid call lands
+## What the first paid call brought with it
 
-Whoever adds AI summaries owns all of this, in the same pull request as the call itself:
+This was the contract for whoever added AI summaries. It is kept here as the checklist
+it was, with what satisfies each line, because the next paid call inherits it:
 
-- Read the key with a server-only accessor; never pass it through a prop or a response.
-- Put the call in a module the worker imports and a page cannot.
-- Check `LLM_MAX_STORIES_PER_DAY` against today's `llm_usage` row **before** the call,
-  and write the row **after** it, in the same run.
-- Make the app work with `LLM_PROVIDER=none`. Summaries are an enhancement; the brief is
-  useful without them, and a missing key must degrade rather than fail.
-- Add a test that a page render cannot reach the call, and one that the cap refuses the
-  call rather than logging a warning and proceeding.
+- **Read the key with a server-only accessor; never pass it through a prop or a
+  response.** The key is closed over inside `createLlmClient` and is never placed on a
+  return value, a log line or an error.
+- **Put the call in a module the worker imports and a page cannot.** `src/llm/`, reached
+  from `src/worker/main.ts`. The internal HTTP trigger shares `ingestOnce` with the
+  worker loop and deliberately does **not** share the summariser: a paid call belongs to
+  a process on a schedule the owner controls, not to a request handler, even a
+  secret-guarded one.
+- **Check the cap before the call and write the row after it.** `remainingToday` before,
+  `recordUsage` after — and the ledger is re-read inside the loop, because a cap enforced
+  only by the length of a list was enforced by arithmetic done before the spending
+  started.
+- **Make the app work with `LLM_PROVIDER=none`.** It is the shipped default. A missing
+  provider, a missing key and a misspelled provider name all disable summaries and say
+  which variable to set; none of them throws, because a worker with seventeen working
+  feeds must not die over an enhancement.
+- **A test that a page render cannot reach the call, and one that the cap refuses it.**
+  `npm run routes:check` and `src/llm/run-summaries.test.ts`.
+
+**And the cost ledger records failures.** A call that reached the provider and came back
+as unusable rubbish still spent the tokens, so it is charged to the day's allowance. A
+ledger that counted only successes would under-report the bill in exactly the case
+somebody is watching it.
 
 ## Checking the rules yourself
 
@@ -134,5 +189,7 @@ grep -rn "LLM_MAX_STORIES_PER_DAY\|llmUsage" src/
 grep -n "cron" .github/workflows/ingest.yml
 ```
 
-If the last command prints nothing, the cap is still unenforced and nothing paid is
-running — which is the state described above.
+The third command now prints `src/llm/budget.ts` and `src/llm/run-summaries.ts`. If it
+ever prints nothing again, the cap has been removed and something paid may still be
+running — which is the one combination this page exists to make impossible to reach
+quietly.

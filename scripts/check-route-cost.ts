@@ -29,7 +29,13 @@ const ROUTE_ROOT = "src/app/api";
 /** Next allows a route handler anywhere under here, not only under ROUTE_ROOT. */
 const APP_ROOT = "src/app";
 const GUARD = "src/api/internal-guard.ts";
-const FORBIDDEN_DIRS = ["src/sources/"];
+/**
+ * `src/llm/` is here and not only the SDK package below, because two of the
+ * three providers are plain `fetch` against a base URL and import no package
+ * at all. A package name is a tripwire for one provider; the directory is the
+ * rule for the feature, and the rule is what a new provider inherits.
+ */
+const FORBIDDEN_DIRS = ["src/sources/", "src/llm/"];
 const FORBIDDEN_PACKAGES = ["@anthropic-ai/sdk"];
 
 function walk(dir: string, out: string[] = []): string[] {
