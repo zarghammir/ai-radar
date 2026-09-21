@@ -104,11 +104,28 @@ jobs:
           set -euo pipefail
           TITLE="Scheduled ingestion is failing"
 
-          # `|| true` because gh exits non-zero when it finds NOTHING, and
-          # finding nothing is the ordinary case here. Without it this step
-          # dies on the first healthy run.
+          # NO `|| true`. I had one here with a comment claiming gh exits
+          # non-zero when it finds nothing. MEASURED, with a control: `gh issue
+          # list --json` exits 0 and prints empty when nothing matches, and
+          # exits 0 with a number when something does. So the ordinary case
+          # never needed rescuing, and the ONLY thing `|| true` could swallow
+          # was a genuine failure — auth, rate limit, network.
+          #
+          # What that cost: on a swallowed error NUM is empty, OPEN=false, and
+          # a failing run opens a DUPLICATE issue while one is already open —
+          # every 30 minutes, for as long as the outage lasts. The exact
+          # "thirty issues train the reader to ignore it" failure this design
+          # exists to prevent, arriving through the error path.
+          #
+          # AN ALARM THAT CANNOT TELL WHETHER AN ISSUE IS OPEN MUST NOT GUESS
+          # "NO". Without the guard, `set -euo pipefail` fails the step, which
+          # is correct: fail closed and visibly.
+          #
+          # (I transferred this from #83, where `|| true` on a grep WAS
+          # load-bearing because grep really does exit 1 on no match. A true
+          # fact about one tool, applied to another without testing it.)
           NUM="$(gh issue list --state open --search "$TITLE in:title" \
-                   --json number --jq '.[0].number // empty' || true)"
+                   --json number --jq '.[0].number // empty')"
           if [ -n "${NUM:-}" ]; then OPEN=true; else OPEN=false; fi
 
           ACTION="$(node .github/scripts/ingest-alarm.mjs --decide "$OUTCOME" "$OPEN")"
