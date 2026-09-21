@@ -21,11 +21,17 @@
  *   - error text is REPORTED AS SHAPES WITH COUNTS, never row by row;
  *   - an unrecognised shape is printed truncated, and the truncation is stated.
  *
- * WHAT THIS DOES NOT PRINT, so the operator knows what he is not seeing:
+ * WHAT THIS DOES NOT PRINT, so the operator knows what he is not seeing.
+ * THIS LIST IS THE CHECK, NOT A DESCRIPTION: a public Actions log is readable
+ * the instant it is written, so there is no review step between generating a
+ * line and publishing it. An entry here that is false actively directs
+ * attention away from the thing it names.
  *   - no connection string, host, port, user, password or database name
- *   - no row-level error text; only classified shapes and counts
- *   - no story, item or source CONTENT — keys and column names only
- *   - no SQL parameters
+ *   - NO row-level error text at all: classified shapes and counts only,
+ *     including for shapes it could not classify
+ *   - no SQL parameters (they live inside the error text, which is never shown)
+ *   - no story, item or source content
+ *   - no source KEYS: section 4 reads `key` to group by, and prints only shapes
  *
  * IT IS READ-ONLY BY CONSTRUCTION: every statement below is a SELECT. It takes
  * no argument that could make it write, and it never calls migrate or seed.
@@ -106,14 +112,17 @@ async function main() {
     select error, started_at from ingest_runs
     where error is not null order by started_at desc limit 2000`;
   say(`  ${runs.length} failed run row(s) read (most recent 2000)`);
-  const byShape = new Map<string, { n: number; oldest: string; newest: string; sample: string }>();
+  const byShape = new Map<string, { n: number; oldest: string; newest: string }>();
   for (const r of runs) {
+    // Redacted before classification even though classification cannot leak:
+    // the redactor is the only thing standing between this row and stdout, so
+    // it runs first and unconditionally rather than where it looks necessary.
     const text = redactConnectionParts(r.error ?? "");
     const { shape, detail } = classify(text);
     const key = `${shape} :: ${detail}`;
     const when = new Date(r.started_at).toISOString().slice(0, 16);
     const cur = byShape.get(key);
-    if (!cur) byShape.set(key, { n: 1, oldest: when, newest: when, sample: text.slice(0, 200) });
+    if (!cur) byShape.set(key, { n: 1, oldest: when, newest: when });
     else {
       cur.n++;
       if (when < cur.oldest) cur.oldest = when;
@@ -123,7 +132,19 @@ async function main() {
   for (const [key, v] of [...byShape.entries()].sort((a, b) => b[1].n - a[1].n)) {
     say(`  ${String(v.n).padStart(5)}x  ${key}   first ${v.oldest}  last ${v.newest}`);
     if (key.startsWith("UNRECOGNISED")) {
-      say(`         sample (redacted, first 200 chars): ${v.sample}`);
+      // THE COUNT, AND NOTHING FROM THE ROW. A sample here was the file's only
+      // residual leak path: every other line is structurally incapable of
+      // carrying a credential — the `connection` pattern has no capture
+      // groups, and `detail` is built from [a-z_]+ groups, which cannot hold a
+      // dot, an @ or a colon. A truncated sample inherits no such guarantee.
+      //
+      // Removing it also retires a question that would otherwise have to be
+      // asked: whether DATABASE_URL was rotated inside this window. A design
+      // whose safety depends on someone remembering correctly is not safe, it
+      // is unfalsified. Gone, the question is moot for every rotation.
+      say(
+        "         not printed here — inspect locally with `npx tsx scripts/capture-ingest-failures.ts`",
+      );
     }
   }
   if (byShape.size === 0) say("  none — no failed runs are recorded");
@@ -144,11 +165,19 @@ async function main() {
   }
 
   say("");
+  // Identical in substance to the docblock at the top of this file. They were
+  // NOT identical before: both claimed "no row-level error text" while an
+  // UNRECOGNISED sample was printed, and the top one additionally claimed "no
+  // SQL parameters" while that sample could contain drizzle's `params:` line.
+  // Two statements of one fact, and the one a reader meets at the end of a
+  // long log was as wrong as the one nobody scrolls back to.
   say("=== WHAT THIS DID NOT PRINT ===");
   say("  no connection string, host, port, user, password or database name");
-  say("  no row-level error text (only classified shapes and counts)");
-  say("  no story, item or source content — keys and column names only");
-  say("  every string above passed through redactConnectionParts at read time");
+  say("  NO row-level error text at all — classified shapes and counts only,");
+  say("    including for shapes it could not classify");
+  say("  no SQL parameters (they live inside the error text, which is never shown)");
+  say("  no story, item or source content, and no source keys");
+  say("  every line above passed through redactConnectionParts at read time");
 
   await sql.end();
 }
