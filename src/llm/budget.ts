@@ -97,38 +97,53 @@ export interface UsageRecord {
  */
 export async function recordUsage(db: Db, usage: UsageRecord): Promise<void> {
   await db.transaction(async (tx) => {
-    const [existing] = await tx
-      .select({ id: llmUsage.id })
-      .from(llmUsage)
-      .where(
-        and(
-          eq(llmUsage.day, usage.day),
-          eq(llmUsage.provider, usage.provider),
-          eq(llmUsage.model, usage.model),
-        ),
-      )
-      .for("update")
-      .limit(1);
-
-    if (!existing) {
-      await tx.insert(llmUsage).values({
-        day: usage.day,
-        provider: usage.provider,
-        model: usage.model,
-        storiesSummarized: usage.stories,
-        inputTokens: usage.inputTokens,
-        outputTokens: usage.outputTokens,
-      });
-      return;
-    }
-
-    await tx
-      .update(llmUsage)
-      .set({
-        storiesSummarized: sql`${llmUsage.storiesSummarized} + ${usage.stories}`,
-        inputTokens: sql`${llmUsage.inputTokens} + ${usage.inputTokens}`,
-        outputTokens: sql`${llmUsage.outputTokens} + ${usage.outputTokens}`,
-      })
-      .where(eq(llmUsage.id, existing.id));
+    await applyUsage(tx, usage);
   });
+}
+
+/** A transaction handle, taken from the db type so it cannot drift from it. */
+type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
+
+/**
+ * The ledger write, inside a transaction the caller already owns.
+ *
+ * Exported so the story row and its charge can be committed TOGETHER. They are
+ * two halves of one fact — "this story was summarised and it cost this much" —
+ * and committing them separately is what allowed a failure in the second to
+ * erase the first.
+ */
+export async function applyUsage(tx: Tx, usage: UsageRecord): Promise<void> {
+  const [existing] = await tx
+    .select({ id: llmUsage.id })
+    .from(llmUsage)
+    .where(
+      and(
+        eq(llmUsage.day, usage.day),
+        eq(llmUsage.provider, usage.provider),
+        eq(llmUsage.model, usage.model),
+      ),
+    )
+    .for("update")
+    .limit(1);
+
+  if (!existing) {
+    await tx.insert(llmUsage).values({
+      day: usage.day,
+      provider: usage.provider,
+      model: usage.model,
+      storiesSummarized: usage.stories,
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+    });
+    return;
+  }
+
+  await tx
+    .update(llmUsage)
+    .set({
+      storiesSummarized: sql`${llmUsage.storiesSummarized} + ${usage.stories}`,
+      inputTokens: sql`${llmUsage.inputTokens} + ${usage.inputTokens}`,
+      outputTokens: sql`${llmUsage.outputTokens} + ${usage.outputTokens}`,
+    })
+    .where(eq(llmUsage.id, existing.id));
 }

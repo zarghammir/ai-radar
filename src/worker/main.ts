@@ -11,6 +11,7 @@ import {
 } from "./report";
 import { readInternalSecret } from "./secret";
 import { runSummaries } from "@/llm/run-summaries";
+import { describeError } from "@/pipeline/describe-error";
 
 /**
  * The ingestion worker: one pass with --once, otherwise a pass every
@@ -83,9 +84,21 @@ async function runPass(): Promise<number> {
   // seventeen feeds succeeded; an LLM outage on top of it is a degraded
   // enhancement, and turning the scheduled run red for it is how a red run
   // stops meaning anything.
-  const summaries = await runSummaries(getDb());
-  if (summaries.skipped) {
-    console.log(`[worker] summaries off: ${summaries.skipped}.`);
+  //
+  // GUARDED HERE AS WELL AS INSIDE, deliberately. runSummaries is written so
+  // that it cannot throw, and this catch does not trust it: the module's
+  // guarantee is a property of code that can be edited by someone who has not
+  // read this line, and "it never throws" is a comment until something checks
+  // it. The cost of being wrong went up when #137 started opening a GitHub
+  // issue on a failed run — a transient database error inside an optional
+  // enhancement would file an outage.
+  try {
+    const summaries = await runSummaries(getDb());
+    if (summaries.skipped) {
+      console.log(`[worker] summaries off: ${summaries.skipped}.`);
+    }
+  } catch (error) {
+    console.error(`[worker] summaries failed: ${describeError(error)}`);
   }
 
   return exitCodeFor(ingest);

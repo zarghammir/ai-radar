@@ -19,6 +19,10 @@ interface FakeState {
   itemRows: { title: string; excerpt: string | null; sourceName: string }[];
   updates: { id: number; set: Record<string, unknown> }[];
   usageWrites: number;
+  /** Simulates the database being the broken thing during bookkeeping. */
+  transactionThrows: boolean;
+  /** Simulates the database being unreachable before any spending starts. */
+  selectThrows: boolean;
 }
 
 function fakeDb(overrides: Partial<FakeState> = {}): { db: Db; state: FakeState } {
@@ -28,6 +32,8 @@ function fakeDb(overrides: Partial<FakeState> = {}): { db: Db; state: FakeState 
     itemRows: [{ title: "report", excerpt: "text", sourceName: "Source" }],
     updates: [],
     usageWrites: 0,
+    transactionThrows: false,
+    selectThrows: false,
     ...overrides,
   };
 
@@ -47,7 +53,8 @@ function fakeDb(overrides: Partial<FakeState> = {}): { db: Db; state: FakeState 
       table = t;
       return self();
     };
-    chain.then = (resolve: (value: unknown[]) => unknown) => {
+    chain.then = (resolve: (value: unknown[]) => unknown, reject?: (e: unknown) => unknown) => {
+      if (state.selectThrows) return reject?.(new Error("database is unavailable"));
       // One row shape serves both readers of this table: the ledger sum reads
       // `total`, the upsert reads `id`.
       if (table === llmUsage) return resolve([{ id: 1, total: String(state.usedToday) }]);
@@ -63,17 +70,24 @@ function fakeDb(overrides: Partial<FakeState> = {}): { db: Db; state: FakeState 
     return chain;
   };
 
+  const recorder = () => ({
+    set: (values: Record<string, unknown>) => ({
+      where: async () => {
+        // Only the story write is interesting to these tests; the ledger's own
+        // update carries SQL fragments rather than values.
+        if ("summary" in values || "summarizedAt" in values) {
+          state.updates.push({ id: state.updates.length, set: values });
+        }
+      },
+    }),
+  });
+
   const db = {
     select: () => builder(),
-    update: () => ({
-      set: (values: Record<string, unknown>) => ({
-        where: async () => {
-          state.updates.push({ id: state.updates.length, set: values });
-        },
-      }),
-    }),
+    update: () => recorder(),
     insert: () => ({ values: async () => {} }),
     transaction: async (fn: (tx: unknown) => Promise<void>) => {
+      if (state.transactionThrows) throw new Error("database is unavailable");
       state.usageWrites++;
       // The ledger actually moves, so the re-read inside the loop is a live
       // quantity. Held constant, that guard would be untestable from here.
@@ -81,7 +95,7 @@ function fakeDb(overrides: Partial<FakeState> = {}): { db: Db; state: FakeState 
       await fn({
         select: () => builder(),
         insert: () => ({ values: async () => {} }),
-        update: () => ({ set: () => ({ where: async () => {} }) }),
+        update: () => recorder(),
       });
     },
   } as unknown as Db;
@@ -271,5 +285,69 @@ describe("runSummaries — a failure is not an absence", () => {
     });
 
     expect(state.usageWrites).toBe(1);
+  });
+});
+
+describe("runSummaries — the database being the broken thing", () => {
+  // The module used to promise "NEVER THROWS" in a comment while making
+  // unguarded database calls, and the worker called it with no try/catch. The
+  // cost of that went up when #137 started opening a GitHub issue on a failed
+  // run: a transient hiccup in an OPTIONAL enhancement would file an outage,
+  // and an alarm that cries wolf trains its reader to ignore it.
+  it("resolves rather than throwing when the ledger cannot be read", async () => {
+    const { db } = fakeDb({ selectThrows: true, storyRows: [{ id: 1, title: "t" }] });
+
+    const result = await runSummaries(db, {
+      env: ENV,
+      now: NOW,
+      client: fakeClient(),
+      log: silent,
+    });
+
+    expect(result.skipped).toContain("stopped after an error");
+  });
+
+  it("resolves rather than throwing when the bookkeeping transaction fails", async () => {
+    const { db } = fakeDb({ transactionThrows: true, storyRows: [{ id: 1, title: "t" }] });
+
+    const result = await runSummaries(db, {
+      env: ENV,
+      now: NOW,
+      client: fakeClient(),
+      log: silent,
+    });
+
+    expect(result.skipped).toContain("stopped after an error");
+  });
+
+  /**
+   * THE DATA-LOSS PATH THAT USED TO EXIST.
+   *
+   * The summary was written first and the charge second. When the charge threw,
+   * control fell into the failure branch, which called the story write AGAIN
+   * with null — erasing a summary that had already been paid for and leaving
+   * the row eligible to be paid for a second time.
+   *
+   * Both writes now commit in one transaction, so a bookkeeping failure leaves
+   * NOTHING written. The assertion is on the absence of a null-summary write,
+   * which is the thing that destroyed the paid work.
+   */
+  it("never overwrites a paid summary with null when the bookkeeping fails", async () => {
+    const { db, state } = fakeDb({ transactionThrows: true, storyRows: [{ id: 1, title: "t" }] });
+
+    const result = await runSummaries(db, {
+      env: ENV,
+      now: NOW,
+      client: fakeClient(),
+      log: silent,
+    });
+
+    expect(state.updates.filter((u) => u.set.summary === null)).toHaveLength(0);
+    expect(state.updates).toHaveLength(0);
+    // Attempted but neither counted: the discrepancy IS the signal that a call
+    // was paid for and its result never committed.
+    expect(result.attempted).toBe(1);
+    expect(result.succeeded).toBe(0);
+    expect(result.failed).toBe(0);
   });
 });
