@@ -174,7 +174,7 @@ test cannot read this page, so keeping the two in step is still a person's job.
 produced; `stories` cluster items that are the same event; `topics` and
 `story_topics` tag them; `user_preferences`, `saved_items` and `read_state` are
 the single local user; `ingest_runs` is one row per source per pass, with counts
-and the error; `llm_usage` is the cost ledger for summaries that do not exist yet.
+and the error; `llm_usage` is the cost ledger, written by the summariser.
 
 **Verification level and content type are separate columns and separate
 vocabularies.** How sure we are is not what kind of thing it is, and `schema.test.ts`
@@ -202,8 +202,10 @@ Phase 1 milestone does, and it stays current. The durable gaps:
   Releases are not placeholders now, they are gone. The owner ruled one feed and
   one filter, so what they used to show are two positions of Today's view
   control rather than two destinations.
-- **AI summaries do not exist.** `LLM_MAX_STORIES_PER_DAY` and `llm_usage` are
-  in the schema and nothing reads either; `#35` owns closing that before any
-  paid call ships.
+- **AI summaries are optional and off by default.** `src/llm/` summarises the
+  top-scoring stories of a pass, in the worker only, capped by
+  `LLM_MAX_STORIES_PER_DAY` and recorded in `llm_usage` — `#35` closed with the
+  first paid call, as it required. With `LLM_PROVIDER=none`, which is what
+  `.env.example` ships, nothing is called and cards show source excerpts.
 - **Sources with no usable feed cannot be added**, pending the HTML listing
   adapter in `#26`.

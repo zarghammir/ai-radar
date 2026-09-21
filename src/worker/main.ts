@@ -10,6 +10,8 @@ import {
   readIntervalMinutes,
 } from "./report";
 import { readInternalSecret } from "./secret";
+import { runSummaries } from "@/llm/run-summaries";
+import { describeError } from "@/pipeline/describe-error";
 
 /**
  * The ingestion worker: one pass with --once, otherwise a pass every
@@ -72,6 +74,33 @@ async function runPass(): Promise<number> {
   // leaves the screen empty, and the two are indistinguishable from the counts
   // above.
   console.log(`[worker] scored ${ranked.ranked} stor${ranked.ranked === 1 ? "y" : "ies"}.`);
+
+  // Summaries last, and ONLY HERE. The internal HTTP trigger shares ingestOnce
+  // with this loop but deliberately does not share this call: a paid call
+  // belongs to the process running on a schedule the owner controls, not to a
+  // request handler, even a secret-guarded one (docs/cost-protection.md rule 2).
+  //
+  // Its result does not touch the exit code. A pass that collected and scored
+  // seventeen feeds succeeded; an LLM outage on top of it is a degraded
+  // enhancement, and turning the scheduled run red for it is how a red run
+  // stops meaning anything.
+  //
+  // GUARDED HERE AS WELL AS INSIDE, deliberately. runSummaries is written so
+  // that it cannot throw, and this catch does not trust it: the module's
+  // guarantee is a property of code that can be edited by someone who has not
+  // read this line, and "it never throws" is a comment until something checks
+  // it. The cost of being wrong went up when #137 started opening a GitHub
+  // issue on a failed run — a transient database error inside an optional
+  // enhancement would file an outage.
+  try {
+    const summaries = await runSummaries(getDb());
+    if (summaries.skipped) {
+      console.log(`[worker] summaries off: ${summaries.skipped}.`);
+    }
+  } catch (error) {
+    console.error(`[worker] summaries failed: ${describeError(error)}`);
+  }
+
   return exitCodeFor(ingest);
 }
 
