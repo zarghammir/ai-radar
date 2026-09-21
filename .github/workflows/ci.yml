@@ -90,6 +90,13 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # The failure alarm's decision table, checked on every PR. Its two SILENT
+      # cases — still-failing, and an ordinary green run — are the ones no
+      # manual test exercises, and a notifier that fires on every run is as
+      # broken as one that never fires.
+      - name: The ingest alarm decides correctly
+        run: node .github/scripts/ingest-alarm.mjs --self-test
+
       # `typecheck` is `next typegen && tsc --noEmit`. The typegen half is not
       # decoration: LayoutProps and friends live in gitignored .next/types, so a
       # clean checkout cannot typecheck without it.
