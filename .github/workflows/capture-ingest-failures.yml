@@ -1,0 +1,75 @@
+name: Capture why ingestion is failing (read-only)
+
+# READ-ONLY. Run this BEFORE migrating, and only by hand.
+#
+# WHY IT EXISTS. Migration 0003 rewrites every `sources.last_error` and
+# `ingest_runs.error` to a placeholder. It was a no-op when written — those
+# columns were null everywhere — and it is not one now: they hold two days of
+# failure diagnostics for the outage the pending migrations fix. Applying them
+# destroys the evidence. This captures it first.
+#
+# WHY IT IS NOT JUST `SELECT error FROM ingest_runs`. The text being captured
+# is the exact text #99 exists to remove — 0003's own message says it "may have
+# contained part of the database connection string" — and THIS REPOSITORY IS
+# PUBLIC, so this log is world-readable. Printing those columns raw would
+# recreate the leak #121 closed, in a step whose purpose is preserving
+# evidence. The script redacts AT READ TIME rather than trusting the write-time
+# redaction, because that only landed at d8ec412 and older rows predate it.
+#
+# IT CAN DISAGREE WITH US, WHICH IS THE POINT. Section 2 asks the database
+# which columns it actually has and compares them with what the code expects.
+# If nothing is missing, the diagnosis is wrong and it will say so. Section 3
+# reports every distinct failure shape, so "there are two failures, not one"
+# is a result it can produce.
+#
+# It does not migrate, seed, or write anything. Every statement is a SELECT.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: capture-ingest-failures
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    name: read the failure evidence, print nothing sensitive
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      NEXT_TELEMETRY_DISABLED: "1"
+
+    steps:
+      - name: Check out the branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node and the npm cache
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Pin npm to the version in packageManager
+        run: |
+          NPM_VERSION="$(node -p "require('./package.json').packageManager.split('@')[1]")"
+          npm install -g "npm@${NPM_VERSION}"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Copied from ingest.yml rather than rewritten. It is the part of that
+      # workflow that has behaved correctly since it landed.
+      - name: Check the secret this job needs is set
+        run: |
+          if [ -z "${DATABASE_URL:-}" ]; then
+            echo "Missing repository secret: DATABASE_URL" >&2
+            echo "Set it under Settings → Secrets and variables → Actions." >&2
+            exit 1
+          fi
+
+      - name: Capture
+        run: npx tsx scripts/capture-ingest-failures.ts
