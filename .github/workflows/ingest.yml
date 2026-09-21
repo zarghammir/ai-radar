@@ -27,6 +27,10 @@ concurrency:
 
 permissions:
   contents: read
+  # The alarm opens and closes ONE issue. Ingestion failed 25+ consecutive runs
+  # over four days and nothing told anyone; a red run is only a notification if
+  # somebody opens the Actions tab.
+  issues: write
 
 jobs:
   ingest:
@@ -80,3 +84,69 @@ jobs:
       # database rather than one publisher having a bad morning.
       - name: Run one ingestion pass
         run: npm run worker:once
+
+      # ── The alarm ─────────────────────────────────────────────────────────
+      # `always()` on purpose: the whole point is the failing case, and a step
+      # that only runs on success cannot report a failure.
+      #
+      # ONE issue per outage, closed on recovery. Thirty failures making thirty
+      # issues would train its reader to filter it, which is how a real one gets
+      # missed — so the decision lives in .github/scripts/ingest-alarm.mjs,
+      # whose --self-test drives all four cases including the two that must stay
+      # SILENT. Those are the cases no manual test exercises.
+      - name: Raise or clear the failure alarm
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OUTCOME: ${{ job.status }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          TITLE="Scheduled ingestion is failing"
+
+          # NO `|| true`. I had one here with a comment claiming gh exits
+          # non-zero when it finds nothing. MEASURED, with a control: `gh issue
+          # list --json` exits 0 and prints empty when nothing matches, and
+          # exits 0 with a number when something does. So the ordinary case
+          # never needed rescuing, and the ONLY thing `|| true` could swallow
+          # was a genuine failure — auth, rate limit, network.
+          #
+          # What that cost: on a swallowed error NUM is empty, OPEN=false, and
+          # a failing run opens a DUPLICATE issue while one is already open —
+          # every 30 minutes, for as long as the outage lasts. The exact
+          # "thirty issues train the reader to ignore it" failure this design
+          # exists to prevent, arriving through the error path.
+          #
+          # AN ALARM THAT CANNOT TELL WHETHER AN ISSUE IS OPEN MUST NOT GUESS
+          # "NO". Without the guard, `set -euo pipefail` fails the step, which
+          # is correct: fail closed and visibly.
+          #
+          # (I transferred this from #83, where `|| true` on a grep WAS
+          # load-bearing because grep really does exit 1 on no match. A true
+          # fact about one tool, applied to another without testing it.)
+          NUM="$(gh issue list --state open --search "$TITLE in:title" \
+                   --json number --jq '.[0].number // empty')"
+          if [ -n "${NUM:-}" ]; then OPEN=true; else OPEN=false; fi
+
+          ACTION="$(node .github/scripts/ingest-alarm.mjs --decide "$OUTCOME" "$OPEN")"
+          echo "RESULT: outcome=$OUTCOME alarmOpen=$OPEN -> $ACTION"
+
+          case "$ACTION" in
+            open)
+              BODY="$(printf '%s\n\n%s\n\n%s' \
+                "The scheduled collector failed. One outage is one issue: this opens on the first failure and closes itself when a run succeeds." \
+                "Run: $RUN_URL" \
+                "Not a diagnosis. A per-source failure prints only the FIRST line of its error, so the database own words are in ingest_runs.error rather than in this log.")"
+              gh issue create --title "$TITLE" --body "$BODY"
+              ;;
+            close)
+              gh issue close "$NUM" --comment "A scheduled run succeeded: $RUN_URL"
+              ;;
+            nothing)
+              echo "  nothing to do"
+              ;;
+            *)
+              echo "::error::the alarm returned an unknown action '$ACTION'" >&2
+              exit 1
+              ;;
+          esac
