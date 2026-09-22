@@ -132,9 +132,9 @@ try {
    *
    * IT HAS BEEN WATCHED GOING RED. On 2026-09-17, at head 8312215, under a
    * liveness control: the precondition was checked first — the second browser
-   * really did read back "Everything", so it could exhibit the property — and
+   * really did read back "Full brief", so it could exhibit the property — and
    * only then was the mutation applied. Exit 1, firstAfterSecondChanged
-   * "Everything", and the message printed the sentence naming the failure it
+   * "Full brief", and the message printed the sentence naming the failure it
    * describes. It fires, it reads what it claims to read, and it says the right
    * thing. This paragraph replaces one saying it had never been observed
    * failing, which was true when written and stopped being true that evening.
@@ -174,7 +174,7 @@ try {
       .then(() => true)
       .catch(() => false);
     if (!ready) return null;
-    for (const option of ["Five minutes", "Ten minutes", "Everything"]) {
+    for (const option of ["Five minutes", "Ten minutes", "Full brief"]) {
       if (await page.getByRole("radio", { name: option }).isChecked()) return option;
     }
     return null;
@@ -195,7 +195,7 @@ try {
   };
 
   const lengthA = await setLength(first, /Five minutes/i);
-  const lengthB = await setLength(second, /Everything/i);
+  const lengthB = await setLength(second, /Full brief/i);
   // READ, not set. This is the line the review blocked on.
   const lengthAAfter = await readLength(first);
   out.briefLength = { first: lengthA, second: lengthB, firstAfterSecondChanged: lengthAAfter };
@@ -224,7 +224,7 @@ try {
     floor.push("could not READ the first browser's brief length back; this is not a leak");
   }
   bailIfBroken(floor, settingMark);
-  if (lengthB !== "Everything")
+  if (lengthB !== "Full brief")
     floor.push(`the second browser chose Everything and has ${lengthB}`);
   if (lengthAAfter !== "Five minutes") {
     floor.push(

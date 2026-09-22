@@ -1691,4 +1691,84 @@ withDb("API routes", () => {
       expect(d.summaryProvider).toBe("test-provider");
     });
   });
+
+  /**
+   * #148 — A BRIEF IS WHAT ARRIVED FOR YOU, NOT WHAT WAS PUBLISHED TODAY.
+   *
+   * The owner opened the live site at a 07:30 window and read "nothing has
+   * arrived since your brief window opened — the database answered, so this is
+   * a quiet morning rather than a fault." The collector had written 64 stories
+   * that day and 13 more at 12:17.
+   *
+   * Admission keyed on stories.lastActivityAt, which is the newest PUBLISHED
+   * time of a story's items. Publishers file overnight and we sweep in the
+   * morning, so a story published at 02:00 and fetched at 12:17 sat outside a
+   * 07:30 window for the whole day it arrived in. Which is most stories.
+   */
+  describe("the brief admits by ARRIVAL, not by publication (#148)", () => {
+    /** Files one story with publication and arrival set independently. */
+    async function fileStory(slug: string, publishedAt: Date, fetchedAt: Date) {
+      const src = await source(`arr-${slug}`);
+      const [st] = await sql.unsafe(
+        `insert into stories (slug,title,content_type,verification,verification_note,first_seen_at,last_activity_at,source_count,score,adjacent_tech)
+         values ($1,$2,'NEWS','CORROBORATED','graded',$3,$3,1,5,false) returning id`,
+        [slug, `story ${slug}`, publishedAt.toISOString()],
+      );
+      const storyId = Number(st.id);
+      const [ri] = await sql.unsafe(
+        `insert into raw_items (source_id,external_id,url,canonical_url,title,excerpt,published_at,fetched_at,content_type,metadata,fingerprint,story_id,role)
+         values ($1,$2,$3,$3,$4,'an excerpt',$5,$6,'NEWS','{}',$7,$8,'primary') returning id`,
+        [
+          src,
+          `${slug}-x`,
+          `https://example.com/${slug}`,
+          `story ${slug}`,
+          publishedAt.toISOString(),
+          fetchedAt.toISOString(),
+          `${slug}-fp`,
+          storyId,
+        ],
+      );
+      await sql.unsafe(`update stories set primary_item_id = $1 where id = $2`, [
+        Number(ri.id),
+        storyId,
+      ]);
+      return slug;
+    }
+
+    async function briefSlugs() {
+      const { GET } = await import("@/app/api/brief/route");
+      const res = await GET(req("/api/brief?view=all&length=all"));
+      expect(res.status).toBe(200);
+      const d = await body(res);
+      return (d.stories as { slug: string }[]).map((s) => s.slug);
+    }
+
+    it("includes a story PUBLISHED before the window but FETCHED inside it", async () => {
+      const threeDaysAgo = new Date(Date.now() - 3 * 24 * 3_600_000);
+      await fileStory("overnight-but-fetched-today", threeDaysAgo, new Date());
+
+      // THE ASSERTION THE OWNER'S MORNING NEEDED. Under the old rule this was
+      // absent, and the screen called it a quiet morning.
+      expect(await briefSlugs()).toContain("overnight-but-fetched-today");
+    });
+
+    it("still excludes a story that arrived before the window, so the window means something", async () => {
+      const threeDaysAgo = new Date(Date.now() - 3 * 24 * 3_600_000);
+      await fileStory("old-and-already-seen", threeDaysAgo, threeDaysAgo);
+
+      // The control. Without this, "admit everything" would pass the test
+      // above and the window would have stopped meaning anything at all.
+      expect(await briefSlugs()).not.toContain("old-and-already-seen");
+    });
+
+    it("reports what the collector has done, so an empty brief can say why", async () => {
+      const { GET } = await import("@/app/api/brief/route");
+      const res = await GET(req("/api/brief?view=all&length=all"));
+      const d = await body(res);
+      expect(d.sweep).toBeDefined();
+      expect(d.sweep).toHaveProperty("lastFinishedAt");
+      expect(d.sweep).toHaveProperty("itemsSinceWindowOpened");
+    });
+  });
 });

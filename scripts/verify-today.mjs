@@ -301,7 +301,16 @@ try {
       // The distinction a reader has to be able to make without knowing what a
       // database is: one of these says nothing happened, the other says we do
       // not know what happened.
-      saysQuietMorning: text.includes("quiet morning"),
+      // PINNED TO THE MARKER, NOT TO THE WORDS (#148). This read
+      // text.includes("quiet morning") — a phrase the empty state no longer
+      // always uses, because it now has FOUR answers and only one of them is
+      // "quiet". A copy edit would have reddened this on a correct page, which
+      // is the same defect the CI empty-state check was fixed for twice.
+      //
+      // data-empty-reason carries the CASE; the prose is free to change.
+      emptyReason: await page
+        .getAttribute("[data-empty-reason]", "data-empty-reason")
+        .catch(() => null),
       saysCannotReach: text.includes("cannot reach"),
     };
 
@@ -317,10 +326,17 @@ try {
       floor.push("state=unreachable but the screen does not say it cannot reach anything");
     }
     if (state === "quiet" && out.screenState.saysCannotReach) {
-      floor.push("a quiet morning is being described as a failure");
+      floor.push("an empty brief is being described as a failure");
     }
-    if (state === "unreachable" && out.screenState.saysQuietMorning) {
-      floor.push("an unreachable database is being described as a quiet morning");
+    if (state === "unreachable" && out.screenState.emptyReason) {
+      floor.push("an unreachable database is being given one of the empty-brief reasons");
+    }
+    // AN EMPTY BRIEF MUST SAY WHICH KIND OF EMPTY IT IS. Without this the
+    // screen can go back to one flattened "no stories" message, which is the
+    // whole of #148: the old copy asserted a quiet morning on a day the
+    // collector had written sixty-four stories.
+    if (state === "quiet" && !out.screenState.emptyReason) {
+      floor.push("state=quiet but the screen does not say WHY it is empty (no data-empty-reason)");
     }
     await ctx.close();
   }

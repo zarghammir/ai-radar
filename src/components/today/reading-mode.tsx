@@ -8,7 +8,9 @@ import { cn } from "@/lib/utils";
 const OPTIONS: { value: BriefLengthParam; label: string }[] = [
   { value: "5", label: "5 min" },
   { value: "10", label: "10 min" },
-  { value: "all", label: "Everything" },
+  // See BRIEF_LENGTH_LABELS: the word "Everything" belongs to the view filter,
+  // which sits directly above this control and means something else (#147).
+  { value: "all", label: "Full brief" },
 ];
 
 /**
