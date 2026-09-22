@@ -167,14 +167,16 @@ exceptions list.
 
 ## Data model, in one paragraph
 
-Ten tables — a count `src/db/schema.test.ts` floors, so it can no longer drift
+Twelve tables — a count `src/db/schema.test.ts` floors, so it can no longer drift
 **silently**: adding a table stops the suite and tells you to update both. The
 test cannot read this page, so keeping the two in step is still a person's job.
 `sources` is the catalogue; `raw_items` is one row per thing a source
 produced; `stories` cluster items that are the same event; `topics` and
 `story_topics` tag them; `user_preferences`, `saved_items` and `read_state` are
 the single local user; `ingest_runs` is one row per source per pass, with counts
-and the error; `llm_usage` is the cost ledger, written by the summariser.
+and the error; `llm_usage` is the cost ledger, written by the summariser;
+`push_subscriptions` is one row per browser that asked to be told, and
+`brief_sends` is one row per delivery the worker decided on, sent or not.
 
 **Verification level and content type are separate columns and separate
 vocabularies.** How sure we are is not what kind of thing it is, and `schema.test.ts`

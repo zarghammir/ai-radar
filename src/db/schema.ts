@@ -316,6 +316,75 @@ export const ingestRuns = pgTable("ingest_runs", {
   error: text("error"),
 });
 
+// ─── Brief delivery (#72) ────────────────────────────────────────────────────
+
+/**
+ * One browser that asked to be told when the brief is ready.
+ *
+ * SERVER-SIDE, and that is not a contradiction of #91. What lives in the
+ * reader's browser is their SAVES, READS and HIDES — state about them. A push
+ * subscription is an address the server must hold in order to send anything at
+ * all; a subscription kept only in the browser is a subscription nothing can
+ * deliver to. One row per browser, so a shared instance tells each of its
+ * readers rather than making them share one.
+ *
+ * The reader's LENGTH preference is deliberately not here. It moved into the
+ * browser with #94, and a one-line notification has no reading-time budget to
+ * spend — the length governs the brief when it is opened, which is where it is
+ * observable. Storing a copy the sender never reads would be the exact defect
+ * this ticket exists to remove.
+ */
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: serial("id").primaryKey(),
+  /** The push service URL. Unique: re-subscribing must update, never duplicate. */
+  endpoint: text("endpoint").notNull().unique(),
+  /**
+   * The browser's own keys, STORED THOUGH NOTHING READS THEM YET, which is a
+   * deliberate exception rather than the dead column #72 is about.
+   *
+   * They are generated per-subscription by the browser and cannot be recovered
+   * afterwards: adding encrypted payloads later without them means asking
+   * every reader to subscribe again. A length preference, by contrast, can be
+   * re-sent at any time — which is why there is no brief_length column here.
+   */
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  lastSuccessAt: timestamp("last_success_at", { withTimezone: true }),
+  /** Why the last attempt failed, redacted like every other stored error. */
+  lastError: text("last_error"),
+  failureCount: integer("failure_count").notNull().default(0),
+});
+
+/**
+ * One row per delivery the worker DECIDED ON, sent or not.
+ *
+ * THE POINT IS THE ROWS THAT ARE NOT SENDS. A send that silently does nothing
+ * is the family that hid the collector outage for three days, so "it was not
+ * time yet", "nobody is subscribed" and "the push service refused" are
+ * recorded as distinct outcomes rather than all being an absence of rows.
+ * Modelled on ingest_runs for exactly that reason.
+ */
+export const briefSends = pgTable(
+  "brief_sends",
+  {
+    id: serial("id").primaryKey(),
+    /** YYYY-MM-DD in the READER'S zone: the day whose brief this was. */
+    localDay: text("local_day").notNull(),
+    decidedAt: timestamp("decided_at", { withTimezone: true }).notNull().defaultNow(),
+    channel: text("channel").notNull(),
+    /** "sent" | "skipped" | "failed" — see run-brief.ts, which is the only writer. */
+    outcome: text("outcome").notNull(),
+    /** Plain sentence. Always present on skipped and failed. */
+    detail: text("detail"),
+    storyCount: integer("story_count").notNull().default(0),
+    attempted: integer("attempted").notNull().default(0),
+    delivered: integer("delivered").notNull().default(0),
+    failed: integer("failed").notNull().default(0),
+  },
+  (t) => [index("brief_sends_day_idx").on(t.localDay)],
+);
+
 // ─── LLM usage (cost guardrail) ──────────────────────────────────────────────
 
 export const llmUsage = pgTable("llm_usage", {
@@ -335,3 +404,5 @@ export type Story = typeof stories.$inferSelect;
 export type Topic = typeof topics.$inferSelect;
 export type UserPreferences = typeof userPreferences.$inferSelect;
 export type SavedItem = typeof savedItems.$inferSelect;
+export type PushSubscription = typeof pushSubscriptions.$inferSelect;
+export type BriefSend = typeof briefSends.$inferSelect;

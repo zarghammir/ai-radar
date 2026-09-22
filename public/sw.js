@@ -100,3 +100,78 @@ self.addEventListener("fetch", (event) => {
     );
   }
 });
+
+/* ── The brief arriving on its own (#72) ────────────────────────────────────
+ *
+ * THE PUSH CARRIES NO PAYLOAD. It is a wake-up, and the text is fetched here,
+ * when the notification is about to be shown. That means the headline a reader
+ * sees is the one that is true when it arrives rather than when it was queued,
+ * and it keeps RFC 8291 payload encryption out of the server entirely — see
+ * src/notify/vapid.ts for the trade.
+ *
+ * What it costs is this: a push received with no network cannot show the
+ * count. That case is handled below rather than left to show an empty
+ * notification, because a browser will substitute its own "This site has been
+ * updated in the background" if the handler shows nothing at all.
+ */
+const BRIEF_URL = "/api/brief";
+const BRIEF_TAG = "ai-radar-brief";
+
+self.addEventListener("push", (event) => {
+  event.waitUntil(
+    (async () => {
+      let title = "Your brief is ready";
+      let body = "Open AI Radar to read it.";
+
+      try {
+        const response = await fetch(BRIEF_URL, { cache: "no-store" });
+        if (response.ok) {
+          const brief = await response.json();
+          const count = typeof brief.count === "number" ? brief.count : 0;
+          const top = Array.isArray(brief.stories) ? brief.stories[0] : undefined;
+
+          if (count === 0) {
+            // A QUIET MORNING SAYS SO. Sending nothing would make a quiet day
+            // and a broken sender the same experience, which is the thing #72
+            // asks us not to do.
+            title = "A quiet morning";
+            body = "Nothing new since your last brief.";
+          } else {
+            title = count === 1 ? "1 new story" : `${count} new stories`;
+            body = top && typeof top.title === "string" ? top.title : "Open AI Radar to read them.";
+          }
+        }
+      } catch {
+        // Offline, or the instance is down. The generic text above stands:
+        // saying "your brief is ready" when we cannot count it is honest,
+        // where showing "0 stories" would be a measurement we did not take.
+      }
+
+      await self.registration.showNotification(title, {
+        body,
+        tag: BRIEF_TAG,
+        // Replaces yesterday's rather than stacking: this is a daily brief,
+        // and a column of them is how a reader learns to swipe without looking.
+        renotify: false,
+        icon: "/icons/icon-192.png",
+        badge: "/icons/icon-192.png",
+        data: { url: "/" },
+      });
+    })()
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(
+    (async () => {
+      const url = (event.notification.data && event.notification.data.url) || "/";
+      const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      // Focus an open copy rather than opening a second one.
+      for (const client of clients) {
+        if ("focus" in client) return client.focus();
+      }
+      return self.clients.openWindow(url);
+    })()
+  );
+});

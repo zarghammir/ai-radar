@@ -12,6 +12,7 @@ import {
 import { readInternalSecret } from "./secret";
 import { runSummaries } from "@/llm/run-summaries";
 import { describeError } from "@/pipeline/describe-error";
+import { runBriefDelivery } from "@/notify/run-brief";
 
 /**
  * The ingestion worker: one pass with --once, otherwise a pass every
@@ -99,6 +100,21 @@ async function runPass(): Promise<number> {
     }
   } catch (error) {
     console.error(`[worker] summaries failed: ${describeError(error)}`);
+  }
+
+  // The brief that arrives on its own (#72). Guarded for the same reason the
+  // summariser is, and it matters more here: a push service having a bad
+  // morning is not a collector outage, and #137 files a GitHub issue on a red
+  // run. Its result does not touch the exit code.
+  try {
+    const brief = await runBriefDelivery(getDb());
+    // "not due" is the common case — most passes are not at the brief time —
+    // so it is logged only when it carries a reason an operator would act on.
+    if (brief.outcome === "not-due" && brief.detail && !brief.detail.startsWith("not yet")) {
+      console.log(`[brief] not sent: ${brief.detail}.`);
+    }
+  } catch (error) {
+    console.error(`[brief] delivery failed: ${describeError(error)}`);
   }
 
   return exitCodeFor(ingest);
