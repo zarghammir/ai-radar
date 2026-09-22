@@ -8,13 +8,13 @@ import { cn } from "@/lib/utils";
 const OPTIONS: { value: BriefLengthParam; label: string }[] = [
   { value: "5", label: "5 min" },
   { value: "10", label: "10 min" },
-  // See BRIEF_LENGTH_LABELS: the word "Everything" belongs to the view filter,
-  // which sits directly above this control and means something else (#147).
+  // #147/#154: no word appears in two controls. The filter above owns
+  // "Built"; this one owns the reading time.
   { value: "all", label: "Full brief" },
 ];
 
 /**
- * How long you have. LINKS rather than buttons, so the choice is in the URL:
+ * How much to read. LINKS rather than buttons, so the choice is in the URL:
  * it survives a reload, it can be shared, and it works before JavaScript runs.
  *
  * This is the OVERRIDE FOR ONE VISIT. The durable default is `briefLength` in
@@ -31,21 +31,56 @@ export function ReadingMode({ current }: { current: BriefLengthParam }) {
   const pathname = usePathname();
 
   return (
-    <div className="mt-4 flex gap-2" role="group" aria-label="How long you have">
-      {OPTIONS.map((option) => {
+    /*
+     * THE SECONDARY CONTROL, AND IT LOOKS SECONDARY (#154).
+     *
+     * This used to be a second row of segmented buttons identical to the
+     * filter above it — five boxes in two rows, reading as five peers. The
+     * owner: "two kinds of filters up there and three filters down there."
+     * It is now a quiet line of text: a label, three choices, no boxes.
+     *
+     * IT DELIBERATELY DOES NOT USE --org. The accent marks WHERE YOU ARE, and
+     * when both controls used it the screen had two competing orange blocks
+     * and no hierarchy. Giving the accent to the primary control ALONE is what
+     * makes the hierarchy visible at a glance rather than explained.
+     *
+     * The selected choice is carried by WEIGHT AND AN UNDERLINE, not by colour
+     * — the same rule the verification chip follows, and it keeps this legible
+     * to anyone who cannot separate the accent from the text.
+     */
+    <div
+      className="mt-2.5 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[12.5px]"
+      role="group"
+      aria-label="How much to read"
+    >
+      {/* text-ash, NOT text-soft. The accessibility sweep caught text-soft
+          failing contrast at this size on the dark theme — a quiet control
+          still has to be readable, and "secondary" is a matter of weight and
+          position, not of being harder to see. The options beside it already
+          use text-ash and pass. */}
+      <span className="text-ash">Reading time</span>
+      {OPTIONS.map((option, i) => {
         const selected = option.value === current;
         return (
-          <Link
-            key={option.value}
-            href={`${pathname}?length=${option.value}`}
-            aria-current={selected ? "true" : undefined}
-            className={cn(
-              "focus-visible:ring-org flex-1 rounded-xs border py-2 text-center text-[12.5px] font-semibold focus-visible:ring-2 focus-visible:outline-none",
-              selected ? "bg-org border-org text-org-on" : "border-edge text-ash hover:text-ash-hi",
-            )}
-          >
-            {option.label}
-          </Link>
+          <span key={option.value} className="flex items-baseline gap-2">
+            {i > 0 ? (
+              <span aria-hidden className="text-faint">
+                ·
+              </span>
+            ) : null}
+            <Link
+              href={`${pathname}?length=${option.value}`}
+              aria-current={selected ? "true" : undefined}
+              className={cn(
+                "focus-visible:ring-org inline-block rounded-xs py-1 focus-visible:ring-2 focus-visible:outline-none",
+                selected
+                  ? "text-ash-hi font-bold underline underline-offset-4"
+                  : "text-ash hover:text-ash-hi",
+              )}
+            >
+              {option.label}
+            </Link>
+          </span>
         );
       })}
     </div>

@@ -56,7 +56,11 @@ describe("the two positions", () => {
     expect(BRIEF_VIEWS).toHaveLength(2);
     for (const view of BRIEF_VIEWS) {
       expect(VIEW_LABELS[view].label.trim()).toBeTruthy();
-      expect(VIEW_LABELS[view].hint.trim()).toBeTruthy();
+      // NO hint FIELD ANY MORE (#154). A control that needs a sentence to
+      // explain itself is misnamed, so the label has to carry the meaning on
+      // its own. This asserts the label is not merely present but long enough
+      // to be a name rather than a letter.
+      expect(VIEW_LABELS[view].label.trim().length).toBeGreaterThan(2);
     }
   });
 

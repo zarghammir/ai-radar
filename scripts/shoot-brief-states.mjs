@@ -1,21 +1,17 @@
 /**
- * The Today screen in whichever state the database puts it in.
+ * The Today screen's controls, at the three widths the owner actually uses.
  *
- *   npx next start -p 3210 && npm run shots:brief -- --name=with-stories
- *   (point DATABASE_URL at an empty database, restart, then)
- *   npm run shots:brief -- --name=never-swept
+ *   npx next start -p 3210 && npm run shots:brief
+ *   npm run shots:brief -- --name=empty        (against an empty database)
  *
- * IN THE TREE, NOT IN /tmp. The last capture script for a feature lived in a
- * temporary file and its floor was reported in a pull request as though it
- * were committed. A reviewer went looking, could not find it, and could not
- * make it fail — which is worse than no floor, because the claim stops the
- * search for the gap it supposedly closes.
+ * WHY THREE WIDTHS AND BOTH POSITIONS. The controls were rejected on sight —
+ * "two kinds of filters up there and three filters down there" — so the
+ * evidence has to be what a person sees, not what the DOM contains, at every
+ * size and in both states of the primary control. He reads this on a phone.
  *
- * THE FLOOR: an EMPTY brief must carry data-empty-reason. #148 exists because
- * the empty screen asserted "the database answered, so this is a quiet morning
- * rather than a fault" on a day the collector had written sixty-four stories.
- * Four reasons replaced that one sentence, and a screenshot of an empty brief
- * that cannot say which reason it is showing proves nothing about the fix.
+ * IT CLICKS. Each position is reached by clicking the control, not by typing a
+ * URL, because a control that cannot be operated at 390px is the defect this
+ * is meant to catch.
  */
 import { mkdir } from "node:fs/promises";
 import { launchBrowser, requireServer } from "./lib/browser.mjs";
@@ -24,73 +20,111 @@ import { markOnboarded } from "./lib/seed.mjs";
 const args = process.argv.slice(2);
 const base =
   args.find((a) => !a.startsWith("--")) || process.env.VERIFY_URL || "http://127.0.0.1:3210";
-const name = args.find((a) => a.startsWith("--name="))?.slice("--name=".length) ?? "brief";
+const name = args.find((a) => a.startsWith("--name="))?.slice("--name=".length) ?? "stories";
 await requireServer(base);
 
-const DIR = "docs/screenshots/brief";
+const DIR = "docs/screenshots/controls";
+const WIDTHS = [
+  { key: "desktop", width: 1440, height: 1000, colorScheme: "light" },
+  { key: "tablet", width: 820, height: 1100, colorScheme: "light" },
+  { key: "phone", width: 390, height: 900, colorScheme: "dark" },
+];
+const FILTER = '[role="group"][aria-label="What kind of stories"]';
+const READING = '[role="group"][aria-label="How much to read"]';
+
 const floor = [];
-const out = {};
+const shots = [];
 const browser = await launchBrowser();
 
 try {
   await mkdir(DIR, { recursive: true });
-  const ctx = await browser.newContext({
-    viewport: { width: 390, height: 900 },
-    colorScheme: "dark",
-  });
-  await markOnboarded(ctx, base);
-  const page = await ctx.newPage();
-  await page.goto(`${base}/?length=all&view=all`, { waitUntil: "networkidle" });
 
-  const state = await page.getAttribute("[data-screen-state]", "data-screen-state");
-  const reason = await page
-    .getAttribute("[data-empty-reason]", "data-empty-reason")
-    .catch(() => null);
-  const stories = await page.locator("article h2 a").count();
-  out.state = state;
-  out.emptyReason = reason;
-  out.stories = stories;
+  for (const vp of WIDTHS) {
+    const ctx = await browser.newContext({
+      viewport: { width: vp.width, height: vp.height },
+      colorScheme: vp.colorScheme,
+    });
+    await markOnboarded(ctx, base);
+    const page = await ctx.newPage();
+    await page.goto(`${base}/?length=all&view=built`, { waitUntil: "networkidle" });
 
-  if (!state) floor.push("no data-screen-state on the page");
-  if (state === "quiet" && !reason) {
-    floor.push(
-      "the brief is empty and does NOT say which kind of empty — no data-empty-reason. " +
-        "A picture of this proves nothing about #148; the screen could be back to one " +
-        "flattened message.",
-    );
+    const options = page.locator(`${FILTER} a`);
+    const count = await options.count();
+    if (count !== 2) {
+      floor.push(`${vp.key}: the filter has ${count} options, not 2`);
+      await ctx.close();
+      continue;
+    }
+
+    const filterLabels = (await options.allInnerTexts()).map((t) => t.trim());
+    const readingLabels = (await page.locator(`${READING} a`).allInnerTexts()).map((t) => t.trim());
+
+    // NO WORD IN TWO CONTROLS. The rule the owner's complaint produced, checked
+    // rather than asserted in a comment — and checked on the RENDERED text, so
+    // a label changed in one place and not the other cannot slip through.
+    const wordsOf = (labels) =>
+      new Set(
+        labels
+          .join(" ")
+          .toLowerCase()
+          .split(/[^a-z]+/)
+          .filter((w) => w.length > 2),
+      );
+    const shared = [...wordsOf(filterLabels)].filter((w) => wordsOf(readingLabels).has(w));
+    if (shared.length > 0) {
+      floor.push(
+        `${vp.key}: "${shared.join('", "')}" appears in BOTH controls — ` +
+          `filter ${JSON.stringify(filterLabels)}, reading ${JSON.stringify(readingLabels)}`,
+      );
+    }
+
+    // A CONTROL THAT NEEDS A SENTENCE IS MISNAMED. The explanatory line under
+    // the filter is gone; this stops it coming back.
+    const stray = await page.locator(`${FILTER} ~ p`).count();
+    if (stray > 0) floor.push(`${vp.key}: the filter has an explanatory paragraph under it again`);
+
+    for (const position of ["built", "all"]) {
+      if (position === "all") {
+        // CLICKED, not navigated. At 390px this is the interaction that matters.
+        await options.nth(1).click();
+        await page.waitForURL(/view=all/, { timeout: 8000 });
+        await page.waitForLoadState("networkidle");
+      }
+      const selected = await page.locator(`${FILTER} a[aria-current="true"]`).innerText();
+      const emptyReason = await page
+        .getAttribute("[data-empty-reason]", "data-empty-reason")
+        .catch(() => null);
+      const stories = await page.locator("article h2 a").count();
+      if (stories === 0 && !emptyReason) {
+        floor.push(
+          `${vp.key}/${position}: nothing rendered and no data-empty-reason to explain it`,
+        );
+      }
+      const file = `${DIR}/${name}-${vp.key}-${position}.png`;
+      await page.screenshot({ path: file });
+      shots.push({
+        file: file.split("/").pop(),
+        width: vp.width,
+        selected: selected.trim(),
+        stories,
+        emptyReason,
+      });
+    }
+
+    if (shots.length) {
+      shots[shots.length - 1].filterLabels = filterLabels;
+      shots[shots.length - 1].readingLabels = readingLabels;
+    }
+    await ctx.close();
   }
-  if (state === "brief" && stories < 1) floor.push("state=brief but no stories rendered");
-
-  // The renamed control (#147): the word "Everything" now belongs to the view
-  // filter alone, so the budget's third option must NOT be called that.
-  // SCOPED TO THE READING-BUDGET GROUP BY ITS OWN aria-label. The first
-  // version matched `a[href*="length=all"]` and read "Built" — the VIEW
-  // FILTER, whose links also carry a length. A control aimed at the wrong
-  // element cannot fail for the reason it names: it would have reported the
-  // rename intact no matter what the budget option said.
-  const budget = await page
-    .locator('[role="group"][aria-label="How long you have"] a')
-    .last()
-    .innerText()
-    .catch(() => "");
-  out.budgetOptionLabel = budget.trim();
-  if (/everything/i.test(budget)) {
-    floor.push(`the reading-budget option still reads "${budget.trim()}" — #147 renamed it`);
-  }
-
-  if (floor.length === 0) {
-    await page.screenshot({ path: `${DIR}/today-${name}.png` });
-    out.file = `today-${name}.png`;
-  }
-  await ctx.close();
 } finally {
   await browser.close();
 }
 
-console.log(JSON.stringify(out, null, 2));
+console.log(JSON.stringify({ base, shots, floor }, null, 2));
 if (floor.length) {
-  console.error("\nFLOOR BROKEN:");
+  console.error("\nFLOOR BROKEN — these shots are not evidence:");
   for (const f of floor) console.error(`  - ${f}`);
   process.exit(1);
 }
-console.log(`\nwrote ${DIR}/${out.file}`);
+console.log(`\n${shots.length} shots written to ${DIR}`);
