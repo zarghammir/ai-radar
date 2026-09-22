@@ -72,9 +72,9 @@ async function shoot(page, { name, expectView, expectState, what }) {
     return null;
   }
   const selected = await page
-    .locator('[role="group"][aria-label="What to show"] a[aria-current="true"]')
+    .locator('[role="group"][aria-label="What kind of stories"] a[aria-current="true"]')
     .textContent();
-  const want = expectView === "built" ? "Built" : "Everything";
+  const want = expectView === "built" ? "Built" : "Built + news";
   if ((selected ?? "").trim() !== want) {
     floor.push(`${name}: the control reads "${(selected ?? "").trim()}", expected "${want}"`);
     return null;

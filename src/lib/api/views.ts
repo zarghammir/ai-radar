@@ -59,15 +59,32 @@ export function parseView(value: string | string[] | undefined | null): BriefVie
 }
 
 /** What the two positions say, and what the reader is told when one is empty. */
-export const VIEW_LABELS: Record<BriefView, { label: string; hint: string }> = {
-  built: {
-    label: "Built",
-    hint: "Models, tools, releases and papers — things somebody made.",
-  },
-  all: {
-    label: "Everything",
-    hint: "Adds the reporting around them: news, discussion, funding and policy.",
-  },
+/**
+ * WHAT EACH POSITION SHOWS, IN THE BUTTON ITSELF.
+ *
+ * THE OWNER REJECTED THE PREVIOUS PAIR: "Built" and "Everything", under a
+ * sentence explaining the difference. His words were "it doesn't make sense to
+ * have two kinds of filters up there and three filters down there." The
+ * sentence was the tell — A CONTROL THAT NEEDS A LINE OF PROSE TO EXPLAIN
+ * ITSELF IS MISNAMED, and there is no `hint` field any more because there is
+ * nowhere honest to put one.
+ *
+ * "Built" STAYS because it is HIS word, from the day he described what he
+ * wanted: things people built. Only the presentation was rejected. Alone it was
+ * vague — not because the word is wrong, but because its sibling "Everything"
+ * named a different axis, so the pair described no relationship at all and the
+ * sentence had to.
+ *
+ * "Built + news" makes the relationship the thing you read. It is visibly a
+ * SUPERSET of the other position: same word, plus something. The `+` does what
+ * the sentence did, in one character, inside the control. And "news" is the
+ * head of what is actually added — news, discussion, funding, policy.
+ *
+ * Neither word appears in the reading-time control beside it.
+ */
+export const VIEW_LABELS: Record<BriefView, { label: string }> = {
+  built: { label: "Built" },
+  all: { label: "Built + news" },
 };
 
 /**
