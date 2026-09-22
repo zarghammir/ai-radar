@@ -34,8 +34,15 @@ const GUARD = "src/api/internal-guard.ts";
  * three providers are plain `fetch` against a base URL and import no package
  * at all. A package name is a tripwire for one provider; the directory is the
  * rule for the feature, and the rule is what a new provider inherits.
+ *
+ * `src/notify/` is here although a push costs nothing. The rule this file
+ * enforces is written about money, but the harm it prevents is a stranger
+ * setting the rate: a page render that could send a push would let any visitor
+ * make this instance hammer a push service until it is rate-limited, which
+ * buys an outage rather than a bill. The subscribe route writes a row and
+ * sends nothing, which is why it is allowed to exist as a public route.
  */
-const FORBIDDEN_DIRS = ["src/sources/", "src/llm/"];
+const FORBIDDEN_DIRS = ["src/sources/", "src/llm/", "src/notify/"];
 const FORBIDDEN_PACKAGES = ["@anthropic-ai/sdk"];
 
 function walk(dir: string, out: string[] = []): string[] {

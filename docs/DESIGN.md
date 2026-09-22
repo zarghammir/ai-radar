@@ -282,9 +282,17 @@ reader nothing, and a local fake disagrees with the server the moment they open 
 device. Archive on the Saved card is the worked example; the endpoint is issue #70.
 
 Where a whole feature is missing, the panel says so above its controls rather than below them.
-"Being told" carries the sentence "nothing is sent yet — not a push, not an email" before the
+"Being told" carried the sentence "nothing is sent yet — not a push, not an email" before the
 choices, because a product that accepts _email me at seven_ and then never writes is worse than
 one that admits it cannot.
+
+**#72 built one of the two, and the copy got more specific rather than
+disappearing.** Push now sends; email still does not, so the panel names which is which instead
+of a blanket disclaimer. The same rule governs both halves: the one that cannot must keep saying
+so, and the one that can must stop pretending it cannot. The push control also states what it
+can honestly promise — _soon after_ the chosen time, not at it, because the collector runs a
+handful of times a day on a best-effort schedule. A promise the scheduler cannot keep would be
+the defect, not the delay.
 
 ### Settings is a list of sections
 

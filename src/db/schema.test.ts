@@ -22,7 +22,7 @@ import { CONTENT_TYPES, VERIFICATION_LEVELS, rawItems, stories } from "./schema"
 describe("the schema's shape is what the architecture document says", () => {
   it("has the number of tables docs/architecture.md claims", () => {
     const tables = Object.values(schema).filter((v) => is(v, PgTable));
-    expect(tables).toHaveLength(10);
+    expect(tables).toHaveLength(12);
   });
 });
 

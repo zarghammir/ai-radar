@@ -5,17 +5,18 @@ import { savePreferences } from "@/lib/api/preferences-store";
 import { NOTIFICATION_OPTIONS } from "@/lib/api/preferences";
 import type { Preferences } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
+import { PushToggle } from "@/components/settings/push-toggle";
 
 /**
  * How the reader hears that the brief is ready.
  *
- * NOTHING SENDS ANYTHING YET. The preference is real and it is stored, but no
- * code reads notification_channel to deliver a brief — there is no push
- * subscription and no mail path in this repository. The screen says so in
- * plain words rather than presenting a working feature, because a product that
- * quietly accepts "email me at seven" and then never writes is worse than one
- * that admits it cannot yet: the reader stops opening the app and concludes
- * there is no news.
+ * PUSH NOW WORKS; EMAIL STILL DOES NOT. #72 built one of the two channels the
+ * preference offers, so this panel no longer says "nothing is sent" — it says
+ * which one arrives and which one is still only recorded. The rule that made
+ * the old copy honest is the rule that makes this copy specific: a product
+ * that quietly accepts "email me at seven" and never writes is worse than one
+ * that admits it cannot, so the half that cannot must keep saying so while the
+ * half that can stops pretending it cannot.
  */
 export function NotificationsSection({ preferences }: { preferences: Preferences }) {
   const { status, run } = useSaveStatus();
@@ -28,13 +29,15 @@ export function NotificationsSection({ preferences }: { preferences: Preferences
       status={<SaveStatusText status={status} what="how you are told" />}
     >
       <p className="border-faint-2 text-soft mb-4 border border-dashed p-3 text-[13px] leading-relaxed">
-        Nothing is sent yet — not a push, not an email. The choice is kept so it is already right
-        when sending arrives, and until then the brief waits for you on Today.{" "}
-        {/* There is no address field, and that is the point rather than an
-            omission: #94 removed it because storing one for a feature that
-            does not exist collects personal data for nothing. See #72. */}
+        A push notification is sent once a day, soon after your brief time, to every browser you
+        switch it on in.{" "}
+        {/* There is still no address field, and that is the point rather than
+            an omission: #94 removed it because storing one for a feature that
+            does not exist collects personal data for nothing. Email remains
+            unbuilt — see #72. */}
         <b className="text-ink font-semibold">
-          Nowhere to send to is not asked for until there is something to send.
+          Email is still only recorded — nothing is mailed, and you are not asked for an address
+          until something sends to it.
         </b>
       </p>
 
@@ -67,6 +70,8 @@ export function NotificationsSection({ preferences }: { preferences: Preferences
           ))}
         </div>
       </fieldset>
+
+      {channel === "push" && <PushToggle />}
 
       {/* Same hazard as the brief length: the column is plain text and only the
           write path validates it, so a channel this build cannot draw leaves
