@@ -273,7 +273,13 @@ try {
    * one, so each state names itself in the DOM and this reads the name.
    *
    * Run against a live database:   npm run verify:today
-   * Run against an empty one:      seed nothing, then the same command
+   * (There is no empty-database mode HERE. Seeding nothing never reaches this
+   * section: bailIfBroken throws on section 1's MIN_STORIES floor first. That
+   * line advertised a mode that cannot run, and it survived TWO edits to this
+   * very docblock — including the one that added the paragraph below about an
+   * unreachable assertion reading as coverage. The empty case is covered by
+   * ci.yml's "A reachable, empty database is a quiet day, not a failure" step,
+   * which runs BEFORE the seed.)
    * Run against no database:       DATABASE_URL=postgres://nope/nope npm start
    */
   {

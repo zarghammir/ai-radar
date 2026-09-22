@@ -19,9 +19,10 @@
  * threshold is a time in disguise:
  *
  * ⚠️ THE WALL-CLOCK COLUMN BELOW ASSUMES THE DECLARED HALF-HOURLY CRON, WHICH
- * GITHUB DOES NOT KEEP. Measured 2026-09-17 to 09-22: about 7 passes a day, so
- * each figure is roughly SEVEN TIMES LONGER in practice — N = 3 is most of a day,
- * not ninety minutes. The threshold is still the right shape, because it counts
+ * GITHUB DOES NOT KEEP. Measured 09-18 to 09-21: 8, 8, 7, 5 passes a day — a
+ * MEAN of 7 with real spread, not a rate. So N = 3 is somewhere between about
+ * NINE AND FOURTEEN HOURS depending on the day, not ninety minutes and not a
+ * single figure. The threshold is still the right shape, because it counts
  * PASSES rather than time; the note is here so nobody reads the column as a
  * promise about how quickly a source is flagged.
  *

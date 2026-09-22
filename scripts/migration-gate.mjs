@@ -4,8 +4,15 @@
  *
  * THE OUTAGE THIS EXISTS FOR. Migration 0004 added two columns; #71 began
  * writing them in the same change; nothing applies migrations on merge, so the
- * code went live against a database that had never seen them. Seventeen
- * sources failed every thirty minutes for four days.
+ * code went live against a database that had never seen them. MEASURED: 30
+ * failed scheduled passes over four days, all 17 sources failing in each — 441
+ * failed source-runs. NOT "every thirty minutes", which the schedule declares
+ * and GitHub does not keep (#139).
+ *
+ * The overstated version was about sevenfold high and it was doing persuasive
+ * work: these two sentences are the MOTIVATION for this gate. The true number
+ * makes the case weaker and truer, which is the trade the whole of #139 is
+ * about.
  *
  * SO WHY NOT JUST RUN db:migrate ON MERGE. Because a migration that applies
  * itself is a DESTRUCTIVE OPERATION that applies itself. The set pending during

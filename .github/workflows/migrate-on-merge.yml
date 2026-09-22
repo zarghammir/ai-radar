@@ -2,8 +2,10 @@ name: Apply additive migrations on merge
 
 # THE OUTAGE THIS EXISTS FOR. Nothing applied migrations on merge. Migration
 # 0004 added two columns, #71 began writing them in the same change, and the
-# code went live against a database that had never seen them: 17 sources failing
-# every 30 minutes for four days.
+# code went live against a database that had never seen them. MEASURED: 30
+# failed scheduled passes over four days — every one of the 17 sources failing
+# in each, 441 failed source-runs in ingest_runs. Not "every 30 minutes": the
+# schedule declares that and GitHub delivers about 7 a day (#139).
 #
 # WHY IT ONLY APPLIES SOME OF THEM. A migration that applies itself is a
 # destructive operation that applies itself. The set pending during that outage

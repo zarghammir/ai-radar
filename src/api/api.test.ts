@@ -468,7 +468,8 @@ withDb("API routes", () => {
     it("does not let a run that has only started clear the count", async () => {
       // An in-flight row has no error and no finish time. Treating it as a
       // success would mark a failing source healthy the moment the next pass
-      // began — and the next pass begins every thirty minutes.
+      // began — and the next pass begins on the hosted schedule, which is
+      // declared half-hourly and measured at about 7 a day (#139).
       const id = await source("mid-run");
       await run(id, "2026-09-16T08:00:00Z", "failed");
       await run(id, "2026-09-16T08:30:00Z", "failed");
