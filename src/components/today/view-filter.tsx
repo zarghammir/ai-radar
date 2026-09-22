@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
  *
  * There are two positions and there will not be a third. With the fetch-time AI
  * gate in place every stored story is already AI-matched, so an "AI only" stop
- * and this "Everything" would return the identical rows.
+ * and this widened position would return the identical rows.
  */
 export function ViewFilter({ current }: { current: BriefView }) {
   const pathname = usePathname();
@@ -26,7 +26,17 @@ export function ViewFilter({ current }: { current: BriefView }) {
 
   return (
     <div className="mt-4">
-      <div role="group" aria-label="What to show" className="flex gap-2">
+      {/* THE PRIMARY CONTROL, AND IT HAS TO LOOK LIKE ONE (#154).
+          Two rows of identically-styled segmented buttons read as five peers
+          with no hierarchy — the owner's words were "two kinds of filters up
+          there and three filters down there." This row is bigger, bolder and
+          full width; the reading-time row below is a quiet line of text. One
+          thing to decide, one thing to adjust. */}
+      {/* CAPPED WIDTH, because a binary choice spanning 900px of desktop reads
+          as crude rather than as important. At phone width the column is
+          already narrower than this cap, so nothing changes where it matters
+          most. */}
+      <div role="group" aria-label="What kind of stories" className="flex max-w-md gap-2">
         {BRIEF_VIEWS.map((view) => {
           const selected = view === current;
           const query = new URLSearchParams();
@@ -40,7 +50,7 @@ export function ViewFilter({ current }: { current: BriefView }) {
               className={cn(
                 // --org marks WHERE YOU ARE. Palette law one, same as the
                 // reading-length control.
-                "focus-visible:ring-org flex-1 rounded-xs border py-2 text-center text-[12.5px] font-semibold focus-visible:ring-2 focus-visible:outline-none",
+                "focus-visible:ring-org flex-1 rounded-xs border py-2.5 text-center text-[14.5px] font-bold focus-visible:ring-2 focus-visible:outline-none",
                 selected
                   ? "bg-org border-org text-org-on"
                   : "border-edge text-ash hover:text-ash-hi",
@@ -51,10 +61,11 @@ export function ViewFilter({ current }: { current: BriefView }) {
           );
         })}
       </div>
-      {/* The hint is for the position you are ON, not a legend for both: a
-          reader needs to know what they are looking at, not what the other
-          button would do. */}
-      <p className="text-ash mt-1.5 text-[12.5px]">{VIEW_LABELS[current].hint}</p>
+      {/* NO SENTENCE UNDER THE CONTROL. It used to carry "Adds the reporting
+          around them: news, discussion, funding and policy" — which is the
+          smell this redesign is about. The relationship now lives in the
+          labels: "Launches" and "Launches + news" are visibly the same set plus
+          something. */}
       <ViewMemory chosen={parseView(params.get("view"))} />
     </div>
   );

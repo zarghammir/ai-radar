@@ -379,6 +379,27 @@ jobs:
             exit 1
           fi
           echo "the empty state explained itself in ${#EXPLANATION} characters"
+
+          # AND IT MUST SAY WHICH KIND OF EMPTY (#148). The screen that caused
+          # that ticket asserted "the database answered, so this is a quiet
+          # morning rather than a fault" on a day the collector had written 64
+          # stories — honest about what it checked, wrong about the cause.
+          #
+          # The page now carries data-empty-reason with one of four values, and
+          # THIS is where that can be asserted: the database here is reachable
+          # and genuinely empty, which is the only place the quiet state exists.
+          # verify:today cannot check it — that script requires stories before
+          # it reaches its screen-state block, and a page with stories is not
+          # quiet.
+          #
+          # Pinned to the MARKER, not the prose, and requiring `="` so it cannot
+          # match the RSC payload's escaped copy (#115).
+          REASON="$(printf '%s' "$HTML" | grep -o 'data-empty-reason="[a-z-]*"' | head -1 || true)"
+          if [ -z "$REASON" ]; then
+            echo "::error::the empty brief does not say WHY it is empty (no data-empty-reason). It can therefore go back to one flattened message, which is the whole of #148." >&2
+            exit 1
+          fi
+          echo "the empty brief says which kind of empty it is: $REASON"
           # And the half that actually matters: a quiet day must never be
           # described as a failure. This is the pair the product exists to keep
           # apart, and it is the assertion that would catch them being confused.
@@ -610,12 +631,13 @@ jobs:
           # would also make CI depend on a corpus that differs by view, which is
           # a property of the seed rather than of the app.
           # Newline-separated: the loop below matches with `grep -qx`, so each
-          # entry has to be its own line. Both are CAPTURE scripts — they take
-          # the pictures a PR body carries. They assert plenty before each
+          # entry has to be its own line. All three are CAPTURE scripts — they
+          # take the pictures a PR body carries. They assert plenty before each
           # shutter, but those assertions guard the PICTURES rather than the
           # product, and running them here would tie the job to a seeded corpus.
           NOT_A_CHECK="scripts/shoot-filter.mjs
-          scripts/shoot-story.mjs"
+          scripts/shoot-story.mjs
+          scripts/shoot-brief-states.mjs"
 
           DRIVERS="$(grep -rl "launchBrowser" scripts --include='*.mjs' 2>/dev/null | grep -v '^scripts/lib/' | sort || true)"
           SELECTED_FILES="$(while IFS= read -r c; do

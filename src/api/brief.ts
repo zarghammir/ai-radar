@@ -1,7 +1,7 @@
-import { and, desc, gte, inArray } from "drizzle-orm";
+import { and, desc, inArray, sql, type SQL } from "drizzle-orm";
 import type { Db } from "@/db/client";
 import type { ContentType } from "@/db/schema";
-import { stories } from "@/db/schema";
+import { ingestRuns, stories } from "@/db/schema";
 import { ApiError } from "./http";
 import type { BriefLength } from "./reading-budget";
 import { BRIEF_LENGTHS } from "./reading-budget";
@@ -196,6 +196,44 @@ export interface BriefOptions {
   types?: readonly ContentType[];
 }
 
+/**
+ * ADMISSION IS BY ARRIVAL. ORDERING IS NOT.
+ *
+ * THE BUG THIS FIXES, hit by the owner on the live site (#148). His window
+ * opened at 07:30 and the screen said "nothing has arrived since your brief
+ * window opened — the database answered, so this is a quiet morning rather
+ * than a fault." The collector had written 64 stories that day and 13 more at
+ * 12:17. It was not a quiet morning.
+ *
+ * Admission keyed on `stories.lastActivityAt`, which refreshStory computes as
+ * the newest PUBLISHED time of the story's items. So a story published at 02:00
+ * and fetched at 12:17 has lastActivityAt 02:00 — before a 07:30 window, and
+ * invisible for the whole day it arrived in. That is most stories: publishers
+ * file overnight and we sweep in the morning.
+ *
+ * A brief is "what arrived for you", so it admits on `raw_items.fetched_at` —
+ * when this app first held the thing. Publication is still what the story SAYS
+ * about itself and still what `lastActivityAt` means; it is simply not the
+ * question "is this new to me".
+ *
+ * EXISTS RATHER THAN A DENORMALISED COLUMN, deliberately. A column would need a
+ * migration, and the collector spent four days dead because a change added a
+ * column and started writing it in the same deploy with nothing applying
+ * migrations on merge. `raw_items_story_idx` already exists, so this reads the
+ * index rather than the table, and it ships without a schema change at all.
+ */
+function arrivedSince(from: Date): SQL {
+  // AN ISO STRING WITH AN EXPLICIT CAST, not the Date. Interpolating a Date
+  // into a raw `sql` template hands it straight to postgres.js, which wants a
+  // string or a Buffer and throws "Received an instance of Date" — every brief
+  // request a 500. notHidden() next door never hit this because it interpolates
+  // only column references, so the pattern it models does not cover a value.
+  return sql`exists (
+    select 1 from raw_items ri
+    where ri.story_id = ${stories.id} and ri.fetched_at >= ${from.toISOString()}::timestamptz
+  )`;
+}
+
 export async function storiesInWindow(
   db: Db,
   window: BriefWindow,
@@ -207,7 +245,7 @@ export async function storiesInWindow(
     .from(stories)
     .where(
       and(
-        gte(stories.lastActivityAt, window.from),
+        arrivedSince(window.from),
         notHidden(),
         ...(includeAdjacent ? [] : [notAdjacentTech()]),
         types && types.length > 0 ? inArray(stories.contentType, [...types]) : undefined,
@@ -216,4 +254,48 @@ export async function storiesInWindow(
     .orderBy(desc(stories.score), desc(stories.id))
     .limit(BRIEF_CANDIDATE_LIMIT);
   return buildCards(db, rows);
+}
+
+/**
+ * What the collector has been doing, so an empty brief can never again be
+ * mistaken for a quiet day (#148).
+ *
+ * The screen that caused this ticket said "the database answered, so this is a
+ * quiet morning rather than a fault." Every word was true about what it had
+ * CHECKED, and the conclusion was wrong: 64 stories had been collected that
+ * day. Honest about the check, wrong about the cause — the reading-side twin
+ * of the collector outage, where the system was fine, the user saw nothing,
+ * and the message reassured.
+ *
+ * So the empty state is given two facts it cannot infer for itself:
+ *
+ *   lastFinishedAt          when a sweep last COMPLETED. Null means none ever
+ *                           has, which is a different screen from a quiet day.
+ *   itemsSinceWindowOpened  how much the collector has written since the
+ *                           reader's window opened.
+ *
+ * The second is the one that turns a reassurance into a lead. If it is zero the
+ * morning really was quiet. If it is not, stories arrived and none of them are
+ * in this view — which points at the filter or the window, and is actionable.
+ */
+export interface SweepSummary {
+  lastFinishedAt: string | null;
+  itemsSinceWindowOpened: number;
+}
+
+export async function sweepSummary(db: Db, from: Date): Promise<SweepSummary> {
+  const [row] = await db
+    .select({
+      lastFinishedAt: sql<Date | null>`max(${ingestRuns.finishedAt})`,
+      // COALESCE because sum() over no rows is NULL, and "the collector wrote
+      // nothing" must not arrive as an absent number that renders as blank.
+      // Zero is an answer; null is the absence of one.
+      itemsSinceWindowOpened: sql<number>`coalesce(sum(${ingestRuns.itemsNew}) filter (where ${ingestRuns.finishedAt} >= ${from.toISOString()}::timestamptz), 0)::int`,
+    })
+    .from(ingestRuns);
+
+  return {
+    lastFinishedAt: row?.lastFinishedAt ? new Date(row.lastFinishedAt).toISOString() : null,
+    itemsSinceWindowOpened: Number(row?.itemsSinceWindowOpened ?? 0),
+  };
 }

@@ -3,7 +3,7 @@ import { ReadingMode } from "@/components/today/reading-mode";
 import { ViewFilter } from "@/components/today/view-filter";
 import { EmptyState, PageShell } from "@/components/page-shell";
 import { LocalDate } from "@/components/local-date";
-import { briefSummary } from "@/lib/api/brief-summary";
+import { briefSummary, emptyBriefReason } from "@/lib/api/brief-summary";
 import { loadBrief } from "@/lib/api/brief-server";
 import { defaultBriefLength, defaultView } from "@/lib/api/brief-length";
 import { parseView } from "@/lib/api/views";
@@ -87,6 +87,7 @@ export default async function TodayPage({ searchParams }: PageProps<"/">) {
   }
 
   const summary = briefSummary(brief);
+  const emptyReason = emptyBriefReason(brief);
 
   return (
     <PageShell
@@ -118,17 +119,21 @@ export default async function TodayPage({ searchParams }: PageProps<"/">) {
       state={brief.count === 0 ? "quiet" : "brief"}
     >
       {brief.count === 0 ? (
-        // A quiet day in the DEFAULT view is not the same as a quiet day
-        // overall: the reader is one tap from more, and a screen that does not
-        // say so looks broken rather than narrow.
-        <EmptyState
-          title={view === "built" ? "Nothing built today" : "No brief yet"}
-          body={
-            view === "built"
-              ? `Nobody shipped a model, a tool, a release or a paper since your window opened at ${brief.window.briefTime}. The database answered, so this is a quiet day rather than a fault — switch to Everything above to see the news and discussion around it.`
-              : `Nothing has arrived since your brief window opened at ${brief.window.briefTime}. The database answered, so this is a quiet morning rather than a fault. It fills as soon as the worker's next sweep finds something.`
-          }
-        />
+        // WHY IT IS EMPTY, FROM THE COLLECTOR'S OWN RECORD (#148).
+        //
+        // This used to assert "the database answered, so this is a quiet
+        // morning rather than a fault" — honest about what it had checked and
+        // wrong about the cause. The owner read it on a day the collector had
+        // written sixty-four stories. The screen argued him out of the truth.
+        //
+        // emptyBriefReason has four answers and one of them is actionable: if
+        // things HAVE arrived since the window opened and none are here, the
+        // reader is looking at a filter or a brief time in the wrong timezone,
+        // not at a quiet day. The kind is in the DOM so a check can assert
+        // WHICH case without matching prose.
+        <div data-empty-reason={emptyReason.kind}>
+          <EmptyState title={emptyReason.title} body={emptyReason.body} />
+        </div>
       ) : (
         <BriefList stories={brief.stories} />
       )}

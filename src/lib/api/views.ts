@@ -59,15 +59,42 @@ export function parseView(value: string | string[] | undefined | null): BriefVie
 }
 
 /** What the two positions say, and what the reader is told when one is empty. */
-export const VIEW_LABELS: Record<BriefView, { label: string; hint: string }> = {
-  built: {
-    label: "Built",
-    hint: "Models, tools, releases and papers — things somebody made.",
-  },
-  all: {
-    label: "Everything",
-    hint: "Adds the reporting around them: news, discussion, funding and policy.",
-  },
+/**
+ * WHAT EACH POSITION SHOWS, IN THE BUTTON ITSELF.
+ *
+ * THE OWNER REJECTED THE PREVIOUS PAIR: "Built" and "Everything", under a
+ * sentence explaining the difference. His words were "it doesn't make sense to
+ * have two kinds of filters up there and three filters down there." The
+ * sentence was the tell — A CONTROL THAT NEEDS A LINE OF PROSE TO EXPLAIN
+ * ITSELF IS MISNAMED, and there is no `hint` field any more because there is
+ * nowhere honest to put one.
+ *
+ * "LAUNCHES" IS THE OWNER'S CHOICE, from three he was offered. The previous
+ * version of this comment said "Built" stayed because it was HIS word — THAT
+ * WAS FALSE, and it is recorded here rather than quietly overwritten because
+ * it is the kind of claim that gets built on.
+ *
+ * What he actually said was "the fun part — the startups, the cool things".
+ * "Built" was a lane's shorthand on a roadmap page, carried forward through
+ * enough hands that it arrived as something he had chosen. He then looked at
+ * the redesign and asked what "Built" meant.
+ *
+ * A LABEL THE OWNER HAS TO ASK ABOUT HAS FAILED, however good the hierarchy
+ * around it — and none of that hierarchy changed, only this word.
+ *
+ * "Launches + news" makes the relationship the thing you read. It is visibly a
+ * SUPERSET of the other position: same word, plus something. The `+` does what
+ * an explanatory sentence used to do, in one character, inside the control.
+ * "news" is the head of what is actually added — news, discussion, funding,
+ * policy.
+ *
+ * Neither word appears in the reading-time control beside it, and the capture
+ * script checks that against the RENDERED labels rather than trusting this
+ * paragraph.
+ */
+export const VIEW_LABELS: Record<BriefView, { label: string }> = {
+  built: { label: "Launches" },
+  all: { label: "Launches + news" },
 };
 
 /**

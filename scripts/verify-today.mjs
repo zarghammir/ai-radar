@@ -301,7 +301,16 @@ try {
       // The distinction a reader has to be able to make without knowing what a
       // database is: one of these says nothing happened, the other says we do
       // not know what happened.
-      saysQuietMorning: text.includes("quiet morning"),
+      // PINNED TO THE MARKER, NOT TO THE WORDS (#148). This read
+      // text.includes("quiet morning") — a phrase the empty state no longer
+      // always uses, because it now has FOUR answers and only one of them is
+      // "quiet". A copy edit would have reddened this on a correct page, which
+      // is the same defect the CI empty-state check was fixed for twice.
+      //
+      // data-empty-reason carries the CASE; the prose is free to change.
+      emptyReason: await page
+        .getAttribute("[data-empty-reason]", "data-empty-reason")
+        .catch(() => null),
       saysCannotReach: text.includes("cannot reach"),
     };
 
@@ -317,11 +326,29 @@ try {
       floor.push("state=unreachable but the screen does not say it cannot reach anything");
     }
     if (state === "quiet" && out.screenState.saysCannotReach) {
-      floor.push("a quiet morning is being described as a failure");
+      floor.push("an empty brief is being described as a failure");
     }
-    if (state === "unreachable" && out.screenState.saysQuietMorning) {
-      floor.push("an unreachable database is being described as a quiet morning");
+    if (state === "unreachable" && out.screenState.emptyReason) {
+      floor.push("an unreachable database is being given one of the empty-brief reasons");
     }
+    // NO "state=quiet" FLOOR HERE, AND THE REASON IS WORTH THE LINES.
+    //
+    // I added one — "an empty brief must say which kind of empty it is" — and
+    // the control proved it COULD NOT FIRE. This section is reached only if
+    // section 1 passed, and section 1 requires at least MIN_STORIES stories
+    // and a corpus longer than the budget. A page with stories is `brief`, not
+    // `quiet`. So `state === "quiet"` is unreachable from here, and a floor
+    // that cannot fire is not a protection, it is a claim.
+    //
+    // THE TWO BRANCHES BELOW HAVE THE SAME PROBLEM and predate this change;
+    // they are left rather than deleted because removing them is not this
+    // ticket's business, but they are noted so the next person does not read
+    // them as coverage.
+    //
+    // The quiet state IS asserted, on a genuinely empty database, by the
+    // "A reachable, empty database is a quiet day, not a failure" step in
+    // ci.yml — which runs BEFORE the seed. That is where the #148 check for
+    // data-empty-reason lives, because that is where the state exists.
     await ctx.close();
   }
 

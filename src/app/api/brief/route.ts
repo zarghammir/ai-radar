@@ -4,6 +4,7 @@ import {
   briefWindow,
   parseBriefLength,
   storiesInWindow,
+  sweepSummary,
   takeWithinReadingTime,
 } from "@/api/brief";
 import { getPreferences } from "@/api/reader";
@@ -36,6 +37,10 @@ export async function GET(request: Request): Promise<Response> {
     const window = briefWindow(now, prefs.briefTime, prefs.timezone);
     const ranked = await storiesInWindow(getDb(), window, { types: typesForView(view) });
     const stories = takeWithinReadingTime(ranked, length);
+    // The route carries it too, so a client of the API gets the same account of
+    // an empty brief that the page does. Two answers to "why is this empty"
+    // would be one more than there should be.
+    const sweep = await sweepSummary(getDb(), window.from);
 
     return json({
       window: {
@@ -50,6 +55,7 @@ export async function GET(request: Request): Promise<Response> {
       count: stories.length,
       readingMinutes: stories.reduce((n, s) => n + s.readingMinutes, 0),
       stories,
+      sweep,
     });
   });
 }

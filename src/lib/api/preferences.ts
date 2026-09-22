@@ -13,7 +13,13 @@ import type {
 export const BRIEF_LENGTH_LABELS: Record<BriefLength, { label: string; hint: string }> = {
   "5": { label: "Five minutes", hint: "The shortest useful read. Top stories only." },
   "10": { label: "Ten minutes", hint: "The default. Enough to catch the day." },
-  all: { label: "Everything", hint: "No budget. Every story that passed the bar." },
+  // "FULL BRIEF", NOT "EVERYTHING" (#147). Today carries two controls and both
+  // said "Everything" while meaning different things: this one lifts the
+  // READING-TIME budget, and the view filter widens WHICH KINDS of story are
+  // in the feed at all. A reader choosing "Everything" here and still not
+  // seeing the news has been told, by the app, that they asked for everything.
+  // The word now belongs to one control.
+  all: { label: "Full brief", hint: "No time limit. Every story that passed the bar." },
 };
 
 export const NOTIFICATION_LABELS: Record<NotificationChannel, { label: string; hint: string }> = {
