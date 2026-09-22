@@ -113,6 +113,19 @@ export interface BriefResponse {
   count: number;
   readingMinutes: number;
   stories: StoryCard[];
+  /**
+   * WHAT THE COLLECTOR HAS BEEN DOING, so an empty brief can say WHY it is
+   * empty rather than guessing (#148).
+   *
+   * Null only in fixture mode, where there is no collector to report on — and
+   * that is a third state the empty screen must not flatten into the other two.
+   */
+  sweep: {
+    /** When a sweep last COMPLETED. Null means none ever has. */
+    lastFinishedAt: string | null;
+    /** How much the collector has written since this window opened. */
+    itemsSinceWindowOpened: number;
+  } | null;
 }
 
 export interface ApiError {

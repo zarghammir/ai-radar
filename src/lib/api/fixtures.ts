@@ -328,6 +328,11 @@ function brief(
     view,
     count: stories.length,
     readingMinutes: stories.reduce((total, s) => total + s.readingMinutes, 0),
+    // NULL, NOT A ZEROED SUMMARY. Fixture mode has no collector, so there is
+    // nothing to report about one — and reporting "last sweep: never, 0 items"
+    // would be a claim about a machine that does not exist here. The empty
+    // screen treats null as its own case (#148).
+    sweep: null,
     stories,
   };
 }
