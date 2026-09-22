@@ -451,3 +451,75 @@ describe("a title that announces its own launch", () => {
     expect(CORPUS_TITLES.filter(announcesItsOwnLaunch)).toEqual([]);
   });
 });
+
+/**
+ * #76: the release-shaped headline whose name is not on the family list.
+ *
+ * Every title here is REAL — each one is recorded in #76, in the measured-and-
+ * reverted note in content-type.ts, or was read out of the stored corpus by
+ * scripts/measure-model-recall.ts. None is invented to make a rule look good,
+ * which matters more than usual here: the rule this covers was designed
+ * against a list of known false positives, so a fabricated case would be
+ * marking its own homework.
+ */
+describe("#76: a versioned name that leads the title", () => {
+  it.each([
+    ["TimesFM-3: A zero-shot foundation model for multivariate forecasting", "hyphen + colon"],
+    [
+      "Aurora 1.5: Extending open foundation models for weather and Earth-system applications",
+      "space + decimal version, plural noun",
+    ],
+  ])("types %s as MODEL (%s)", (title) => {
+    expect(classifyContentType(title, "NEWS")).toBe("MODEL");
+  });
+
+  /**
+   * THE FIVE THE REVERTED RULE GOT WRONG.
+   *
+   * This is the control that makes the new rule believable rather than
+   * hopeful, and it is worth stating what it proves: each of these is
+   * excluded by a DIFFERENT clause of the conjunction. If one clause did all
+   * the work, the other two would be decoration and this block would pass for
+   * a much looser rule.
+   */
+  it.each([
+    ["State of Open Models: Summer 2026", "a date, not a version — nothing leads"],
+    ["Training Text-to-Image Models 3.6x Faster", "an incidental figure, and no leading name"],
+    ["Import AI 454", "newsletter numbering, and no model noun"],
+    ["Datasette 1.0a39", "software: no model noun and no colon"],
+    ["Apple releases iOS 27", "software: the name does not lead"],
+  ])("leaves %s alone (%s)", (title) => {
+    expect(classifyContentType(title, "NEWS")).not.toBe("MODEL");
+  });
+
+  /**
+   * A DISCLOSED GAP, ASSERTED SO IT CANNOT CLOSE BY ACCIDENT.
+   *
+   * "We're launching Lyria 3.5" is the third miss #76 records and it stays
+   * missed on purpose: the only rule that reaches it is "launch verb +
+   * versioned name", which is the shape already measured as keeping software
+   * releases. Catching Lyria means swallowing "Apple releases iOS 27".
+   *
+   * Asserted rather than left to a comment because if someone later widens
+   * the rule far enough to catch this, THIS TEST GOING RED is how they find
+   * out they have re-opened the precision hole — and the line above, which
+   * must stay green, is what it costs.
+   */
+  it("still misses a launch verb with no model noun, which is the disclosed trade", () => {
+    expect(classifyContentType("We're launching Lyria 3.5", "NEWS")).not.toBe("MODEL");
+  });
+
+  /**
+   * The shape the corpus says is the REAL remaining gap: a model name with no
+   * version at all. Found by judging a deterministic sample of 60 still-
+   * untyped items. No regex over a title can separate these from any other
+   * product announcement — that needs a maintained list or a summariser.
+   */
+  it.each([
+    "Magistral",
+    "Introducing Shieldstral.",
+    "SensorFM: Towards a general intelligence and interface for wearable health data",
+  ])("documents the versionless miss: %s", (title) => {
+    expect(classifyContentType(title, "NEWS")).not.toBe("MODEL");
+  });
+});
