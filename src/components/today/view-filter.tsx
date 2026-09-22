@@ -64,7 +64,7 @@ export function ViewFilter({ current }: { current: BriefView }) {
       {/* NO SENTENCE UNDER THE CONTROL. It used to carry "Adds the reporting
           around them: news, discussion, funding and policy" — which is the
           smell this redesign is about. The relationship now lives in the
-          labels: "Built" and "Built + news" are visibly the same set plus
+          labels: "Launches" and "Launches + news" are visibly the same set plus
           something. */}
       <ViewMemory chosen={parseView(params.get("view"))} />
     </div>
