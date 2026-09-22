@@ -3,7 +3,8 @@ import {
   DEFAULT_BRIEF_LENGTH,
   briefWindow,
   parseBriefLength,
-  storiesInWindow, sweepSummary,
+  storiesInWindow,
+  sweepSummary,
   takeWithinReadingTime,
 } from "@/api/brief";
 import { getPreferences } from "@/api/reader";
