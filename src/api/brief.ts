@@ -223,8 +223,14 @@ export interface BriefOptions {
  * index rather than the table, and it ships without a schema change at all.
  */
 function arrivedSince(from: Date): SQL {
+  // AN ISO STRING WITH AN EXPLICIT CAST, not the Date. Interpolating a Date
+  // into a raw `sql` template hands it straight to postgres.js, which wants a
+  // string or a Buffer and throws "Received an instance of Date" — every brief
+  // request a 500. notHidden() next door never hit this because it interpolates
+  // only column references, so the pattern it models does not cover a value.
   return sql`exists (
-    select 1 from raw_items ri where ri.story_id = ${stories.id} and ri.fetched_at >= ${from}
+    select 1 from raw_items ri
+    where ri.story_id = ${stories.id} and ri.fetched_at >= ${from.toISOString()}::timestamptz
   )`;
 }
 
@@ -284,7 +290,7 @@ export async function sweepSummary(db: Db, from: Date): Promise<SweepSummary> {
       // COALESCE because sum() over no rows is NULL, and "the collector wrote
       // nothing" must not arrive as an absent number that renders as blank.
       // Zero is an answer; null is the absence of one.
-      itemsSinceWindowOpened: sql<number>`coalesce(sum(${ingestRuns.itemsNew}) filter (where ${ingestRuns.finishedAt} >= ${from}), 0)::int`,
+      itemsSinceWindowOpened: sql<number>`coalesce(sum(${ingestRuns.itemsNew}) filter (where ${ingestRuns.finishedAt} >= ${from.toISOString()}::timestamptz), 0)::int`,
     })
     .from(ingestRuns);
 

@@ -148,7 +148,11 @@ describe("why an empty brief is empty (#148)", () => {
   it("says the collector has never finished, which is not a quiet morning", () => {
     const r = emptyBriefReason(emptyWith({ lastFinishedAt: null, itemsSinceWindowOpened: 0 }));
     expect(r.kind).toBe("never-swept");
-    expect(r.body).not.toMatch(/quiet morning\./);
+    // NOT a substring assertion on the prose. The copy CONTRASTS itself with a
+    // quiet morning — "the collector not having run rather than a quiet
+    // morning" — and a negative match on the phrase cannot tell asserting it
+    // from denying it. The kind is the claim; the words are free to change.
+    expect(r.body).toMatch(/collector not having run/);
   });
 
   it("calls it quiet ONLY when the collector ran and found nothing", () => {
