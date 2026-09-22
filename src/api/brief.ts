@@ -250,7 +250,6 @@ export async function storiesInWindow(
   return buildCards(db, rows);
 }
 
-
 /**
  * What the collector has been doing, so an empty brief can never again be
  * mistaken for a quiet day (#148).
