@@ -9,7 +9,7 @@ const OPTIONS: { value: BriefLengthParam; label: string }[] = [
   { value: "5", label: "5 min" },
   { value: "10", label: "10 min" },
   // #147/#154: no word appears in two controls. The filter above owns
-  // "Built"; this one owns the reading time.
+  // "Launches"; this one owns the reading time.
   { value: "all", label: "Full brief" },
 ];
 
