@@ -1,0 +1,91 @@
+name: Apply additive migrations on merge
+
+# THE OUTAGE THIS EXISTS FOR. Nothing applied migrations on merge. Migration
+# 0004 added two columns, #71 began writing them in the same change, and the
+# code went live against a database that had never seen them: 17 sources failing
+# every 30 minutes for four days.
+#
+# WHY IT ONLY APPLIES SOME OF THEM. A migration that applies itself is a
+# destructive operation that applies itself. The set pending during that outage
+# was three irreversible DROPs and an UPDATE that erases diagnostics — 0003
+# would have wiped the evidence for the outage before anyone read it.
+#
+#   ADDITIVE     may apply itself, and MUST RUN BEFORE the code that uses it
+#   DESTRUCTIVE  is a decision, and MUST RUN AFTER the code stops using it
+#
+# Opposite orders, so this cannot be one step. This is the additive half. The
+# destructive half stays setup-database.yml, dispatched deliberately.
+#
+# KNOWN GAP, stated rather than discovered: Vercel deploys from its GitHub app
+# on push, which this workflow does not control, so "migrate before deploy" is a
+# race it wins by being fast rather than by being sequenced. It closes the
+# four-day window to seconds; it does not close it to zero. Sequencing properly
+# means owning the deploy.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "drizzle/**"
+  workflow_dispatch:
+
+concurrency:
+  group: migrate-on-merge
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  migrate:
+    name: apply additive migrations, refuse the rest
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Pin npm to the version in packageManager
+        run: |
+          NPM_VERSION="$(node -p "require('./package.json').packageManager.split('@')[1]")"
+          npm install -g "npm@${NPM_VERSION}"
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check the secret this job needs is set
+        run: |
+          if [ -z "${DATABASE_URL:-}" ]; then
+            echo "Missing repository secret: DATABASE_URL" >&2; exit 1
+          fi
+
+      # Prints the classification BEFORE anything is applied, so the log says
+      # what was decided rather than leaving it inferred from what happened.
+      - name: Classify every migration
+        run: node scripts/migration-gate.mjs --classify-all
+
+      - name: Decide, then apply only if every pending migration is additive
+        run: node scripts/migrate-if-additive.mjs
+
+      # The same alarm shape as ingest: one issue per outage, closed on
+      # recovery. A migration that needs a decision is not a failure of this
+      # workflow — it is this workflow doing its job — so it says so in words.
+      - name: Raise the alarm if a decision is needed
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          TITLE="A migration needs a decision before it can be applied"
+          NUM="$(gh issue list --state open --search "$TITLE in:title" --json number --jq '.[0].number // empty')"
+          if [ -z "${NUM:-}" ]; then
+            gh issue create --title "$TITLE" --body "$(printf '%s\n\n%s\n\n%s' \
+              "A migration merged to main that this workflow will not apply automatically, because it drops, rewrites or deletes something. The database is now BEHIND the code until someone decides." \
+              "Run: $RUN_URL" \
+              "Apply it deliberately with the 'Set up the database' workflow, after checking that no running code still reads what it removes.")"
+          fi
