@@ -71,22 +71,29 @@ export function isFloorBail(error) {
  * read 1 as "failed as it must" and certified a broken control. This helper
  * exists so that reasoning happens once rather than per script.
  *
- * `needle` is what makes this a control rather than a break: the NAMED
+ * `needles` is what makes this a control rather than a break: the NAMED
  * assertion has to be the one that failed. A control that reddens some other
  * line has proved a different floor can fail, which is the wrong-test problem
- * and is why this takes a substring instead of counting failures.
+ * and is why this takes substrings instead of counting failures.
+ *
+ * Pass several and EVERY one must have fired. A control that neutralises two
+ * things the script asserts should be held to reddening both — one env var is
+ * all ci.yml's map allows per check, so a control covering more than one floor
+ * has to prove it covered them rather than be credited for the first hit.
  */
-export function reportControl(floor, needle, label) {
-  const caught = floor.some((f) => f.includes(needle));
-  if (caught) {
+export function reportControl(floor, needles, label) {
+  const wanted = Array.isArray(needles) ? needles : [needles];
+  const missing = wanted.filter((n) => !floor.some((f) => f.includes(n)));
+  if (missing.length === 0) {
     console.log(`CONTROL OK: ${label} failed as it must (exiting 1, this contract's PASS)`);
     process.exit(1);
   }
   console.log(
-    `CONTROL FAILED: ${label} did not fail. ` +
+    `CONTROL FAILED: ${label} did not fail as required. ` +
+      `Never fired: ${missing.map((n) => JSON.stringify(n)).join(", ")}. ` +
       (floor.length > 0
-        ? `Something else did (${floor.length} other floor failure(s)), which is the wrong assertion — see the JSON above.`
-        : "Nothing failed at all, so this floor has not been shown able to fail."),
+        ? `${floor.length} other floor failure(s) did — see the JSON above; a red for the wrong reason is not a control.`
+        : "Nothing failed at all, so these floors have not been shown able to fail."),
   );
   process.exit(0);
 }
