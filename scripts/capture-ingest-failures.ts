@@ -19,7 +19,24 @@
  *     redaction, because write-time redaction only landed at d8ec412 and rows
  *     older than that were written without it;
  *   - error text is REPORTED AS SHAPES WITH COUNTS, never row by row;
- *   - an unrecognised shape is printed truncated, and the truncation is stated.
+ *   - an unrecognised shape is reported as a COUNT and nothing from the row.
+ *
+ * THAT LAST LINE WAS STALE FOR A WHILE, AND WHERE IT SURVIVED IS THE POINT.
+ * It said a sample was "printed truncated" after the sample had been removed.
+ * The same fact was ALSO wrong in two places in the withholding list below —
+ * both were caught in review and corrected, and the note recording that
+ * correction sits about a hundred lines down. This third instance sat twelve
+ * lines above it and survived the same review by the same people.
+ *
+ * Not importance, not position — GENRE:
+ *
+ *   A CLAIMS LIST GETS AUDITED BECAUSE IT READS LIKE A PROMISE.
+ *   A MECHANISM LIST DOES NOT, BECAUSE IT READS LIKE PROSE.
+ *
+ * The withholding list looks like a check, so it attracted checking. These
+ * bullets describe how the thing works, and explanation gets skimmed. When you
+ * correct a fact, grep every restatement of it — including the ones that do not
+ * look like claims.
  *
  * WHAT THIS DOES NOT PRINT, so the operator knows what he is not seeing.
  * THIS LIST IS THE CHECK, NOT A DESCRIPTION: a public Actions log is readable
@@ -32,6 +49,11 @@
  *   - no SQL parameters (they live inside the error text, which is never shown)
  *   - no story, item or source content
  *   - no source KEYS: section 4 reads `key` to group by, and prints only shapes
+ *   - no column name FROM THE DATABASE: `actual` is used only for .has() and
+ *     .size, and every name in `missing` comes from getTableColumns() — the
+ *     code's own schema. A strangely-named production column cannot appear
+ *     here. (Found in review; the list was under-reporting what it withholds,
+ *     which is the same unchecked defect wearing a harmless face.)
  *
  * IT IS READ-ONLY BY CONSTRUCTION: every statement below is a SELECT. It takes
  * no argument that could make it write, and it never calls migrate or seed.
