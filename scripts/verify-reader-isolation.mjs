@@ -225,7 +225,7 @@ try {
   }
   bailIfBroken(floor, settingMark);
   if (lengthB !== "Full brief")
-    floor.push(`the second browser chose Everything and has ${lengthB}`);
+    floor.push(`the second browser chose Full brief and has ${lengthB}`);
   if (lengthAAfter !== "Five minutes") {
     floor.push(
       `the second browser's choice moved the first browser's brief length to ${lengthAAfter}`,

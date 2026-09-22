@@ -105,10 +105,19 @@ cap, and changing it changes the bill proportionally.
 This is the one recurring cost the project has today. Nothing here is a paid API call,
 which is exactly why it is easy to miss.
 
-`.github/workflows/ingest.yml` runs every 30 minutes: **48 runs a day, about 1,440 a
-month.** This repository is **private**, so those minutes bill against the GitHub Free
-plan's **2,000 minutes a month** rather than being free as they would be on a public
-repository.
+`.github/workflows/ingest.yml` **declares** `*/30` — 48 runs a day, about 1,440 a
+month. **GitHub does not keep that schedule.** Scheduled workflows are best-effort:
+measured 2026-09-17 to 09-22, 39 runs, about **7 a day**.
+
+Every figure below is derived from the DECLARED rate, so treat them as a **ceiling
+rather than an estimate** — the real bill has been roughly a seventh of them. The
+ceiling is deliberately not corrected downward: a cost document that assumed the
+scheduler's generosity would understate the bill the day GitHub starts honouring
+the cron.
+
+This repository was **private** when those figures were written, so the minutes
+billed against the GitHub Free plan's **2,000 minutes a month**. It is public now
+and they are free — #59.
 
 Measured from this project's own runs, not estimated:
 

@@ -266,7 +266,7 @@ try {
     await ctx.close();
   }
 
-  /* ---- 3b. the three screen states are TOLD APART, not inferred ---------
+  /* ---- 3b. unreachable is TOLD APART from empty, not inferred -----------
    *
    * "No stories rendered" is true of a quiet morning AND of a database we
    * cannot reach. An assertion that cannot separate them passes for the broken
@@ -321,29 +321,26 @@ try {
     // Whatever state it is in, it must be INTERNALLY consistent: the marker,
     // the story count and the words on screen must agree.
     if (state === "brief" && storyCount < 1) floor.push("state=brief but no stories rendered");
-    if (state === "quiet" && storyCount > 0) floor.push("state=quiet but stories rendered");
     if (state === "unreachable" && !out.screenState.saysCannotReach) {
       floor.push("state=unreachable but the screen does not say it cannot reach anything");
-    }
-    if (state === "quiet" && out.screenState.saysCannotReach) {
-      floor.push("an empty brief is being described as a failure");
     }
     if (state === "unreachable" && out.screenState.emptyReason) {
       floor.push("an unreachable database is being given one of the empty-brief reasons");
     }
     // NO "state=quiet" FLOOR HERE, AND THE REASON IS WORTH THE LINES.
     //
-    // I added one — "an empty brief must say which kind of empty it is" — and
-    // the control proved it COULD NOT FIRE. This section is reached only if
+    // One was added — "an empty brief must say which kind of empty it is" —
+    // and the control proved it COULD NOT FIRE. This section is reached only if
     // section 1 passed, and section 1 requires at least MIN_STORIES stories
     // and a corpus longer than the budget. A page with stories is `brief`, not
     // `quiet`. So `state === "quiet"` is unreachable from here, and a floor
     // that cannot fire is not a protection, it is a claim.
     //
-    // THE TWO BRANCHES BELOW HAVE THE SAME PROBLEM and predate this change;
-    // they are left rather than deleted because removing them is not this
-    // ticket's business, but they are noted so the next person does not read
-    // them as coverage.
+    // TWO MORE quiet branches used to sit here with the same problem, kept and
+    // annotated because deleting them was not that ticket's business. #132
+    // made it somebody's business: they are gone. An unreachable assertion
+    // left in place with a note explaining why it cannot fire still READS as
+    // coverage to anyone scanning for what this file checks.
     //
     // The quiet state IS asserted, on a genuinely empty database, by the
     // "A reachable, empty database is a quiet day, not a failure" step in

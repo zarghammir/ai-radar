@@ -18,6 +18,13 @@
  * The schedule in ingest.yml is a cron of every thirtieth minute, so this
  * threshold is a time in disguise:
  *
+ * ⚠️ THE WALL-CLOCK COLUMN BELOW ASSUMES THE DECLARED HALF-HOURLY CRON, WHICH
+ * GITHUB DOES NOT KEEP. Measured 2026-09-17 to 09-22: about 7 passes a day, so
+ * each figure is roughly SEVEN TIMES LONGER in practice — N = 3 is most of a day,
+ * not ninety minutes. The threshold is still the right shape, because it counts
+ * PASSES rather than time; the note is here so nobody reads the column as a
+ * promise about how quickly a source is flagged.
+ *
  *   N = 1   30 minutes   any single 500 from any of eighteen feeds flags it
  *   N = 3   90 minutes   a blip survives; a real outage is caught before noon
  *   N = 6   3 hours

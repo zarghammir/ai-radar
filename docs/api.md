@@ -653,7 +653,10 @@ is indistinguishable from a feed refused on every run for a week. `health` is
 computed from `ingest_runs` history — `consecutiveFailures` counts failures
 since the source last succeeded, and a source crosses to `FAILING` at three.
 
-Three is a duration in disguise. The ingest schedule runs every thirty minutes,
+Three is a duration in disguise. The ingest schedule DECLARES thirty minutes and
+GitHub does not keep it — about 7 passes a day measured — so the wall-clock
+meaning of a consecutive-failure count is roughly seven times longer than it
+reads,
 so three consecutive failures is ninety minutes of uninterrupted failure: long
 enough that no single transient 500 reaches it, short enough that a source
 which died overnight is already flagged when someone looks in the morning. The
