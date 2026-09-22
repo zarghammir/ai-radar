@@ -74,7 +74,9 @@ export default async function StoryPage({ params }: PageProps<"/story/[slug]">) 
         story.primarySource ? (
           <span>
             {story.primarySource.name}
-            {story.sourceCount > 1 ? ` and ${story.sourceCount - 1} other source(s)` : ""}
+            {story.sourceCount > 1
+              ? ` and ${story.sourceCount - 1} other source${story.sourceCount - 1 === 1 ? "" : "s"}`
+              : ""}
           </span>
         ) : undefined
       }

@@ -33,7 +33,21 @@ export function StoryProvenance({
   story: StoryDetail;
   publishedAt: Date | null;
 }) {
-  const primary = story.items.find((i) => i.role === "primary") ?? story.items[0] ?? null;
+  // THE TRUE PRIMARY IS THE ONE THE STORY'S OWN URL CAME FROM, not the first
+  // item wearing the role. Real seeded data turned up a story with THREE
+  // sources and TWO items both marked "primary" — `role` is a property of an
+  // item, and nothing stops two of them carrying it, while `stories.
+  // primary_item_id` picks exactly one and is what `story.url` is built from.
+  //
+  // Matching on the url therefore agrees with the card by construction rather
+  // than by coincidence, and picking "the first one with the role" would have
+  // been right almost always and silently wrong here. Role is kept as the
+  // fallback for a story whose url is null.
+  const primary =
+    story.items.find((i) => story.url !== null && i.url === story.url) ??
+    story.items.find((i) => i.role === "primary") ??
+    story.items[0] ??
+    null;
   const others = story.items.filter((i) => i !== primary);
 
   return (
@@ -103,7 +117,17 @@ export function StoryProvenance({
                   {when(item.publishedAt)}
                 </span>{" "}
                 <b className="text-ink font-semibold">{item.source.name}</b>
-                {item.role ? <span className="text-ash"> · {item.role}</span> : null}
+                {/* A ROLE OF "primary" IS NOT PRINTED HERE, because this list is
+                    headed "Then picked up by" and the two together contradict
+                    each other. Real seeded data produced a story with two items
+                    both marked primary — `role` is per item and nothing stops
+                    that — and the true origin is already shown above. Printing
+                    it a second time under a heading that says the opposite
+                    tells the reader something false about the relationship.
+                    Every other role is information and is kept. */}
+                {item.role && item.role !== "primary" ? (
+                  <span className="text-ash"> · {item.role}</span>
+                ) : null}
                 <a
                   href={item.url}
                   target="_blank"
