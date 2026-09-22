@@ -14,10 +14,30 @@
 -- service refused us" are all the same observable: no notification. Each is
 -- now a row with its own outcome and a sentence saying which.
 --
--- Written by hand rather than generated, as 0003 was. The snapshot in
--- meta/0007_snapshot.json is written alongside it so the NEXT drizzle-kit
--- generate diffs against a tree that contains these tables — without it the
--- next person's migration would try to create them a second time.
+-- ─────────────────────────────────────────────────────────────────────────
+-- IF YOU ARE WRITING A HAND MIGRATION, READ THIS FIRST.
+--
+-- This file was written by hand rather than generated, as 0003 was. But it
+-- carries a snapshot and 0003 does not, and the difference is not an
+-- inconsistency — it is the rule:
+--
+--   0003 CHANGED NO SCHEMA. It was two UPDATE statements. drizzle-kit diffs
+--   TABLE SHAPES, so a data-only migration leaves the shape identical and
+--   needs no snapshot to keep the next diff honest.
+--
+--   0007 CREATES TABLES. Without meta/0007_snapshot.json, the next
+--   `drizzle-kit generate` diffs the schema against 0006 — a tree with no
+--   push_subscriptions and no brief_sends — decides they are missing, and
+--   emits a migration that CREATES THEM A SECOND TIME. That migration then
+--   fails against any database where 0007 already ran.
+--
+-- So: a hand migration that changes a table's shape MUST be accompanied by a
+-- snapshot; one that only moves data must not bother. Getting this wrong does
+-- not fail here — it fails in whoever's branch comes next, which is the worst
+-- place for it to surface. The collector spent three days down in September
+-- on a migration that was listed and never executed; this is the neighbouring
+-- failure, and it is cheap to avoid and expensive to diagnose.
+-- ─────────────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS "push_subscriptions" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"endpoint" text NOT NULL,
