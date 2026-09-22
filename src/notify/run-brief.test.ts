@@ -70,13 +70,29 @@ function fakeDb(overrides: Partial<FakeState> = {}): { db: Db; state: FakeState 
   return { db, state };
 }
 
-const ENV = {
-  NEXT_PUBLIC_VAPID_PUBLIC_KEY: Buffer.concat([Buffer.from([0x04]), Buffer.alloc(64, 1)]).toString(
-    "base64url",
-  ),
-  VAPID_PRIVATE_KEY: Buffer.alloc(32, 2).toString("base64url"),
-  VAPID_SUBJECT: "mailto:o@example.com",
-};
+/**
+ * A REAL key pair, because a fake one changes what this file measures.
+ *
+ * With dummy bytes every attempt fails inside the signer, so "the push service
+ * refused with 500" and "it was delivered" both arrive as a signing failure
+ * and the assertions below pass for the wrong reason. That is not
+ * hypothetical: this fixture shipped with dummy bytes and four tests went red
+ * in CI saying "expected 'Invalid JWK EC key' to contain '500'".
+ */
+const ENV = (() => {
+  const { publicKey, privateKey } = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+  const jwk = publicKey.export({ format: "jwk" }) as { x: string; y: string };
+  const priv = privateKey.export({ format: "jwk" }) as { d: string };
+  return {
+    NEXT_PUBLIC_VAPID_PUBLIC_KEY: Buffer.concat([
+      Buffer.from([0x04]),
+      Buffer.from(jwk.x, "base64url"),
+      Buffer.from(jwk.y, "base64url"),
+    ]).toString("base64url"),
+    VAPID_PRIVATE_KEY: Buffer.from(priv.d, "base64url").toString("base64url"),
+    VAPID_SUBJECT: "mailto:o@example.com",
+  };
+})();
 const DUE = new Date("2026-09-22T09:00:00Z");
 const EARLY = new Date("2026-09-22T06:00:00Z");
 const silent = () => {};
