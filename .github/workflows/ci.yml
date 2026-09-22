@@ -97,6 +97,14 @@ jobs:
       - name: The ingest alarm decides correctly
         run: node .github/scripts/ingest-alarm.mjs --self-test
 
+      # The migration gate's classifier, on every PR. Its acceptance test is
+      # this repository's own history: 0004 (two ADD COLUMNs) must classify
+      # additive — that is the migration whose absence caused the four-day
+      # outage — and 0003 (an UPDATE that erases diagnostics) must NOT, because
+      # auto-applying it would have destroyed the evidence for that outage.
+      - name: The migration gate classifies correctly
+        run: node scripts/migration-gate.mjs --self-test
+
       # `typecheck` is `next typegen && tsc --noEmit`. The typegen half is not
       # decoration: LayoutProps and friends live in gitignored .next/types, so a
       # clean checkout cannot typecheck without it.
