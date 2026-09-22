@@ -71,10 +71,12 @@ export default async function StoryPage({ params }: PageProps<"/story/[slug]">) 
       eyebrow={<LocalDate />}
       title={story.title}
       summary={
-        <span className="flex flex-wrap items-center gap-3">
-          <ContentTypeBadge type={story.contentType} />
-          <VerificationChip level={story.verification} />
-        </span>
+        story.primarySource ? (
+          <span>
+            {story.primarySource.name}
+            {story.sourceCount > 1 ? ` and ${story.sourceCount - 1} other source(s)` : ""}
+          </span>
+        ) : undefined
       }
       state="brief"
     >
@@ -83,20 +85,38 @@ export default async function StoryPage({ params }: PageProps<"/story/[slug]">) 
           that also sets state. */}
       <MarkRead storyId={story.id} />
 
-      {story.verificationNote ? (
-        <p className="text-soft border-faint border-l-2 pl-3 text-[14px] leading-relaxed">
-          {story.verificationNote}
-        </p>
-      ) : null}
+      {/* ON PAPER, LIKE A CARD, AND THIS IS NOT DECORATION. The shell is a
+          dark BENCH surface; `text-ink` and the verification chip are PAPER
+          tokens. Rendered straight onto the bench they came out dark on dark —
+          the chip was an unreadable box and the source's own name was barely
+          visible. The DOM was perfect: right elements, right text, right
+          attributes. Only the picture showed it, which is why these get
+          looked at rather than just taken. */}
+      <div className="bg-paper text-ink mr-4 p-4 lg:mr-0">
+        {/* THE BADGES BELONG ON PAPER TOO, and for the same reason as the body.
+            The verification chip is built from PAPER tokens — text-ink inside a
+            faint border — so on the dark shell it rendered as an unreadable box
+            with a meter nobody could see. It reads correctly here, which is
+            also where the card puts it. */}
+        <div className="mb-3 flex items-center gap-3">
+          <ContentTypeBadge type={story.contentType} />
+          <VerificationChip level={story.verification} />
+        </div>
+        {story.verificationNote ? (
+          <p className="text-soft border-faint border-l-2 pl-3 text-[14px] leading-relaxed">
+            {story.verificationNote}
+          </p>
+        ) : null}
 
-      <SummaryBlock story={story} />
+        <SummaryBlock story={story} />
 
-      <StoryProvenance story={story} publishedAt={published} />
+        <StoryProvenance story={story} publishedAt={published} />
 
-      <WhyRanked components={story.scoreComponents} total={story.score} />
+        <WhyRanked components={story.scoreComponents} total={story.score} />
 
-      <div className="border-faint mt-6 border-t pt-4">
-        <StoryActions story={story as unknown as StoryCard} />
+        <div className="border-faint mt-6 border-t pt-4">
+          <StoryActions story={story as unknown as StoryCard} />
+        </div>
       </div>
     </PageShell>
   );
