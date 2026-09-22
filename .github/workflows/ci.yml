@@ -494,7 +494,13 @@ jobs:
           # those assertions guard the PICTURES, not the product. Running it here
           # would also make CI depend on a corpus that differs by view, which is
           # a property of the seed rather than of the app.
-          NOT_A_CHECK="scripts/shoot-filter.mjs"
+          # Newline-separated: the loop below matches with `grep -qx`, so each
+          # entry has to be its own line. Both are CAPTURE scripts — they take
+          # the pictures a PR body carries. They assert plenty before each
+          # shutter, but those assertions guard the PICTURES rather than the
+          # product, and running them here would tie the job to a seeded corpus.
+          NOT_A_CHECK="scripts/shoot-filter.mjs
+          scripts/shoot-story.mjs"
 
           DRIVERS="$(grep -rl "launchBrowser" scripts --include='*.mjs' 2>/dev/null | grep -v '^scripts/lib/' | sort || true)"
           SELECTED_FILES="$(while IFS= read -r c; do
