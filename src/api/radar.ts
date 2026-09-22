@@ -1,6 +1,6 @@
 import { and, desc, gte, inArray, sql, type SQL } from "drizzle-orm";
 import type { Db } from "@/db/client";
-import { stories } from "@/db/schema";
+import { sources, stories, topics } from "@/db/schema";
 import { buildCards, type StoryCard } from "./stories";
 import { encodeCursor, type Cursor, type RadarFilters, type Sort } from "./params";
 
@@ -208,10 +208,22 @@ export async function unknownKeys(
   keys: string[],
 ): Promise<string[]> {
   if (keys.length === 0) return [];
+
+  // THROUGH THE QUERY BUILDER, NOT A RAW TEMPLATE. This was
+  // sql`select key from topics where key in ${keys}` — a JS ARRAY
+  // interpolated into a raw template, which is the same shape as the Date that
+  // would have made every brief request a 500 (#148). A raw `sql` fragment
+  // hands its values straight to the driver; only a column reference is safe
+  // there without thinking about it.
+  //
+  // `inArray` builds the placeholder list and the binding, so the expansion is
+  // the library's problem rather than a string's. It is also typed against the
+  // column, so a rename cannot leave this reading a field that no longer
+  // exists.
   const rows =
     kind === "topic"
-      ? await db.execute(sql`select key from topics where key in ${keys}`)
-      : await db.execute(sql`select key from sources where key in ${keys}`);
-  const found = new Set((rows as unknown as { key: string }[]).map((r) => r.key));
+      ? await db.select({ key: topics.key }).from(topics).where(inArray(topics.key, keys))
+      : await db.select({ key: sources.key }).from(sources).where(inArray(sources.key, keys));
+  const found = new Set(rows.map((r) => r.key));
   return keys.filter((k) => !found.has(k));
 }

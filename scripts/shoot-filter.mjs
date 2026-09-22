@@ -98,13 +98,15 @@ try {
     await page.goto(`${base}/?view=built`, { waitUntil: "networkidle" });
     const built = await cards(page).count();
     if (built < MIN_BUILT)
-      floor.push(`only ${built} stories on Built; the pair cannot show a difference worth seeing`);
+      floor.push(
+        `only ${built} stories on Launches; the pair cannot show a difference worth seeing`,
+      );
     bailIfBroken(floor, mark);
     await shoot(page, {
       name: "today-built-phone-dark",
       expectView: "built",
       expectState: "brief",
-      what: `The app as it opens. ${built} things people built.`,
+      what: `The app as it opens. ${built} launches.`,
     });
 
     await page.goto(`${base}/?view=all`, { waitUntil: "networkidle" });
@@ -115,7 +117,7 @@ try {
     // proof that it does.
     if (!(all > built))
       floor.push(
-        `the two positions returned the SAME SET (${built} on Built, ${all} on Everything) — ` +
+        `the two positions returned the SAME SET (${built} on Launches, ${all} on Launches + news) — ` +
           `there is no difference to photograph, so no files were written. ` +
           `DO NOT take these shots by hand instead, and do not delete this check: ` +
           `both produce a pair of pictures that look like proof the filter works ` +
@@ -126,7 +128,7 @@ try {
       name: "today-all-phone-dark",
       expectView: "all",
       expectState: "brief",
-      what: `One tap wider: ${all} stories, the same moment. ${all - built} more than Built.`,
+      what: `One tap wider: ${all} stories, the same moment. ${all - built} more than Launches.`,
     });
 
     await ctx.close();
@@ -146,7 +148,7 @@ try {
       name: "today-built-laptop-light",
       expectView: "built",
       expectState: "brief",
-      what: `The control and the count in one frame: ${built} built things.`,
+      what: `The control and the count in one frame: ${built} launches.`,
     });
 
     await page.goto(`${base}/?view=all`, { waitUntil: "networkidle" });
@@ -241,7 +243,7 @@ try {
         name: "today-quiet-phone-dark",
         expectView: "built",
         expectState: "quiet",
-        what: `A genuinely quiet day: the window opened at ${briefTime} and nothing has been built since. The database ANSWERED — this is not the unreachable state.`,
+        what: `A genuinely quiet day: the window opened at ${briefTime} and nothing has launched since. The database ANSWERED — this is not the unreachable state.`,
       });
 
       await ctx.close();
