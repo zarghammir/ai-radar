@@ -12,8 +12,19 @@
  * IT CLICKS. Each position is reached by clicking the control, not by typing a
  * URL, because a control that cannot be operated at 390px is the defect this
  * is meant to catch.
+ *
+ * NOTHING IS WRITTEN UNTIL EVERY FLOOR HAS PASSED. The first version took each
+ * screenshot straight to disk and only then printed "these shots are not
+ * evidence" and exited 1 — so A RED RUN AND A GREEN RUN LEFT AN IDENTICAL
+ * WORKING TREE. The images from a failed run could be committed, and nothing
+ * on disk said which run produced them.
+ *
+ * That is the same defect as a floor that lives in /tmp, one level up: the
+ * instrument existed, ran, and failed correctly, and still left behind
+ * artefacts indistinguishable from a pass. Screenshots are held in memory and
+ * written at the end, together, only if the floor is empty.
  */
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { launchBrowser, requireServer } from "./lib/browser.mjs";
 import { markOnboarded } from "./lib/seed.mjs";
 
@@ -34,6 +45,8 @@ const READING = '[role="group"][aria-label="How much to read"]';
 
 const floor = [];
 const shots = [];
+/** Held in memory until every floor has passed. See the note above. */
+const pending = [];
 const browser = await launchBrowser();
 
 try {
@@ -101,7 +114,8 @@ try {
         );
       }
       const file = `${DIR}/${name}-${vp.key}-${position}.png`;
-      await page.screenshot({ path: file });
+      // NO `path` — the bytes come back and go nowhere until the end.
+      pending.push({ file, bytes: await page.screenshot() });
       shots.push({
         file: file.split("/").pop(),
         width: vp.width,
@@ -123,8 +137,10 @@ try {
 
 console.log(JSON.stringify({ base, shots, floor }, null, 2));
 if (floor.length) {
-  console.error("\nFLOOR BROKEN — these shots are not evidence:");
+  console.error("\nFLOOR BROKEN — nothing was written. These shots are not evidence:");
   for (const f of floor) console.error(`  - ${f}`);
+  console.error(`  (${pending.length} screenshot(s) discarded rather than left on disk)`);
   process.exit(1);
 }
-console.log(`\n${shots.length} shots written to ${DIR}`);
+for (const shot of pending) await writeFile(shot.file, shot.bytes);
+console.log(`\n${pending.length} shots written to ${DIR}`);

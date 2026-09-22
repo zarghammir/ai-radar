@@ -1771,4 +1771,46 @@ withDb("API routes", () => {
       expect(d.sweep).toHaveProperty("itemsSinceWindowOpened");
     });
   });
+
+  /**
+   * unknownKeys, pinned directly rather than incidentally (#154 review).
+   *
+   * The review flagged the old implementation — a JS array interpolated into a
+   * raw `sql` template — as the same shape as the Date that would have made
+   * every brief request a 500, and as untested.
+   *
+   * THE SHAPE IS RIGHT AND THE CONCLUSION WAS NOT: the old code worked, and it
+   * WAS covered — "/api/radar?topic=does-not-exist" above reaches it with a
+   * non-empty array and gets its 400. The whole file passed against it. So the
+   * change to `inArray` is HARDENING, not a bug fix: it stops the behaviour
+   * depending on how a raw template happens to expand an array, and types the
+   * comparison against the column.
+   *
+   * These two pin it directly, because the existing coverage proves the
+   * ROUTE's verdict and never states what unknownKeys itself returns — which
+   * is the thing a future refactor would change.
+   */
+  describe("unknownKeys names exactly the keys that are missing", () => {
+    it("separates present keys from absent ones rather than answering all-or-nothing", async () => {
+      await topic("openai", "OpenAI");
+      await topic("anthropic", "Anthropic");
+      const { unknownKeys } = await import("@/api/radar");
+      const { getDb } = await import("@/db/client");
+
+      expect(await unknownKeys(getDb(), "topic", ["openai", "anthropic"])).toEqual([]);
+      // THE MIXED CASE. An implementation that returned everything, or nothing,
+      // whenever any key was missing would satisfy a test that only ever asked
+      // about one key at a time.
+      expect(await unknownKeys(getDb(), "topic", ["openai", "ghost", "anthropic"])).toEqual([
+        "ghost",
+      ]);
+    });
+
+    it("answers for sources too, on the same shape", async () => {
+      await source("a-real-source");
+      const { unknownKeys } = await import("@/api/radar");
+      const { getDb } = await import("@/db/client");
+      expect(await unknownKeys(getDb(), "source", ["a-real-source", "nope"])).toEqual(["nope"]);
+    });
+  });
 });

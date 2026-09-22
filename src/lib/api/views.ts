@@ -69,18 +69,27 @@ export function parseView(value: string | string[] | undefined | null): BriefVie
  * ITSELF IS MISNAMED, and there is no `hint` field any more because there is
  * nowhere honest to put one.
  *
- * "LAUNCHES" IS THE OWNER'S CHOICE, from three he was offered. The previous
- * version of this comment said "Built" stayed because it was HIS word — THAT
- * WAS FALSE, and it is recorded here rather than quietly overwritten because
- * it is the kind of claim that gets built on.
+ * "LAUNCHES" IS THE OWNER'S CHOICE, from three he was offered.
  *
- * What he actually said was "the fun part — the startups, the cool things".
- * "Built" was a lane's shorthand on a roadmap page, carried forward through
- * enough hands that it arrived as something he had chosen. He then looked at
- * the redesign and asked what "Built" meant.
+ * THE REASON IS FALSIFIABLE FROM THIS REPOSITORY: he looked at the redesign on
+ * #153 and asked what "Built" meant. A LABEL THE OWNER HAS TO ASK ABOUT HAS
+ * FAILED, however good the hierarchy around it — and none of that hierarchy
+ * changed, only this word.
  *
- * A LABEL THE OWNER HAS TO ASK ABOUT HAS FAILED, however good the hierarchy
- * around it — and none of that hierarchy changed, only this word.
+ * WHAT THIS COMMENT USED TO SAY, AND WHY IT DOES NOT NOW. It claimed "Built"
+ * stayed because it was the owner's own word. That was false — it was a lane's
+ * shorthand from a roadmap page, carried through enough hands to arrive as
+ * something he had chosen — and a naming decision was built on it and defended
+ * in a pull request.
+ *
+ * The first correction then reproduced the defect it was documenting: it put
+ * his actual words in QUOTATION MARKS with nothing to check them against.
+ * Vague and unanchored became precise and unanchored, which is worse, because
+ * a quotation invites belief. The substance reached this file second-hand and
+ * there is no issue or comment here to cite, so it is not quoted: he has
+ * described what he wants in terms of the fun part of the field — startups and
+ * the interesting things people put out — rather than in terms of "building".
+ * That is a paraphrase, and it is labelled as one.
  *
  * "Launches + news" makes the relationship the thing you read. It is visibly a
  * SUPERSET of the other position: same word, plus something. The `+` does what
