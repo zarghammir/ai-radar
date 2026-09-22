@@ -16,14 +16,28 @@ import { classifyMigration, plan } from "./migration-gate.mjs";
 const sql = postgres(process.env.DATABASE_URL, { max: 1, onnotice: () => {} });
 const journal = JSON.parse(readFileSync("drizzle/meta/_journal.json", "utf8"));
 
+// The created_at VALUES, not a count. `__drizzle_migrations.created_at` IS the
+// journal's `when`: the migrator carries journalEntry.when through as
+// folderMillis (migrator.cjs:55) and inserts it as created_at
+// (pg-core/dialect.cjs:69). So the ledger says exactly which entries ran.
+//
+// IT USED TO DERIVE THIS FROM ARRAY INDEX — `applied: i < count` — which is
+// correct only if the journal's order matches production's application order.
+// THAT IS THE INVARIANT #122 ENFORCES IN A PULL REQUEST, and this check exists
+// because PR-time invariants may not hold in production. It derived its key
+// input from the one thing it was written not to trust.
+//
+// The failure was silent and in the dangerous direction: a below-watermark
+// UNAPPLIED entry whose index happened to fall under the count was marked
+// applied, dropped out of belowWatermark, and THE GATE PASSED — while drizzle
+// skipped it permanently. That is the scenario this check was built for.
 const rows = await sql`
-  select coalesce(max(created_at), 0)::bigint as w,
-         count(*)::int as n
-  from drizzle.__drizzle_migrations`.catch(() => [{ w: 0n, n: 0 }]);
-const watermark = Number(rows[0].w);
-console.log(`  production: ${rows[0].n} applied, watermark ${watermark}`);
+  select created_at from drizzle.__drizzle_migrations`.catch(() => []);
+const appliedWhens = new Set(rows.map((r) => Number(r.created_at)));
+const watermark = appliedWhens.size ? Math.max(...appliedWhens) : 0;
+console.log(`  production: ${appliedWhens.size} applied, watermark ${watermark}`);
 
-const entries = journal.entries.map((e, i) => ({ ...e, applied: i < rows[0].n }));
+const entries = journal.entries.map((e) => ({ ...e, applied: appliedWhens.has(e.when) }));
 const { pending, belowWatermark } = plan(entries, watermark);
 
 if (belowWatermark.length > 0) {
