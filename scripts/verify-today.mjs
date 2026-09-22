@@ -265,13 +265,24 @@ try {
     if (state === "unreachable" && out.screenState.emptyReason) {
       floor.push("an unreachable database is being given one of the empty-brief reasons");
     }
-    // AN EMPTY BRIEF MUST SAY WHICH KIND OF EMPTY IT IS. Without this the
-    // screen can go back to one flattened "no stories" message, which is the
-    // whole of #148: the old copy asserted a quiet morning on a day the
-    // collector had written sixty-four stories.
-    if (state === "quiet" && !out.screenState.emptyReason) {
-      floor.push("state=quiet but the screen does not say WHY it is empty (no data-empty-reason)");
-    }
+    // NO "state=quiet" FLOOR HERE, AND THE REASON IS WORTH THE LINES.
+    //
+    // I added one — "an empty brief must say which kind of empty it is" — and
+    // the control proved it COULD NOT FIRE. This section is reached only if
+    // section 1 passed, and section 1 requires at least MIN_STORIES stories
+    // and a corpus longer than the budget. A page with stories is `brief`, not
+    // `quiet`. So `state === "quiet"` is unreachable from here, and a floor
+    // that cannot fire is not a protection, it is a claim.
+    //
+    // THE TWO BRANCHES BELOW HAVE THE SAME PROBLEM and predate this change;
+    // they are left rather than deleted because removing them is not this
+    // ticket's business, but they are noted so the next person does not read
+    // them as coverage.
+    //
+    // The quiet state IS asserted, on a genuinely empty database, by the
+    // "A reachable, empty database is a quiet day, not a failure" step in
+    // ci.yml — which runs BEFORE the seed. That is where the #148 check for
+    // data-empty-reason lives, because that is where the state exists.
     await ctx.close();
   }
 
