@@ -1607,4 +1607,88 @@ withDb("API routes", () => {
       expect(d.discussionUrl).toBeNull();
     });
   });
+
+  /**
+   * #15 / #138 — "NO SUMMARY" IS THREE FACTS AND THE CONTRACT CARRIES WHICH.
+   *
+   * The summariser ships OFF, so almost every story has no summary. But
+   *
+   *   summarizedAt null                  nobody tried — no provider configured
+   *   summarizedAt set, summary null     tried, and produced nothing
+   *   summarizedAt set, summary present  done
+   *
+   * are different answers, and only the middle one is a reason to distrust the
+   * page. Collapsing the first two is the absence-versus-failure defect, so the
+   * route has to expose enough to tell them apart — which it did not until the
+   * story page needed it.
+   */
+  describe("the story contract distinguishes never-summarised from summarised-and-empty (#15)", () => {
+    async function detailFor(slug: string, summary: string | null, summarizedAt: Date | null) {
+      const src = await source(`sum-${slug}`);
+      const at = new Date(Date.now() - 3_600_000);
+      const [st] = await sql.unsafe(
+        `insert into stories (slug,title,summary,summarized_at,summary_provider,content_type,verification,verification_note,first_seen_at,last_activity_at,source_count,score,adjacent_tech)
+         values ($1,$2,$3,$4,$5,'NEWS','CORROBORATED','graded',$6,$6,1,5,false) returning id`,
+        [
+          slug,
+          `story ${slug}`,
+          summary,
+          summarizedAt?.toISOString() ?? null,
+          summary ? "test-provider" : null,
+          at.toISOString(),
+        ],
+      );
+      const storyId = Number(st.id);
+      const [ri] = await sql.unsafe(
+        `insert into raw_items (source_id,external_id,url,canonical_url,title,excerpt,published_at,fetched_at,content_type,metadata,fingerprint,story_id,role)
+         values ($1,$2,$3,$3,$4,'the source own excerpt',$5,$5,'NEWS','{}',$6,$7,'primary') returning id`,
+        [
+          src,
+          `${slug}-x`,
+          `https://example.com/${slug}`,
+          `story ${slug}`,
+          at.toISOString(),
+          `${slug}-fp`,
+          storyId,
+        ],
+      );
+      await sql.unsafe(`update stories set primary_item_id = $1 where id = $2`, [
+        Number(ri.id),
+        storyId,
+      ]);
+      const { GET } = await import("@/app/api/stories/[slug]/route");
+      const res = await GET(req(`/api/stories/${slug}`), {
+        params: Promise.resolve({ slug }),
+      } as never);
+      expect(res.status).toBe(200);
+      return body(res);
+    }
+
+    it("reports never-tried as summarizedAt null, with the excerpt still carrying the page", async () => {
+      const d = await detailFor("never-tried", null, null);
+      expect(d.summary).toBeNull();
+      expect(d.summarizedAt).toBeNull();
+      expect(d.summaryProvider).toBeNull();
+      // The fallback the page renders. Without it a never-summarised story
+      // would be a blank screen rather than a thinner one.
+      expect(d.excerpt).toBe("the source own excerpt");
+    });
+
+    it("reports tried-and-empty as summarizedAt SET with summary still null", async () => {
+      const when = new Date(Date.now() - 600_000);
+      const d = await detailFor("tried-and-empty", null, when);
+      expect(d.summary).toBeNull();
+      // THE DISTINCTION. Same null summary as above, different fact, and the
+      // only thing that tells them apart is this field being present.
+      expect(d.summarizedAt).not.toBeNull();
+      expect(new Date(d.summarizedAt as string).toISOString()).toBe(when.toISOString());
+    });
+
+    it("reports a real summary with the provider that wrote it", async () => {
+      const d = await detailFor("summarised", "a real summary", new Date());
+      expect(d.summary).toBe("a real summary");
+      expect(d.summarizedAt).not.toBeNull();
+      expect(d.summaryProvider).toBe("test-provider");
+    });
+  });
 });

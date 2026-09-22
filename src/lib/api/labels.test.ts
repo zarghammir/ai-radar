@@ -3,6 +3,8 @@ import {
   ALL_CONTENT_TYPES,
   ALL_VERIFICATION_LEVELS,
   CONTENT_TYPE_LABELS,
+  SOURCE_TIER_LABELS,
+  TIER_KEYS,
   VERIFICATION,
   alsoReportedBy,
   storyBody,
@@ -87,5 +89,39 @@ describe("alsoReportedBy", () => {
   it("counts the others, not the sources", () => {
     expect(alsoReportedBy({ sourceCount: 3 })).toBe("+2 others");
     expect(alsoReportedBy({ sourceCount: 5 })).toBe("+4 others");
+  });
+});
+
+describe("source tier labels", () => {
+  /**
+   * Derived from the DATABASE's enum, like the content types above, so adding
+   * a tier without a word here fails here rather than rendering a blank beside
+   * the original source on the story page — where the tier is doing real work
+   * and a blank would read as "no standing" rather than "no label".
+   */
+  it("covers every tier the database can store", () => {
+    expect(TIER_KEYS.length).toBe(5);
+    for (const tier of TIER_KEYS) {
+      const label = SOURCE_TIER_LABELS[tier];
+      expect(label, `no label for source tier ${tier}`).toBeTruthy();
+      expect(label).toBe(label.trim());
+    }
+  });
+
+  /**
+   * THE COLLISION THIS EXISTS TO PREVENT. The verification chip already says
+   * "Primary source" and means something different — verification is about the
+   * evidence for THIS story, tier is about a publisher's standing in general.
+   * Both appear on the story page. If a tier ever borrowed the chip's wording,
+   * a reader would reasonably read one as confirming the other.
+   */
+  it("shares no wording with the verification levels, which sit beside them", () => {
+    const verificationWords = new Set(Object.values(VERIFICATION).map((v) => v.word.toLowerCase()));
+    for (const label of Object.values(SOURCE_TIER_LABELS)) {
+      expect(
+        verificationWords.has(label.toLowerCase()),
+        `the tier label "${label}" is also a verification word`,
+      ).toBe(false);
+    }
   });
 });

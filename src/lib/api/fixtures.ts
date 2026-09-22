@@ -23,6 +23,7 @@
 import { takeWithinReadingTime } from "@/api/reading-budget";
 import { typesForView, type BriefView } from "@/lib/api/views";
 import type { BriefResponse, SourceRef, StoryCard } from "@/lib/api/types";
+import type { StoryDetail } from "@/api/stories";
 
 const openai: SourceRef = {
   key: "openai-blog",
@@ -364,4 +365,56 @@ export function fixtureQuietBrief(): BriefResponse {
 /** Nothing ingested yet, or nothing in the window. */
 export function fixtureEmptyBrief(): BriefResponse {
   return brief([], "all");
+}
+
+/**
+ * One fixture story, shaped as the detail page needs it.
+ *
+ * IT INVENTS NOTHING. The items and the timeline are projected from what the
+ * card already carries — its own sources and its own published time — because
+ * the alternative is fabricating provenance, and provenance is the entire
+ * subject of this page. A made-up second source would not be a placeholder,
+ * it would be a false claim about where a story came from, in the one place a
+ * reader goes to check exactly that.
+ *
+ * So in fixture mode the page shows a thinner but TRUE picture: the sources
+ * this fixture actually names. The live database is where the multi-source
+ * case is real, and it is the state the owner is in.
+ */
+export function fixtureStory(slug: string): StoryDetail | null {
+  const card = FIXTURE_STORIES.find((s) => s.slug === slug);
+  if (!card) return null;
+
+  const items = card.sources.map((source, i) => ({
+    id: card.id * 100 + i,
+    title: card.title,
+    url: i === 0 ? card.url : (source.homepage ?? card.url),
+    excerpt: i === 0 ? card.excerpt : null,
+    author: null,
+    publishedAt: card.publishedAt,
+    fetchedAt: card.firstSeenAt,
+    role: i === 0 ? "primary" : "report",
+    source: { ...source, kind: "rss" },
+    engagement: null,
+  }));
+
+  return {
+    ...card,
+    keyPoints: [],
+    // Fixtures are never summarised: no provider runs against them. That is
+    // "never tried", which is a different screen from "tried and failed" and
+    // the page must be able to show it.
+    summarizedAt: null,
+    summaryProvider: null,
+    items,
+    timeline: items.map((it) => ({
+      at: it.publishedAt,
+      sourceKey: it.source.key,
+      sourceName: it.source.name,
+      role: it.role,
+      title: it.title,
+      url: it.url,
+    })),
+    scoreComponents: [],
+  } as unknown as StoryDetail;
 }

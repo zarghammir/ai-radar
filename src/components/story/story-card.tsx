@@ -3,6 +3,7 @@ import { ContentTypeBadge, VerificationChip } from "@/components/story/badges";
 import { StoryActions } from "@/components/story/story-actions";
 import { alsoReportedBy, storyBody } from "@/lib/api/labels";
 import type { StoryCard as Story } from "@/lib/api/types";
+import Link from "next/link";
 
 function detectedAt(iso: string) {
   // The time this app first SAW it, which is a different question from when it
@@ -122,6 +123,20 @@ export function StoryCardView({
               about it. The accessible name carries the story's title because a
               reader tabbing a brief would otherwise hear "Discussion" a dozen
               times with nothing to tell them apart. */}
+          {/* THE WAY IN TO PROVENANCE (#15). The title still links OUT to the
+              article, because that is what a reader taps when they want to
+              read the thing — changing it would hijack the primary action and
+              make every existing habit and screenshot wrong. This is the
+              second question, "where did this come from", and it gets its own
+              affordance rather than taking over the first. */}
+          <span>·</span>
+          <Link
+            href={`/story/${story.slug}`}
+            aria-label={`Sources for ${story.title}`}
+            className="focus-visible:ring-org rounded-xs underline underline-offset-2 hover:no-underline focus-visible:ring-2 focus-visible:outline-none"
+          >
+            Sources
+          </Link>
           {story.discussionUrl ? (
             <>
               <span>·</span>

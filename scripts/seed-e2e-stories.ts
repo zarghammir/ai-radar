@@ -148,6 +148,26 @@ const ITEMS = [
   },
 ];
 
+/**
+ * One story told twice, so the corpus contains a multi-source story at all.
+ *
+ * The headlines share almost every token, which is what makes assignStory
+ * cluster them; the links differ, which is what makes them two items from two
+ * sources rather than one item seen twice.
+ */
+const PICKUP = {
+  origin: {
+    title: "Hugging Face releases an open dataset of agent trajectories",
+    link: "https://huggingface.co/e2e-trajectories-release",
+    minutesAgo: 250,
+  },
+  report: {
+    title: "Hugging Face releases an open dataset of agent trajectories under CC-BY",
+    link: "https://www.theverge.com/e2e-trajectories-report",
+    minutesAgo: 240,
+  },
+};
+
 function rssFeed(now: Date, items: typeof ITEMS): string {
   const entries = items
     .map(
@@ -204,6 +224,25 @@ async function main() {
   const routes: Record<string, string> = {};
   withUrls.forEach((source, index) => {
     const mine = ITEMS.filter((_, i) => i % withUrls.length === index);
+    // THE PICKUP PAIR, and it is the only reason this seeder can produce a
+    // story with MORE THAN ONE SOURCE.
+    //
+    // Every other item goes to exactly one feed, so every other story has one
+    // source — which means the story page's whole subject, several sources
+    // with roles and an order, was unreachable locally and could only be
+    // typechecked. #15's acceptance names that case specifically.
+    //
+    // These two go to the first two feeds with DIFFERENT links and nearly the
+    // same headline, which is what a real pickup looks like: the lab publishes,
+    // somebody reports on it. assignStory clusters them because the titles pass
+    // isSameStory (tokenJaccard >= 0.5) while the canonical URLs differ — so
+    // this exercises the TITLE path rather than the trivial same-URL one, and
+    // the story ends up with two raw_items from two sources.
+    //
+    // It is not a hand-written story row: it goes through runIngest, the real
+    // normalizer and the real clusterer, exactly like everything else here.
+    if (index === 0) mine.push(PICKUP.origin);
+    if (index === 1) mine.push(PICKUP.report);
     routes[source.url] = rssFeed(now, mine);
   });
 

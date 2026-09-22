@@ -87,6 +87,22 @@ export interface StoryItem {
 
 export interface StoryDetail extends StoryCard {
   keyPoints: string[];
+  /**
+   * WHEN THE SUMMARISER LAST TRIED, and it is exposed so a reader can be told
+   * WHICH of three states they are looking at rather than one flattened
+   * "no summary":
+   *
+   *   summarizedAt null                  never tried — no provider configured
+   *   summarizedAt set, summary null     tried and produced nothing
+   *   summarizedAt set, summary present  done
+   *
+   * Collapsing the first two is the absence-versus-failure defect: "we have
+   * not looked at this yet" and "we looked and could not" are different
+   * answers, and only the second is a reason to distrust the page.
+   */
+  summarizedAt: string | null;
+  /** Which provider wrote it. Null whenever `summary` is null. */
+  summaryProvider: string | null;
   items: StoryItem[];
   timeline: {
     at: string;
@@ -312,6 +328,8 @@ export async function buildDetail(db: Db, slug: string): Promise<StoryDetail | n
   return {
     ...card,
     keyPoints: story.keyPoints,
+    summarizedAt: story.summarizedAt ? iso(story.summarizedAt) : null,
+    summaryProvider: story.summaryProvider,
     items,
     timeline: ordered.map((r) => ({
       at: iso(r.publishedAt),
