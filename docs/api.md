@@ -631,7 +631,6 @@ list is a few dozen rows.
       "homepage": "https://openai.com/news",
       "enabled": true,
       "lastFetchedAt": "2026-09-16T11:30:00.000Z",
-      "lastError": null,
       "storyCount": 24,
       "health": "OK",
       "consecutiveFailures": 0
@@ -640,9 +639,27 @@ list is a few dozen rows.
 }
 ```
 
-`lastError` and `lastFetchedAt` are included because the developer view needs to
-show which sources are failing. `config` and the feed `url` are not exposed:
-they are operational settings, not display data. Not paginated.
+`lastFetchedAt` is included because the developer view needs to show which
+sources are failing. `config`, the feed `url` and **`lastError`** are not
+exposed: they are operational settings, not display data. Not paginated.
+
+**This paragraph said the opposite until #149, and the code was right — for the
+SECOND time.** `lastError` holds arbitrary text written by the worker and this
+response is unauthenticated; #99 measured that text carrying `getaddrinfo
+ENOTFOUND <host>` and `role "<user>" does not exist`, and #101 forbids adding it
+back. A document that invites the exact field the code refuses is worse than one
+that says nothing, because it reads as permission — and here that permission
+points the wrong way: a reader acting on the old text would be ADDING the field
+back, not removing it.
+
+`src/api/catalogue.ts` records the first occurrence in its own comment — _"THE
+CENSUS WAS WRONG — `lastError` was on the included side"_. That was a census of
+what the response carried; this was the document describing it. **Two different
+artefacts have now put this one field on the included side, and the code has
+refused it both times.** If a third turns up, the field is not the problem: the
+pattern is that `lastError` reads like display data and is not, so whatever you
+are correcting probably needs the reason written beside it rather than just the
+correction.
 
 **`health` is one of `OK`, `FAILING` or `UNKNOWN` — three states, not two.** A
 source that has never completed a run is neither working nor broken, and
@@ -691,6 +708,83 @@ skipped by the next worker run. The seed deliberately never overwrites
 `enabled`, so re-seeding cannot switch a source back on behind the reader.
 
 ---
+
+### `GET /api/delivery`
+
+Whether the brief is actually reaching anyone. The outgoing counterpart to
+`GET /api/sources`, and public for the same reason.
+
+```json
+{
+  "summary": {
+    "kind": "examined",
+    "health": "FAILING",
+    "decisions": 12,
+    "consecutiveFailures": 2,
+    "threshold": 2
+  },
+  "lastDecisionDay": "2026-09-22",
+  "subscriptions": 1,
+  "lastDelivered": 0,
+  "lastFailed": 1
+}
+```
+
+**`summary.kind` is `nothing-examined` or `examined`, and the empty case is a
+different shape rather than a zero.** An instance where delivery has never run
+cannot be read as healthy by a caller that forgets to check: there is no
+`health` field to misread, because reaching one means passing the branch that
+says there was nothing to count.
+
+**`health` is one of `OK`, `FAILING` or `IDLE` — and `IDLE` is not a failure.**
+It means delivery ran and had nobody to send to, which is actionable (press the
+button in Settings) but is not an outage. An instance nobody has subscribed to
+must not read as broken.
+
+`consecutiveFailures` counts `failed` decisions since the last successful send;
+`skipped` mornings are not counted, or an instance with no readers would report
+itself broken. Delivery crosses to `FAILING` at **two**.
+
+Two, where source health uses three, because the threshold is a duration in
+disguise and the cadences differ: ingest lands about seven times a day, delivery
+is decided **once per local day**. Three there is half a day; three here would be
+three days of a reader receiving nothing and assuming the news was quiet —
+longer than the September collector outage went unnoticed.
+
+`threshold` is in the response so the number is not a figure to take on trust.
+
+**No endpoint and no stored error text is served.** `brief_sends.detail` is free
+text copied out of a push service's HTTP body, and `push_subscriptions.endpoint`
+is an address anyone holding it can push to that browser with. Same rule as
+`lastError` above.
+
+### `POST /api/push/subscribe`
+
+Records a browser so the worker can notify it. Body is the browser's own
+`PushSubscription.toJSON()`:
+
+```json
+{ "endpoint": "https://…", "keys": { "p256dh": "…", "auth": "…" } }
+```
+
+Answers `{ "subscribed": true }`. Public, because there are no accounts and a
+reader's browser has no secret to present. It writes a row and makes no outbound
+request, so calling it cannot make this instance talk to a push service. An
+instance remembers at most 50 browsers; re-subscribing an existing endpoint
+updates it in place and does not count against that.
+
+### `POST /api/push/unsubscribe`
+
+```json
+{ "endpoint": "https://…" }
+```
+
+Answers `{ "subscribed": false }`, whether or not a row existed — "already gone"
+is the outcome the caller wanted.
+
+**These two shipped undocumented in #146 and are recorded here late.** The
+omission is the author's; a route that exists and is not in this file is a route
+the next person discovers from the filesystem.
 
 ## Field provenance
 
