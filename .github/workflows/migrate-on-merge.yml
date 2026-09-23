@@ -2,10 +2,20 @@ name: Apply additive migrations on merge
 
 # THE OUTAGE THIS EXISTS FOR. Nothing applied migrations on merge. Migration
 # 0004 added two columns, #71 began writing them in the same change, and the
-# code went live against a database that had never seen them. MEASURED: 30
-# failed scheduled passes over four days — every one of the 17 sources failing
-# in each, 441 failed source-runs in ingest_runs. Not "every 30 minutes": the
+# code went live against a database that had never seen them.
+#
+# MEASURED, AND THE TWO MEASUREMENTS AGREE. 26 failed scheduled passes between
+# 2026-09-18 and 2026-09-21, counted from the Actions API. 442 failed
+# source-runs, counted from ingest_runs by capture-ingest-failures.ts — 441 the
+# missing column, 1 unrecognised. The third figure, 17 sources per pass, is
+# derived (442 / 26), not a third measurement. Not "every 30 minutes": the
 # schedule declares that and GitHub delivers about 7 a day (#139).
+#
+# WHY THE PROVENANCE IS SPELLED OUT. This sentence has been wrong three times
+# the same way: two figures measured, the third asserted beside them without
+# being multiplied out. 441 was read as passes when it is rows; 30 is every
+# failed scheduled pass on record, right for #139's question and wrong for this
+# one. passes x sources = rows is self-checking — check it once, when writing.
 #
 # WHY IT ONLY APPLIES SOME OF THEM. A migration that applies itself is a
 # destructive operation that applies itself. The set pending during that outage
