@@ -1,6 +1,11 @@
 name: Ingest
 
-# Every 30 minutes, matching INGEST_INTERVAL_MINUTES in .env.example, plus a
+# Declares */30, matching INGEST_INTERVAL_MINUTES in .env.example — but GITHUB
+# DOES NOT KEEP IT. Scheduled workflows are best-effort and de-prioritised under
+# load. Measured 2026-09-17 to 09-22: 39 runs, about 7 a day against 48 declared.
+# The cron is kept because best-effort costs nothing and a lower declared rate
+# would only lower the ceiling; it is not a promise, and nothing user-facing may
+# state an interval. Plus a
 # manual button for when someone wants a brief refreshed now. This is the
 # hosted alternative to leaving the worker container running: same entry, same
 # single-writer lock, one pass per invocation.

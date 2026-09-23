@@ -39,7 +39,14 @@ describe("classifySourceHealth", () => {
     // Not a style preference. The exit code is deliberately left green so the
     // schedule is not a notification people mute; a threshold of one would
     // reintroduce exactly that noise one layer up, with eighteen feeds polled
-    // every half hour.
+    // on the hosted schedule.
+    //
+    // NOT "every half hour". ingest.yml DECLARES that and GitHub does not keep
+    // it: measured 09-18 to 09-21, 8/8/7/5 passes a day — a mean of 7 against
+    // 48 declared. The threshold counts PASSES rather than minutes, which is
+    // what makes it survive the difference. Noted here because a constant's
+    // TEST is where the next reader goes to learn what it means, and
+    // source-health.ts carries this warning while its own test did not.
     expect(UNHEALTHY_AFTER_CONSECUTIVE_FAILURES).toBeGreaterThan(1);
   });
 });

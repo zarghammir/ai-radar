@@ -42,8 +42,21 @@ There are two, plus two one-shot commands.
 | seed    | `src/db/seed.ts`             | Writes the catalogue from `src/db/seed-data.ts`                                           |
 
 In Docker, `docker/web-entrypoint.sh` runs migrate and seed before the server;
-the worker service runs the loop. On GitHub Actions, `.github/workflows/ingest.yml`
-runs `npm run worker:once` every thirty minutes instead.
+the worker service runs the loop, and that loop really is a timer — `sleep(minutes
+
+- 60_000)`in`src/worker/main.ts`, so self-hosted it does what it says.
+
+On GitHub Actions, `.github/workflows/ingest.yml` runs `npm run worker:once` on a
+`*/30` schedule **which GitHub does not keep**. Scheduled workflows are
+best-effort and de-prioritised under load; the interval is a request, not a
+promise, and it has no upper bound.
+
+**Measured 2026-09-17 to 09-22 (39 scheduled runs): about 7 passes a day against
+48 declared, roughly one every 3.4 hours.** That is not a bug to fix — it is what
+the hosted scheduler offers. It matters because since #148 the brief admits
+stories by ARRIVAL, so this interval IS the freshness a reader experiences.
+Anything that promises a number here is promising something the scheduler can
+ignore.
 
 ## The write path
 
