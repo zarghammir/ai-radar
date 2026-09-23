@@ -130,6 +130,14 @@ describe("the threshold", () => {
  * push_subscriptions.endpoint is an address anyone holding it can push to. The
  * route is unauthenticated, so this asserts the KEY SET rather than trusting a
  * reviewer to notice a field being added later.
+ *
+ * THE TWO HALVES ARE NOT REDUNDANT, AND THE KEY SET IS THE LOAD-BEARING ONE.
+ * Do not relax it on the grounds that the substring checks cover it — they do
+ * not. A detail re-homed under a friendlier key, `{ "message": "HTTP 500: Bad
+ * Gateway" }`, contains none of the three needles and would sail through every
+ * `not.toContain` below while putting a third party's text back on an
+ * unauthenticated response. The substrings are the BACKSTOP, for a leak that
+ * arrives inside a key that is already allowed.
  */
 describe("the surface does not leak", () => {
   const fakeDb = (row: Record<string, unknown>) =>

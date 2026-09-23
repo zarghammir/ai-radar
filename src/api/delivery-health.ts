@@ -75,6 +75,26 @@ export type DeliveryHealth = "OK" | "FAILING" | "IDLE";
 /** Every value, so a consumer can prove it handles all of them. */
 export const DELIVERY_HEALTH_STATES = ["OK", "FAILING", "IDLE"] as const;
 
+type AssertTrue<T extends true> = T;
+type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+
+// LOAD-BEARING DESPITE LOOKING UNUSED. eslint cannot see that the compiler
+// evaluates this: if the union above and the array above stop listing the same
+// states, `Same<...>` becomes false and `AssertTrue` refuses it, so tsc fails
+// here. Deleting it to clear the warning disarms the only thing keeping the
+// two in step, and nothing would go red afterwards.
+//
+// IT IS THE OTHER HALF OF THIS FILE'S OWN ARGUMENT. An UNREACHABLE state reads
+// as coverage — that is why the first draft's `UNKNOWN` was removed. An
+// UNDECLARED state is the same defect from the opposite side: add a member to
+// the union and a branch returning it, and the completeness test in
+// delivery-health.test.ts still passes, because the reached set will not
+// contain it and neither will the array, so the two stay equal. The docstring
+// above claims this array holds every value; this line is what makes the claim
+// true rather than hopeful.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type _StatesAreTotal = AssertTrue<Same<DeliveryHealth, (typeof DELIVERY_HEALTH_STATES)[number]>>;
+
 export interface DeliveryHistory {
   /** Rows in brief_sends. A decision NOT to send is still a decision. */
   decisions: number;

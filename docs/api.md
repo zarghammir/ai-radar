@@ -643,12 +643,23 @@ list is a few dozen rows.
 sources are failing. `config`, the feed `url` and **`lastError`** are not
 exposed: they are operational settings, not display data. Not paginated.
 
-**This paragraph said the opposite until #149, and the code was right.**
-`lastError` holds arbitrary text written by the worker and this response is
-unauthenticated; #99 measured that text carrying `getaddrinfo ENOTFOUND <host>`
-and `role "<user>" does not exist`, and #101 forbids adding it back. A document
-that invites the exact field the code refuses is worse than one that says
-nothing, because it reads as permission.
+**This paragraph said the opposite until #149, and the code was right — for the
+SECOND time.** `lastError` holds arbitrary text written by the worker and this
+response is unauthenticated; #99 measured that text carrying `getaddrinfo
+ENOTFOUND <host>` and `role "<user>" does not exist`, and #101 forbids adding it
+back. A document that invites the exact field the code refuses is worse than one
+that says nothing, because it reads as permission — and here that permission
+points the wrong way: a reader acting on the old text would be ADDING the field
+back, not removing it.
+
+`src/api/catalogue.ts` records the first occurrence in its own comment — _"THE
+CENSUS WAS WRONG — `lastError` was on the included side"_. That was a census of
+what the response carried; this was the document describing it. **Two different
+artefacts have now put this one field on the included side, and the code has
+refused it both times.** If a third turns up, the field is not the problem: the
+pattern is that `lastError` reads like display data and is not, so whatever you
+are correcting probably needs the reason written beside it rather than just the
+correction.
 
 **`health` is one of `OK`, `FAILING` or `UNKNOWN` — three states, not two.** A
 source that has never completed a run is neither working nor broken, and
