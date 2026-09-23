@@ -142,6 +142,55 @@ const LAUNCH_VERBS = [
  * summariser that reads the item, not a cleverer regex. That was tried.
  */
 
+/**
+ * A capitalised name, a version, then a colon, at the very start of a title.
+ *
+ * This is the release-announcement shape — "TimesFM-3: A zero-shot foundation
+ * model" — and it exists to free MODEL recall from the family list above
+ * WITHOUT re-running the experiment recorded just above, which is a different
+ * rule. The reverted one was a version ANYWHERE and nothing else. This is a
+ * conjunction of three things, and the measurement that matters is that each
+ * of that experiment's five recorded false positives is excluded by a
+ * DIFFERENT clause — if one clause did all the work the other two would be
+ * decoration:
+ *
+ *   "State of Open Models: Summer 2026"          no leading name+version (the date trails)
+ *   "Training Text-to-Image Models 3.6x Faster"  same — "Training" is not followed by a digit
+ *   "Import AI 454"                              no model noun
+ *   "Datasette 1.0a39"                           no model noun, and no colon
+ *   "Apple releases iOS 27"                      the name does not lead, and no model noun
+ *
+ * MEASURED on the stored corpus of 516 items (scripts/measure-model-recall.ts,
+ * which prints its own denominators): it adds exactly TWO items, both correct
+ * — "Aurora 1.5: Extending open foundation models…" and "TimesFM-3: A
+ * zero-shot foundation model…". No item already typed MODEL changes, so the
+ * ~90% precision floor #76 set is held by construction rather than by luck.
+ *
+ * A LOOSER VARIANT WITHOUT THE COLON was measured at the same time and found
+ * exactly the same two items, so nothing in the corpus separates them. The
+ * colon is kept on judgement rather than evidence, and the judgement is
+ * stated so it can be overturned: without it, "Windows 11 brings a new
+ * language model" is a MODEL, and on this ticket precision is worth about an
+ * order of magnitude more than recall.
+ *
+ * WHAT IT DOES NOT CLOSE, and this is the honest part: of #76's three recorded
+ * misses it closes two. "We're launching Lyria 3.5" stays missed, because the
+ * only rule that catches it is "launch verb + versioned name", and the
+ * experiment above already recorded that constraining the reverted rule to the
+ * position after a launch verb "removed the dates and kept the rest" — the
+ * rest being software. Catching Lyria means swallowing "Apple releases iOS
+ * 27". A disclosed miss is cheaper than a false MODEL in the reader's top ten.
+ *
+ * AND THE CORPUS SAYS THE BIGGER MISS IS ELSEWHERE. Judging a deterministic
+ * sample of 60 still-untyped items turned up three model launches this cannot
+ * reach — "Magistral", "Introducing Shieldstral.", "SensorFM: Towards a
+ * general intelligence…" — none of which carries a version number at all.
+ * That shape is indistinguishable from any other product announcement without
+ * knowing the name IS a model, which is the maintained list or the summariser,
+ * not a regex. See #76.
+ */
+const LEADING_VERSIONED_NAME = /^[A-Z][A-Za-z0-9]*[-\s]\d+(?:\.\d+)*\s*:/;
+
 const MODEL_NOUNS = [
   "model",
   "llm",
@@ -261,6 +310,9 @@ const RULES: ReadonlyArray<{ type: ClassifiedContentType; test: (text: string) =
       // every customer story naming a model becomes a model launch:
       // "Legora reviewed 41 documents in minutes with GPT-6 Astra".
       if (family && (launched || family.index === 0)) return true;
+      // A release-shaped headline whose name is not on the family list above.
+      // The noun is required: without it this is any versioned product.
+      if (LEADING_VERSIONED_NAME.test(t) && noun) return true;
       // A parameter count is only a model when something nearby says so; on its
       // own it is money — "$1B to protect essential services".
       if (PARAMETER_COUNT.test(t) && noun) return true;
