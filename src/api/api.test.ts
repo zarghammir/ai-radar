@@ -1854,6 +1854,40 @@ withDb("API routes", () => {
       expect(await briefSlugs()).toContain("old-news-new-to-us");
     });
 
+    /**
+     * THE REPORT MUST COVER WHAT THE BRIEF CAN CONTAIN.
+     *
+     * For one commit it did not: the query bounded at STORY_WINDOW_HOURS and
+     * the reported period was a separate 24-hour constant, so the response
+     * described a day while selecting over three. The Intelligence lane caught
+     * it in the coverage step, where it would have printed a 24-hour period
+     * beside a figure computed over 72.
+     *
+     * It reached the READER too, which is why this test is here and not only
+     * in that worker: sweepSummary counts arrivals since this same `from`, so
+     * a story that arrived 30 hours ago and was filtered out of the view would
+     * have been invisible to the count and the empty state would have said
+     * "genuinely quiet" on a day that was not.
+     *
+     * Asserting the two constants are equal would be tautological. This
+     * asserts the PROPERTY: a story the brief admits is inside the period the
+     * brief reports on.
+     */
+    it("reports on a period that covers the oldest story it will admit", async () => {
+      const thirtyHoursAgo = new Date(Date.now() - 30 * 3_600_000);
+      await fileStory("arrived-thirty-hours-ago", thirtyHoursAgo, thirtyHoursAgo);
+
+      const { GET } = await import("@/app/api/brief/route");
+      const d = await body(await GET(req("/api/brief?view=all&length=all")));
+      const slugs = (d.stories as unknown as { slug: string }[]).map((x) => x.slug);
+      const from = new Date((d.window as unknown as { from: string }).from);
+
+      // It is admitted...
+      expect(slugs).toContain("arrived-thirty-hours-ago");
+      // ...so the reported period has to reach back at least that far.
+      expect(from.getTime()).toBeLessThanOrEqual(thirtyHoursAgo.getTime());
+    });
+
     it("reports what the collector has done, so an empty brief can say why", async () => {
       const { GET } = await import("@/app/api/brief/route");
       const res = await GET(req("/api/brief?view=all&length=all"));

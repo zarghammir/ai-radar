@@ -306,7 +306,7 @@ export async function recentStories(db: Db, options: BriefOptions = {}): Promise
         // recently is news to the reader even if it was published earlier, and
         // bounding on publication would have thrown that away again. A story
         // fetched this morning and published last week still counts.
-        arrivedSince(new Date(Date.now() - STORY_WINDOW_HOURS * 3_600_000)),
+        arrivedSince(briefHorizon()),
         notHidden(),
         ...(includeAdjacent ? [] : [notAdjacentTech()]),
         types && types.length > 0 ? inArray(stories.contentType, [...types]) : undefined,
@@ -321,12 +321,29 @@ export async function recentStories(db: Db, options: BriefOptions = {}): Promise
 }
 
 /**
- * How far back "recently" reaches WHEN REPORTING, and nowhere else.
+ * THE ONE CUTOFF. Everything that bounds or reports the brief derives from
+ * this call, so the measured set and the reported period CANNOT DISAGREE.
  *
- * Nothing is filtered by this. It bounds the sweep diagnostic, so an empty
- * screen can say how much the collector has written lately — see sweepSummary.
+ * They did, for one commit, and the Intelligence lane caught it: recentStories
+ * bounded at 72 hours while reportingWindow reported 24, so the coverage step
+ * would have printed a 24-hour period beside a figure computed over 72 — off
+ * by 3x, with an ISO timestamp on each end lending it false precision. The
+ * same skew reached the reader: sweepSummary counted arrivals in 24 hours to
+ * explain a brief selected over 72, so a story that arrived 30 hours ago and
+ * was filtered out would have produced "genuinely quiet" on a day that was
+ * not.
+ *
+ * ON MAIN THE TWO AGREED BY CONSTRUCTION, because briefWindow produced a
+ * single value used as both. Splitting it into two constants that happened to
+ * be right was the regression — picking the correct number would have made
+ * them agree today, and only deriving them from one value makes them unable
+ * to disagree tomorrow. Nothing downstream would have revealed the error: a
+ * low coverage figure reads as "the cap is too small" and a high one as
+ * "fixed", and neither reading corrects the label.
  */
-export const RECENT_ACTIVITY_HOURS = 24;
+export function briefHorizon(now: Date = new Date()): Date {
+  return new Date(now.getTime() - STORY_WINDOW_HOURS * 60 * 60 * 1000);
+}
 
 /**
  * The period the empty state talks about, plus the reader's delivery settings.
@@ -335,13 +352,18 @@ export const RECENT_ACTIVITY_HOURS = 24;
  * whole change: `from`/`to` describe what the app is REPORTING on, and
  * `briefTime`/`timezone` ride along because the reader's delivery setting is
  * worth showing next to it. Nothing here decides which stories exist.
+ *
+ * `from` IS THE QUERY'S OWN CUTOFF, not a second number chosen to match it.
+ * A report whose bounds do not bound the thing being measured is worse than a
+ * report with no bounds, because it invites the wrong inference confidently.
  */
 export function reportingWindow(now: Date, briefTime: string, timezone: string): BriefWindow {
   // Validated through briefWindow so an invalid briefTime or timezone is still
   // rejected in exactly the same way and with the same message — the setting
   // did not stop being real, it stopped being a filter.
   const validated = briefWindow(now, briefTime, timezone);
-  const from = new Date(now.getTime() - RECENT_ACTIVITY_HOURS * 60 * 60 * 1000);
+  // THE SAME CUTOFF THE QUERY USES, from the same function. See briefHorizon.
+  const from = briefHorizon(now);
   return { from, to: now, briefTime: validated.briefTime, timezone: validated.timezone };
 }
 
