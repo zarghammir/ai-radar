@@ -1842,16 +1842,31 @@ withDb("API routes", () => {
      * the property that took the window's place.
      */
     /**
-     * The control that used to live here asserted a story fetched days ago
-     * stays OUT, so "admit by arrival" could not become "admit everything".
-     * Admitting everything recent IS the rule now, so that assertion is gone;
-     * what replaces it is the horizon test above, which is the thing still
-     * standing between the brief and the whole table.
+     * THIS TEST ASSERTED THE OPPOSITE ONE COMMIT AGO, AND THE CONTRADICTION IS
+     * THE FINDING.
+     *
+     * It required a story published twenty days ago and fetched today to be
+     * ADMITTED, on #148's reasoning that it is news to this reader. That is
+     * still true about the reader. It was false about what the app could then
+     * do with the story: the ranker keys on PUBLICATION, so it had never been
+     * scored, carried the column default of 0, and landed behind everything
+     * ever ranked. It was admitted and then buried.
+     *
+     * So the two assertions could not both stand. Admitting it and sorting it
+     * on a default is worse than leaving it out, because nothing looks wrong.
+     * #168 takes the narrow fix — do not admit what cannot be scored — and
+     * #171 carries the wide one, which makes the ranker cover what the brief
+     * admits so this story can come back.
+     *
+     * THE LIMITATION IS ASSERTED HERE RATHER THAN LEFT AS A GAP, so that when
+     * #171 lands this test fails and whoever is holding it is told that the
+     * behaviour they just enabled was a known cost, not an accident.
      */
-    it("admits a story published long ago but fetched inside the horizon", async () => {
-      const longAgo = new Date(Date.now() - 20 * 24 * 3_600_000);
-      await fileStory("old-news-new-to-us", longAgo, new Date());
-      expect(await briefSlugs()).toContain("old-news-new-to-us");
+    it("leaves out a story published beyond the ranking horizon, until #171", async () => {
+      const twentyDaysAgo = new Date(Date.now() - 20 * 24 * 3_600_000);
+      await fileStory("old-news-new-to-us", twentyDaysAgo, new Date());
+      // Not a silent absence: it is absent BECAUSE nothing could score it.
+      expect(await briefSlugs()).not.toContain("old-news-new-to-us");
     });
 
     /**

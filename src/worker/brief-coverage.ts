@@ -100,14 +100,14 @@ function describe(label: string, value: CoverageSlice | null): string {
 export function coverageLines(coverage: BriefCoverage | null): string[] {
   if (coverage === null) {
     return [
-      "- **brief coverage: no denominator** — the brief can draw on nothing at all, which is not the same as none of it being summarised",
+      "- **brief coverage: no denominator** — nothing is in the reader's window, which is not the same as none of it being summarised",
     ];
   }
 
   const lines = [
-    `- **brief coverage** — ${describe("in everything the brief can draw from", coverage.window)}; ` +
+    `- **brief coverage** — ${describe("in the whole window", coverage.window)}; ` +
       `${describe(`on the "${coverage.defaultViewName}" view he opens`, coverage.defaultView)}`,
-    `  measured over ${coverage.from.toISOString()} → ${coverage.to.toISOString()}`,
+    `  window ${coverage.from.toISOString()} → ${coverage.to.toISOString()}`,
   ];
 
   // The gap is the quantity that says whether the SELECTOR needs the same fix,
