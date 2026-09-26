@@ -36,19 +36,24 @@
  * passed all five probes with an order it could not actually see. Its control
  * failing is the only reason that was caught.
  *
- * What works is WIDTH. Text rendered in the real latin-ext face and the same text
- * rendered in the adjusted-Arial fallback occupy different widths, and a width is
- * a property of the element, not of the document. So each role is measured three
- * ways and the check is a comparison between them:
+ * What works is WIDTH, and the comparison is POSITIVE — against the real face,
+ * never against the fallback. Each string is measured three ways:
  *
- *   real      the role as the application applies it, via its Tailwind utility
- *   broken    the chain deliberately mis-ordered, latin before its own fallback
- *   fallback  the adjusted fallback alone, with no real face available
+ *   real    the role as the application applies it, via its Tailwind utility
+ *   face    the expected subset face ALONE, nothing else in the chain
+ *   broken  the chain deliberately mis-ordered, latin before its own fallback
  *
- * real must differ from fallback — otherwise a fallback is serving the text. And
- * broken must EQUAL fallback — otherwise the mis-ordered chain does not actually
- * fall through, the premise is wrong, and `real != fallback` proves nothing.
- * The second is the control, and it is checked per role rather than once.
+ *   real must EQUAL face    — the real face is what served the text
+ *   broken must DIFFER      — the mis-ordered chain really does fall through,
+ *                             so the first assertion is not vacuous
+ *
+ * THE EARLIER VERSION ASSERTED `real != fallback` AND CI KILLED IT. The generated
+ * fallback is `src: local(Arial)`, and a Linux runner HAS NO ARIAL — the face
+ * never loads, the chain walks on to sans-serif, and DejaVu rendered one of these
+ * strings 0.4px from the real Archivo. The check went red on a correct page. A
+ * comparison against the fallback depends on a coincidence about a font we do not
+ * ship and cannot see; a comparison against the real face depends only on the
+ * face being identical to itself, which holds on every machine.
  *
  * THE ROLE IS APPLIED AS A CLASS, never as font-family: var(--font-mono). The
  * font variables live in Tailwind's `@theme inline`, which does NOT emit them to
@@ -81,29 +86,30 @@ const EPSILON = 0.5;
 
 /**
  * `latinFamily` is the generated family name of the subset that carries the
- * fallback. next/font/local derives these from the identifiers in layout.tsx, so
- * renaming a const there renames a family here and this file must follow.
+ * fallback; `face` is the family that MUST serve the probe text. next/font/local
+ * derives both from the identifiers in layout.tsx, so renaming a const there
+ * renames a family here and this file must follow.
  */
 const ROLES = [
   {
     cls: "font-sans",
     latinFamily: "archivoLatin",
     probes: [
-      { text: "ŁłŻżĆćŚśŃń", why: "Polish, latin-ext" },
-      { text: "ếềễệỀỆ", why: "Vietnamese" },
+      { text: "ŁłŻżĆćŚśŃń", why: "Polish, latin-ext", face: "archivoLatinExt" },
+      { text: "ếềễệỀỆ", why: "Vietnamese", face: "archivoVietnamese" },
     ],
   },
   {
     cls: "font-label",
     latinFamily: "narrowLatin",
-    probes: [{ text: "ŁłŻżĆćŚśŃń", why: "Polish, latin-ext" }],
+    probes: [{ text: "ŁłŻżĆćŚśŃń", why: "Polish, latin-ext", face: "narrowLatinExt" }],
   },
   {
     cls: "font-mono",
     latinFamily: "monoLatin",
     probes: [
-      { text: "Ελλάδα", why: "Greek" },
-      { text: "Привет", why: "Cyrillic" },
+      { text: "Ελλάδα", why: "Greek", face: "monoGreek" },
+      { text: "Привет", why: "Cyrillic", face: "monoCyrillic" },
     ],
   },
 ];
@@ -112,9 +118,9 @@ const ROLES = [
  * Measures one string three ways on one page. Widths only — nothing here reads
  * document.fonts, for the reason in the header.
  */
-async function measure(page, { cls, text, latinFamily }) {
+async function measure(page, { cls, text, latinFamily, face }) {
   return page.evaluate(
-    async ({ cls, text, latinFamily }) => {
+    async ({ cls, text, latinFamily, face }) => {
       const make = (fontFamily, className) => {
         const el = document.createElement("div");
         el.textContent = text;
@@ -126,16 +132,29 @@ async function measure(page, { cls, text, latinFamily }) {
       };
       const q = (n) => `"${n}"`;
       const real = make(null, cls);
+      const faceOnly = make(q(face), null);
       const broken = make(`${q(latinFamily)}, ${q(latinFamily + " Fallback")}, sans-serif`, null);
-      const fallback = make(`${q(latinFamily + " Fallback")}, sans-serif`, null);
       const resolved = getComputedStyle(real).fontFamily;
+
+      // EVERY FACE IS LOADED EXPLICITLY, AND document.fonts.ready IS NOT ENOUGH.
+      // `ready` resolves when nothing is PENDING — and a face referenced by an
+      // element appended in this same task has not been requested yet, so there is
+      // nothing pending and it resolves immediately. The element then measures in
+      // the last-resort font. That is not hypothetical: it made two DIFFERENT
+      // families report the identical width, because neither had loaded and both
+      // fell to the same default, and every probe failed on a correct page.
+      await Promise.all(
+        [q(face), q(latinFamily), q(latinFamily + " Fallback")].map((f) =>
+          document.fonts.load(`32px ${f}`, text).catch(() => {}),
+        ),
+      );
       await document.fonts.ready;
       const w = (el) => el.getBoundingClientRect().width;
-      const out = { real: w(real), broken: w(broken), fallback: w(fallback), resolved };
-      [real, broken, fallback].forEach((el) => el.remove());
+      const out = { real: w(real), face: w(faceOnly), broken: w(broken), resolved };
+      [real, faceOnly, broken].forEach((el) => el.remove());
       return out;
     },
-    { cls, text, latinFamily },
+    { cls, text, latinFamily, face },
   );
 }
 
@@ -157,6 +176,7 @@ try {
         cls: role.cls,
         text: probe.text,
         latinFamily: role.latinFamily,
+        face: probe.face,
       });
       const label = `${role.cls.padEnd(11)} ${probe.why.padEnd(18)}`;
 
@@ -169,29 +189,31 @@ try {
         continue;
       }
 
-      // THE CONTROL, per role: the mis-ordered chain must actually fall through
-      // to the fallback. If it does not, the comparison below is vacuous.
-      const controlOk = Math.abs(m.broken - m.fallback) < EPSILON;
-      // THE CHECK: the real chain must NOT be rendering in that fallback.
-      const realOk = Math.abs(m.real - m.fallback) >= EPSILON;
+      // THE CHECK: the text must render at the width of its real subset face.
+      const realOk = Math.abs(m.real - m.face) < EPSILON;
+      // THE CONTROL, per probe: the mis-ordered chain must NOT, or the check
+      // above would pass whatever the order is.
+      const controlOk = Math.abs(m.broken - m.face) >= EPSILON;
 
-      if (controlOk && realOk) {
+      if (realOk && controlOk) {
         console.log(
-          `  ok    ${label} real ${m.real.toFixed(1)}px vs fallback ${m.fallback.toFixed(1)}px`,
+          `  ok    ${label} ${m.real.toFixed(1)}px = ${probe.face} ` +
+            `(mis-ordered would be ${m.broken.toFixed(1)}px)`,
         );
       } else if (!controlOk) {
         failures++;
         console.log(`  FAIL  ${label} CONTROL did not behave.`);
         console.log(
-          `        mis-ordered chain ${m.broken.toFixed(1)}px vs fallback alone ` +
-            `${m.fallback.toFixed(1)}px — expected these to match.`,
+          `        the mis-ordered chain still measured ${m.broken.toFixed(1)}px, the same as ` +
+            `${probe.face} at ${m.face.toFixed(1)}px.`,
         );
-        console.log(`        Until they do, "real differs from fallback" is not evidence.`);
+        console.log(`        This probe cannot tell the two arrangements apart, so its`);
+        console.log(`        pass would mean nothing. Fix the probe, not the CSS.`);
       } else {
         failures++;
-        console.log(`  FAIL  ${label} a fallback is serving this text.`);
+        console.log(`  FAIL  ${label} ${probe.face} is NOT serving this text.`);
         console.log(
-          `        real ${m.real.toFixed(1)}px equals fallback ${m.fallback.toFixed(1)}px.`,
+          `        measured ${m.real.toFixed(1)}px; ${probe.face} alone is ${m.face.toFixed(1)}px.`,
         );
         console.log(`        Check that the latin face sits LAST in .${role.cls}'s chain.`);
       }
