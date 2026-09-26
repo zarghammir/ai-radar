@@ -45,10 +45,47 @@ jobs:
     # and a hung scheduled job is how a free-tier minute budget disappears.
     timeout-minutes: 15
 
+    # ── What the worker can actually see ──────────────────────────────────
+    #
+    # EVERY VARIABLE THE WORKER READS IS PASSED HERE, INCLUDING THE OPTIONAL
+    # ONES, and that is the fix for a defect that made two features
+    # unswitchable in production rather than merely unconfigured.
+    #
+    # The summariser (#138) and push delivery (#146) are both optional by
+    # design: absent key, feature off, app keeps running. But an optional
+    # variable that the workflow never forwards is not optional — it is
+    # ABSENT ALWAYS. Secrets were added to this repository and nothing
+    # changed, because the process that reads them was never handed them.
+    #
+    # An unset secret expands to the empty string, which is exactly what
+    # "absent" already means to the code, so forwarding them unconditionally
+    # keeps the absent-stays-absent ruling intact and makes PRESENT reachable
+    # for the first time.
+    #
+    # `npm run env:check` fails if this list and what the worker reads ever
+    # drift apart again. Do not add an env read to the worker's import graph
+    # without adding it here or declaring it absent in that script.
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       INTERNAL_API_SECRET: ${{ secrets.INTERNAL_API_SECRET }}
       NEXT_TELEMETRY_DISABLED: "1"
+
+      # AI summaries (#138). Capped by LLM_MAX_STORIES_PER_DAY, which is
+      # enforced in code and recorded in llm_usage.
+      LLM_PROVIDER: ${{ secrets.LLM_PROVIDER }}
+      LLM_MODEL: ${{ secrets.LLM_MODEL }}
+      LLM_MAX_STORIES_PER_DAY: ${{ secrets.LLM_MAX_STORIES_PER_DAY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      OPENAI_COMPATIBLE_BASE_URL: ${{ secrets.OPENAI_COMPATIBLE_BASE_URL }}
+      OPENAI_COMPATIBLE_API_KEY: ${{ secrets.OPENAI_COMPATIBLE_API_KEY }}
+      OLLAMA_BASE_URL: ${{ secrets.OLLAMA_BASE_URL }}
+
+      # The brief that arrives on its own (#146). THE SAME GAP HIT THESE and
+      # nobody had noticed: push delivery could not be switched on in
+      # production either, for the same reason and since it merged.
+      NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${{ secrets.NEXT_PUBLIC_VAPID_PUBLIC_KEY }}
+      VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+      VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
 
     steps:
       - name: Check out the branch
