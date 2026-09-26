@@ -28,6 +28,17 @@ import { cn } from "@/lib/utils";
  */
 type ScreenState = "loading" | "list" | "empty" | "unreachable";
 
+/**
+ * NO FOURTH STATE. An id this device cannot turn into a story is the screen's
+ * EXISTING "unreachable" — the store answered, and what it holds for that id
+ * cannot be read. It is not "empty", which is a fact about the reader.
+ *
+ * The count is published as `data-unresolved` beside `data-screen-state` so a
+ * check can assert the CASE rather than the prose, the way `data-empty-reason`
+ * does on Today. Asserting the sentence would pin the wording and miss the
+ * thing that matters.
+ */
+
 /** No point offering a filter until there is more than one tag to pick. */
 const MIN_TAGS_FOR_FILTER = 2;
 
@@ -40,13 +51,19 @@ export function SavedScreen() {
   const [tag, setTag] = useState<string | null>(null);
 
   const stories = saved.kind === "ready" ? saved.stories : NO_STORIES;
+  const unresolved = saved.kind === "ready" ? saved.unresolved : 0;
   const state: ScreenState =
     saved.kind === "failed"
       ? "unreachable"
       : saved.kind === "loading"
         ? "loading"
         : stories.length === 0
-          ? "empty"
+          ? // NOTHING RENDERABLE. If the device is holding saved ids it cannot
+            // resolve, this is unreachable and NOT empty: telling a reader who
+            // just pressed Save that they have saved nothing is the defect.
+            unresolved > 0
+            ? "unreachable"
+            : "empty"
           : "list";
 
   const tags = useMemo(() => {
@@ -73,7 +90,7 @@ export function SavedScreen() {
         ) : null
       }
     >
-      <div data-screen-state={state}>
+      <div data-screen-state={state} data-unresolved={unresolved}>
         {state === "loading" ? (
           // A real state with its own words. A blank panel and an empty bin
           // look identical for as long as the read takes.
@@ -84,18 +101,32 @@ export function SavedScreen() {
 
         {state === "unreachable" ? (
           <div className="border-edge text-ash border border-dashed p-6">
-            <p className="text-ash-hi text-[15px] font-semibold">Cannot reach your saved stories</p>
-            <p className="mt-2 max-w-prose text-[14px] leading-relaxed">
-              Nothing has been lost. The app could not read the store just now, and your notes and
-              tags are where you left them.
+            <p className="text-ash-hi text-[15px] font-semibold">
+              {unresolved > 0
+                ? unresolved === 1
+                  ? "1 saved story could not be read"
+                  : `${unresolved} saved stories could not be read`
+                : "Cannot reach your saved stories"}
             </p>
-            <button
-              type="button"
-              onClick={refreshSaved}
-              className="focus-visible:ring-org border-edge text-ash-hi hover:bg-bench-2 mt-4 border px-3 py-1.5 text-[13px] font-semibold focus-visible:ring-2 focus-visible:outline-none"
-            >
-              Try again
-            </button>
+            <p className="mt-2 max-w-prose text-[14px] leading-relaxed">
+              {unresolved > 0
+                ? "This device still has the save, but not the copy of the story that goes with it — so there is nothing to draw here. Pressing Save on it again will restore it."
+                : "Nothing has been lost. The app could not read the store just now, and your notes and tags are where you left them."}
+            </p>
+            {/* ONLY WHEN RE-READING IS THE REMEDY. A store that could not be
+                read may read fine a moment later. An id with no card will
+                resolve the same way every time, so offering "Try again" there
+                would be a button that cannot work — the copy above names the
+                thing that does. */}
+            {unresolved > 0 ? null : (
+              <button
+                type="button"
+                onClick={refreshSaved}
+                className="focus-visible:ring-org border-edge text-ash-hi hover:bg-bench-2 mt-4 border px-3 py-1.5 text-[13px] font-semibold focus-visible:ring-2 focus-visible:outline-none"
+              >
+                Try again
+              </button>
+            )}
           </div>
         ) : null}
 
@@ -116,6 +147,17 @@ export function SavedScreen() {
         {/* Said ONCE for the whole list, and every Archive button points at it
             through aria-describedby. It used to be repeated inside every card,
             which is the same sentence twenty times on a full bin. */}
+        {state === "list" && unresolved > 0 ? (
+          <p
+            role="status"
+            className="border-edge text-ash-hi mb-3 border border-dashed p-3 text-[13px]"
+          >
+            {unresolved === 1
+              ? "1 more saved story could not be read and is not shown below."
+              : `${unresolved} more saved stories could not be read and are not shown below.`}
+          </p>
+        ) : null}
+
         {state === "list" ? (
           <p id={ARCHIVE_NOTE_ID} className="text-ash mb-3 text-[12.5px]">
             Archiving is not built yet, so that button is off. Remove takes a story off this list

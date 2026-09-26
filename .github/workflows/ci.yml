@@ -647,7 +647,8 @@ jobs:
           # product, and running them here would tie the job to a seeded corpus.
           NOT_A_CHECK="scripts/shoot-filter.mjs
           scripts/shoot-story.mjs
-          scripts/shoot-brief-states.mjs"
+          scripts/shoot-brief-states.mjs
+          scripts/shoot-saved-states.mjs"
 
           DRIVERS="$(grep -rl "launchBrowser" scripts --include='*.mjs' 2>/dev/null | grep -v '^scripts/lib/' | sort || true)"
           SELECTED_FILES="$(while IFS= read -r c; do
