@@ -1,5 +1,5 @@
 import type { Db } from "@/db/client";
-import { briefWindow, storiesInWindow } from "@/api/brief";
+import { recentStories, reportingWindow } from "@/api/brief";
 import { userPreferences } from "@/db/schema";
 import { DEFAULT_VIEW } from "@/lib/api/brief-length";
 import { VIEW_OF, type BriefView } from "@/lib/api/views";
@@ -75,16 +75,16 @@ export async function briefCoverage(db: Db, now: Date): Promise<BriefCoverage | 
     .limit(1);
   if (!prefs) return null;
 
-  const window = briefWindow(now, prefs.briefTime, prefs.timezone);
   // ONE query, filtered in memory by the SAME map the route's SQL filter is
   // built from. A second `storiesInWindow` call with `types` would be a second
   // trip for a subset of rows already in hand, and keying the split on VIEW_OF
   // rather than on a copied list is what stops the two definitions drifting.
-  const cards = await storiesInWindow(db, window);
+  const reported = reportingWindow(now, prefs.briefTime, prefs.timezone);
+  const cards = await recentStories(db);
 
   return {
-    from: window.from,
-    to: window.to,
+    from: reported.from,
+    to: reported.to,
     window: slice(cards),
     defaultView: slice(cards.filter((card) => VIEW_OF[card.contentType] === DEFAULT_VIEW)),
     defaultViewName: DEFAULT_VIEW,

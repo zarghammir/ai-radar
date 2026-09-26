@@ -6,11 +6,14 @@ import { ApiError } from "./http";
 import type { BriefLength } from "./reading-budget";
 import { BRIEF_LENGTHS } from "./reading-budget";
 import { notAdjacentTech, notHidden } from "./radar";
+// IMPORTED, NOT COPIED. The brief's bound and the ranker's horizon must be the
+// same number or the brief sorts on scores the ranker has stopped maintaining.
+import { STORY_WINDOW_HOURS } from "@/pipeline/run";
 import { buildCards, type StoryCard } from "./stories";
 
 // One implementation, in a module with no database imports so the fixtures can
 // use the same rule rather than a copy that drifts. See reading-budget.ts.
-export { BRIEF_LENGTHS, takeWithinReadingTime } from "./reading-budget";
+export { BRIEF_LENGTHS, BRIEF_STORY_COUNTS, takeBriefStories } from "./reading-budget";
 export type { BriefLength } from "./reading-budget";
 
 export interface BriefWindow {
@@ -222,6 +225,11 @@ export interface BriefOptions {
  * migrations on merge. `raw_items_story_idx` already exists, so this reads the
  * index rather than the table, and it ships without a schema change at all.
  */
+/**
+ * Still used, but ONLY by the sweep diagnostic below — never to decide what a
+ * reader may see. It reports how much has landed recently so an empty screen
+ * can say why; it does not filter the brief.
+ */
 function arrivedSince(from: Date): SQL {
   // AN ISO STRING WITH AN EXPLICIT CAST, not the Date. Interpolating a Date
   // into a raw `sql` template hands it straight to postgres.js, which wants a
@@ -234,26 +242,107 @@ function arrivedSince(from: Date): SQL {
   )`;
 }
 
-export async function storiesInWindow(
-  db: Db,
-  window: BriefWindow,
-  options: BriefOptions = {},
-): Promise<StoryCard[]> {
+/**
+ * THE STORIES A BRIEF DRAWS FROM: everything recent, newest first.
+ *
+ * THERE IS NO LONGER AN ADMISSION WINDOW, and removing it is the point. This
+ * used to be `storiesInWindow`, anchored to the reader's `briefTime`, which
+ * made one setting do two jobs: decide when the push is sent, AND decide what
+ * the reader is allowed to see. Only the first is legitimate. Opening the app
+ * at 09:05 with a 09:00 brief time showed whatever had arrived in five
+ * minutes, which is nothing — the owner hit exactly that and said: "It doesn't
+ * need to be open at 9. It needs to consistently receive news."
+ *
+ * #148 is the near miss worth recording. It changed admission from publication
+ * to ARRIVAL and left the anchor in place, so it corrected which timestamp
+ * counted without noticing that the question itself was wrong. A screen can be
+ * honest about what it checked and still be checking the wrong thing.
+ *
+ * `briefTime` keeps its real job — src/notify/run-brief.ts uses briefWindow to
+ * decide when to SEND. It no longer decides what exists.
+ *
+ * RANKED, NOT CHRONOLOGICAL — the owner ruled it: "the 5 most important,
+ * recent ones." He was offered strictly-newest and declined the consequence,
+ * which is that a big story gets pushed off by newer trivia within the hour.
+ * Score order keeps it on top for a while, and with no admission filter the
+ * screen still cannot be empty while the collector works.
+ *
+ * SO "RECENT" HAS TO MEAN SOMETHING, AND THIS IS THE BOUND.
+ *
+ * With no filter and score ordering, the top five would otherwise be the
+ * all-time best rather than today's — and worse than that, they would be the
+ * best according to a STALE number. `stories.score` is computed and STORED,
+ * and the pipeline only recomputes it for stories whose `lastActivityAt` is
+ * within STORY_WINDOW_HOURS (src/pipeline/run.ts). Past that horizon a story
+ * keeps whatever score it had when it was fresh — recency is 14 points of it
+ * (ten-hour half-life), so a once-hot story stays permanently inflated and
+ * would lead the brief forever.
+ *
+ * The bound is therefore THE SAME HORIZON THE RANKER MAINTAINS, imported
+ * rather than copied. Beyond it the ordering key is meaningless, so this is
+ * not a policy about what the reader deserves to see — it is the range over
+ * which the number being sorted on is still true.
+ *
+ * IT IS MEASURED BY ARRIVAL, NOT PUBLICATION, and that is #148 surviving. A
+ * story published last week and fetched this morning is news to this reader;
+ * bounding on publication would have re-created the exact defect #148 fixed,
+ * one layer down, while looking like a tidy-up.
+ *
+ * AND IT IS NOT THE WINDOW THAT WAS REMOVED. That one was anchored to the
+ * READER'S OWN briefTime: personal, re-anchored every day, and capable of
+ * being five minutes wide at 09:05. This is fixed, product-wide, three days
+ * long, and cannot go empty while the collector is working — if a sweep has
+ * run, something has activity inside 72 hours.
+ */
+export async function recentStories(db: Db, options: BriefOptions = {}): Promise<StoryCard[]> {
   const { includeAdjacent = false, types } = options;
   const rows = await db
     .select()
     .from(stories)
     .where(
       and(
-        arrivedSince(window.from),
+        // The bound, not a window — see the note above. BY ARRIVAL, not by
+        // publication: #148's ruling is that a story which reached this app
+        // recently is news to the reader even if it was published earlier, and
+        // bounding on publication would have thrown that away again. A story
+        // fetched this morning and published last week still counts.
+        arrivedSince(new Date(Date.now() - STORY_WINDOW_HOURS * 3_600_000)),
         notHidden(),
         ...(includeAdjacent ? [] : [notAdjacentTech()]),
         types && types.length > 0 ? inArray(stories.contentType, [...types]) : undefined,
       ),
     )
+    // BY SCORE, which is what "most important" means here, and which is
+    // unchanged from before the window came out. Only the admission rule
+    // changed; the ordering is the one the ranker already produces.
     .orderBy(desc(stories.score), desc(stories.id))
     .limit(BRIEF_CANDIDATE_LIMIT);
   return buildCards(db, rows);
+}
+
+/**
+ * How far back "recently" reaches WHEN REPORTING, and nowhere else.
+ *
+ * Nothing is filtered by this. It bounds the sweep diagnostic, so an empty
+ * screen can say how much the collector has written lately — see sweepSummary.
+ */
+export const RECENT_ACTIVITY_HOURS = 24;
+
+/**
+ * The period the empty state talks about, plus the reader's delivery settings.
+ *
+ * THIS IS NOT AN ADMISSION WINDOW. It replaces one, and the distinction is the
+ * whole change: `from`/`to` describe what the app is REPORTING on, and
+ * `briefTime`/`timezone` ride along because the reader's delivery setting is
+ * worth showing next to it. Nothing here decides which stories exist.
+ */
+export function reportingWindow(now: Date, briefTime: string, timezone: string): BriefWindow {
+  // Validated through briefWindow so an invalid briefTime or timezone is still
+  // rejected in exactly the same way and with the same message — the setting
+  // did not stop being real, it stopped being a filter.
+  const validated = briefWindow(now, briefTime, timezone);
+  const from = new Date(now.getTime() - RECENT_ACTIVITY_HOURS * 60 * 60 * 1000);
+  return { from, to: now, briefTime: validated.briefTime, timezone: validated.timezone };
 }
 
 /**

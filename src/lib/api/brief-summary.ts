@@ -17,7 +17,24 @@ export interface BriefSummary {
    * rather than leaving the reader to infer it — the same principle as showing
    * the word beside the trust meter.
    */
-  overBudget: string | null;
+  /**
+   * REMOVED WITH THE TIME BUDGET (see reading-budget.ts). The field is gone
+   * rather than left returning null, so a caller still reading it is a compile
+   * error instead of a panel that silently never appears.
+   *
+   * What it used to say: "longer than your 5-minute setting — the top story
+   * alone runs 6 minutes." That sentence only meant something while the
+   * setting WAS a number of minutes. Now that "5" selects five stories, five
+   * stories of three minutes each would have tripped it on an ordinary brief
+   * and told the reader their brief had overrun a budget that no longer
+   * exists. A true-sounding sentence about a setting that has changed meaning
+   * is worse than no sentence.
+   *
+   * The assertion behind it came from #114 and is retired deliberately, not
+   * lost: what it guarded — that the header never presents an over-long brief
+   * as though nothing happened — is no longer reachable, because selection is
+   * now a count and a count cannot overrun itself.
+   */
 }
 
 function plural(n: number, one: string, many: string) {
@@ -26,7 +43,7 @@ function plural(n: number, one: string, many: string) {
 
 export function briefSummary(brief: BriefResponse): BriefSummary {
   if (brief.count === 0) {
-    return { count: "Nothing yet", minutes: null, unread: null, overBudget: null };
+    return { count: "Nothing yet", minutes: null, unread: null };
   }
 
   const unreadCount = brief.stories.filter((s) => !s.read).length;
@@ -35,21 +52,10 @@ export function briefSummary(brief: BriefResponse): BriefSummary {
   // there is nothing to compare against a previous morning.
   const unread = unreadCount === brief.count || unreadCount === 0 ? null : `${unreadCount} unread`;
 
-  let overBudget: string | null = null;
-  if (brief.length !== "all") {
-    const budget = Number(brief.length);
-    if (brief.readingMinutes > budget) {
-      overBudget =
-        `longer than your ${budget}-minute setting — the top story alone ` +
-        `runs ${plural(brief.readingMinutes, "minute", "minutes")}`;
-    }
-  }
-
   return {
     count: plural(brief.count, "story", "stories"),
     minutes: plural(brief.readingMinutes, "minute", "minutes"),
     unread,
-    overBudget,
   };
 }
 
@@ -81,9 +87,19 @@ const atTime = (iso: string) =>
  * them something to do, and it is the case the old copy actively argued them
  * out of.
  */
+/**
+ * THE FOUR REASONS SURVIVE THE WINDOW'S REMOVAL AND GET MORE USEFUL, NOT LESS.
+ *
+ * While the brief was anchored to `briefTime`, an empty screen had a fifth and
+ * commonest cause that none of these named: the reader was simply early. That
+ * cause is gone — nothing is filtered by time now — so an empty brief can only
+ * mean the collector has not run, has run and found nothing, or has found
+ * things the reader's own filter excludes. Each of those is worth saying.
+ *
+ * The copy no longer cites the brief time as a boundary, because it is not one
+ * any more. It is only when the push is sent.
+ */
 export function emptyBriefReason(brief: BriefResponse): EmptyBriefReason {
-  const at = brief.window.briefTime;
-
   if (brief.sweep === null) {
     return {
       kind: "no-collector",
@@ -112,8 +128,8 @@ export function emptyBriefReason(brief: BriefResponse): EmptyBriefReason {
       kind: "quiet",
       title: "A quiet morning",
       body:
-        `Nothing has arrived since your brief window opened at ${at}. The last sweep finished ` +
-        `at ${last} and brought nothing new, so this is genuinely quiet rather than a fault.`,
+        `Nothing new has arrived recently. The last sweep finished at ${last} and brought ` +
+        `nothing back, so this is genuinely quiet rather than a fault.`,
     };
   }
 
@@ -121,8 +137,7 @@ export function emptyBriefReason(brief: BriefResponse): EmptyBriefReason {
     kind: "arrived-but-filtered",
     title: "Nothing here, but the day was not quiet",
     body:
-      `${n} ${n === 1 ? "story has" : "stories have"} arrived since your brief window opened at ` +
-      `${at} — the last sweep finished at ${last} — and none of them are in this view. Widen the ` +
-      `filter above, or check your brief time and timezone in Settings if ${at} is not your morning.`,
+      `${n} ${n === 1 ? "story has" : "stories have"} arrived recently — the last sweep finished ` +
+      `at ${last} — and none of them are in this view. Widen the filter above to see them.`,
   };
 }

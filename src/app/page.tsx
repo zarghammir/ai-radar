@@ -101,12 +101,6 @@ export default async function TodayPage({ searchParams }: PageProps<"/">) {
             {summary.count}
             {summary.minutes ? ` · ${summary.minutes}` : null}
             {summary.unread ? ` · ${summary.unread}` : null}
-            {/* The brief always returns at least one story, so a single long
-                story can exceed the chosen budget. Say so rather than let the
-                number look like an arithmetic error. */}
-            {summary.overBudget ? (
-              <span className="text-ash block text-[13px]">{summary.overBudget}</span>
-            ) : null}
           </span>
         )
       }

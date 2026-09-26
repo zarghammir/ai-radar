@@ -1,5 +1,5 @@
 import { getDb } from "@/db/client";
-import { briefWindow, storiesInWindow, sweepSummary, takeWithinReadingTime } from "@/api/brief";
+import { recentStories, reportingWindow, sweepSummary, takeBriefStories } from "@/api/brief";
 import { getPreferences } from "@/api/reader";
 import { USING_FIXTURES } from "@/lib/api/client";
 import { fixtureBrief } from "@/lib/api/fixtures";
@@ -32,19 +32,19 @@ export async function loadBrief(
 
   const db = getDb();
   const prefs = await getPreferences(db);
-  const window = briefWindow(new Date(), prefs.briefTime, prefs.timezone);
-  const ranked = await storiesInWindow(db, window, { types: typesForView(view) });
-  const stories = takeWithinReadingTime(ranked, length);
+  const reported = reportingWindow(new Date(), prefs.briefTime, prefs.timezone);
+  const ranked = await recentStories(db, { types: typesForView(view) });
+  const stories = takeBriefStories(ranked, length);
   // Read whether the brief is empty or not: a reader asking "why so few?" on a
   // short brief deserves the same facts as one asking "why none?".
-  const sweep = await sweepSummary(db, window.from);
+  const sweep = await sweepSummary(db, reported.from);
 
   return {
     window: {
-      from: window.from.toISOString(),
-      to: window.to.toISOString(),
-      briefTime: window.briefTime,
-      timezone: window.timezone,
+      from: reported.from.toISOString(),
+      to: reported.to.toISOString(),
+      briefTime: reported.briefTime,
+      timezone: reported.timezone,
     },
     length,
     view,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { briefWindow, parseBriefLength, takeWithinReadingTime } from "./brief";
+import { briefWindow, parseBriefLength, takeBriefStories } from "./brief";
 import type { StoryCard } from "./stories";
 
 const card = (readingMinutes: number, slug = `s${readingMinutes}`) =>
@@ -66,22 +66,56 @@ describe("parseBriefLength", () => {
   });
 });
 
-describe("takeWithinReadingTime", () => {
-  it("fills a five-minute budget and stops", () => {
-    const taken = takeWithinReadingTime([card(2), card(2), card(3), card(1)], "5");
-    expect(taken.map((s) => s.readingMinutes)).toEqual([2, 2]);
+describe("takeBriefStories", () => {
+  const card = (readingMinutes: number) => ({ readingMinutes });
+
+  /**
+   * THE RULE CHANGED, SO THESE ASSERTIONS CHANGED WITH IT. They used to pin a
+   * reading-time budget: take stories until the accumulated minutes would
+   * exceed the target. The owner specified a count instead — "for the 5
+   * minutes ... pick only 5 news stories" — so the old assertions are now
+   * WRONG rather than merely stale, and pinning them would pin a rule the
+   * product no longer has.
+   */
+  it("takes exactly five for the short brief", () => {
+    const stories = Array.from({ length: 9 }, (_, i) => card(i + 1));
+    expect(takeBriefStories(stories, "5")).toHaveLength(5);
   });
 
-  it("returns everything for all", () => {
-    expect(takeWithinReadingTime([card(9), card(9)], "all")).toHaveLength(2);
+  it("takes exactly ten for the long brief", () => {
+    // TWO-MINUTE STORIES, NOT ONE-MINUTE ONES, and that detail is the test.
+    // With one-minute stories a ten-minute budget also returns ten, so the old
+    // rule and the new one agree and this assertion cannot tell them apart —
+    // it stayed green while the control was in place. At two minutes each the
+    // old rule returns five and the new one returns ten.
+    const stories = Array.from({ length: 30 }, () => card(2));
+    expect(takeBriefStories(stories, "10")).toHaveLength(10);
   });
 
-  it("always returns one story even when it is longer than the budget", () => {
-    // A brief that shows nothing because the best story is long is not a brief.
-    expect(takeWithinReadingTime([card(40), card(1)], "5")).toHaveLength(1);
+  it("IGNORES reading time entirely, which is the whole change", () => {
+    // Five forty-minute stories. The old rule returned ONE of these, because
+    // the first alone blew a five-minute budget. The new rule returns five.
+    const stories = Array.from({ length: 5 }, () => card(40));
+    expect(takeBriefStories(stories, "5")).toHaveLength(5);
   });
 
-  it("returns nothing when there is nothing", () => {
-    expect(takeWithinReadingTime([], "5")).toEqual([]);
+  it("takes everything on 'all'", () => {
+    expect(takeBriefStories([card(9), card(9)], "all")).toHaveLength(2);
+  });
+
+  it("returns fewer than the count when there are fewer stories", () => {
+    // Not padded, not an error: three is what there is.
+    expect(takeBriefStories([card(1), card(1), card(1)], "5")).toHaveLength(3);
+  });
+
+  it("returns nothing for no stories", () => {
+    expect(takeBriefStories([], "5")).toEqual([]);
+  });
+
+  it("takes a PREFIX, so the caller's order is the order", () => {
+    // recentStories sorts newest first, so "the first five" must mean the five
+    // newest. A rule that reordered would quietly change which five.
+    const stories = [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }];
+    expect(takeBriefStories(stories, "5").map((s) => s.id)).toEqual([1, 2, 3, 4]);
   });
 });
