@@ -39,7 +39,8 @@
     "measure:keyword-gate": "tsx scripts/measure-keyword-gate.ts",
     "backfill:ai-vocabulary": "tsx scripts/backfill-ai-vocabulary.ts",
     "migrations:check": "tsx scripts/check-migrations.ts",
-    "env:check": "tsx scripts/check-worker-env.ts"
+    "env:check": "tsx scripts/check-worker-env.ts",
+    "measure:brief-coverage": "tsx scripts/measure-brief-coverage.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.126.0",
