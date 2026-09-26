@@ -14,6 +14,7 @@ import { runSummaries } from "@/llm/run-summaries";
 import { describeError } from "@/pipeline/describe-error";
 import { runBriefDelivery } from "@/notify/run-brief";
 import { summaryLines, writeStepSummary } from "./step-summary";
+import { briefCoverage, coverageLines } from "./brief-coverage";
 
 /**
  * The ingestion worker: one pass with --once, otherwise a pass every
@@ -128,7 +129,28 @@ async function runPass(): Promise<number> {
   // opens, and "summaries are off" is a SUCCESSFUL run, so the failure alarm
   // never mentions it. #162 made the on state reachable; this makes the
   // current state legible.
-  writeStepSummary(summaryLines(summaryState, briefState), process.env);
+  // THE COVERAGE FIGURE IS COMPUTED UNCONDITIONALLY, and that is the point
+  // rather than an oversight.
+  //
+  // It does not depend on the summariser having run. The pass that prompted
+  // this said "summaries off: daily cap reached (20 stories/day)" — nothing was
+  // written, AND THE COVERAGE QUESTION STILL HAD AN ANSWER. A figure that only
+  // appears on the runs that did work is one nobody can use to notice that work
+  // has stopped happening, which is the whole failure this reports against.
+  //
+  // Guarded like the features themselves: a report that could fail a pass would
+  // be worse than the invisibility it exists to remove.
+  let coverage: Awaited<ReturnType<typeof briefCoverage>> = null;
+  try {
+    coverage = await briefCoverage(getDb(), new Date());
+  } catch (error) {
+    console.error(`[brief] coverage unavailable: ${describeError(error)}`);
+  }
+
+  writeStepSummary(
+    [...summaryLines(summaryState, briefState), ...coverageLines(coverage)],
+    process.env,
+  );
 
   return exitCodeFor(ingest);
 }
