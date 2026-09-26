@@ -158,7 +158,11 @@ function readsReachableFrom(entry: string): {
  * every job. There is none today; supporting it is cheaper than discovering the
  * omission from a wrong answer.
  */
-function scopedEnv(path: string): { provided: Set<string>; job: string | null } {
+function scopedEnv(path: string): {
+  provided: Set<string>;
+  job: string | null;
+  ambiguous?: string[];
+} {
   const lines = readFileSync(path, "utf8").split("\n");
   const provided = new Set<string>();
 
@@ -196,6 +200,22 @@ function scopedEnv(path: string): { provided: Set<string>; job: string | null } 
     if (head) jobStarts.push({ name: head[1], at: i });
   }
 
+  // EVERY job that runs the worker, not the first. Taking the first would
+  // examine one job's wiring and silently ignore the other's — which is this
+  // checker's own defect, committed by the checker. Found by a control that was
+  // aimed wrong and revealed something anyway.
+  const runners = jobStarts.filter((start, j) => {
+    const to = j + 1 < jobStarts.length ? jobStarts[j + 1].at : lines.length;
+    return lines.slice(start.at, to).some((line) => line.includes(WORKER_COMMAND));
+  });
+
+  if (runners.length > 1) {
+    // Refused rather than unioned. A union has exactly the flaw this scoping
+    // exists to remove: a variable forwarded to only one of them would read as
+    // visible to both.
+    return { provided, job: null, ambiguous: runners.map((r) => r.name) };
+  }
+
   for (let j = 0; j < jobStarts.length; j++) {
     const from = jobStarts[j].at;
     const to = j + 1 < jobStarts.length ? jobStarts[j + 1].at : lines.length;
@@ -226,14 +246,18 @@ function scopedEnv(path: string): { provided: Set<string>; job: string | null } 
 
 function main(): void {
   const { reads, files } = readsReachableFrom(WORKER_ENTRY);
-  const { provided, job } = scopedEnv(WORKFLOW);
+  const { provided, job, ambiguous } = scopedEnv(WORKFLOW);
   const modules = files.length;
   const problems: string[] = [];
 
   // Floors first. A parser that matched nothing, or a graph walk that resolved
   // nothing, would otherwise print a clean bill of health — the exact shape of
   // instrument this repository keeps deleting.
-  if (job === null) {
+  if (ambiguous) {
+    problems.push(
+      `${ambiguous.length} jobs in ${WORKFLOW} run \`${WORKER_COMMAND}\` (${ambiguous.join(", ")}). This checker compares against ONE env block and cannot tell you which is authoritative, and unioning them would reintroduce the very confusion the scoping removes — a variable forwarded to only one would read as visible to both. Split them, or teach this script which one is the scheduled pass.`,
+    );
+  } else if (job === null) {
     problems.push(
       `no job in ${WORKFLOW} runs \`${WORKER_COMMAND}\`, so there is no env block to compare against. Either the workflow changed or this checker is pointed at the wrong file.`,
     );
