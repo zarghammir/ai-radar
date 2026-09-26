@@ -8,6 +8,7 @@ import {
   type BriefLength,
 } from "@/api/brief";
 import { userPreferences } from "@/db/schema";
+import { briefCoverage, coverageLine } from "@/worker/brief-coverage";
 
 /**
  * How much of the brief the reader would open carries a summary? (#149-adjacent)
@@ -51,6 +52,13 @@ async function main(): Promise<void> {
 
   const window = briefWindow(now, prefs.briefTime, prefs.timezone);
   const cards = await storiesInWindow(db, window);
+
+  // The headline figure comes from the SHARED module, not from arithmetic done
+  // here: the same number will be reported on every ingest pass once the step
+  // summary from #164 can call it, and two implementations of one figure is how
+  // a script and a report start disagreeing.
+  console.log(coverageLine(await briefCoverage(db, now)));
+  console.log("");
 
   console.log(`measured at   ${now.toISOString()}`);
   console.log(`brief time    ${prefs.briefTime} ${prefs.timezone}`);
