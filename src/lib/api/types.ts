@@ -93,6 +93,16 @@ export interface SavedResponse {
   stories: SavedCard[];
   nextCursor: string | null;
   hasMore: boolean;
+  /**
+   * SAVED IDS THIS DEVICE HOLDS BUT CANNOT TURN INTO A STORY.
+   *
+   * Not a detail: it is the difference between "you have saved nothing" and
+   * "the app cannot show you what you saved", and those are opposite things to
+   * tell a reader. savedCards() has always computed this; getSaved() used to
+   * drop it on the floor, so the screen had no way to tell the two apart and
+   * reported the second as the first.
+   */
+  unresolved: number;
 }
 
 export interface BriefWindow {

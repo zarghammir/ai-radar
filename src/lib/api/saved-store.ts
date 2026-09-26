@@ -16,7 +16,13 @@ import type { SavedCard } from "@/lib/api/types";
  * render as a reader who has saved nothing.
  */
 export type SavedState =
-  { kind: "loading" } | { kind: "ready"; stories: SavedCard[] } | { kind: "failed" };
+  | { kind: "loading" }
+  /** `unresolved`: saved ids this device holds but cannot turn into a story.
+   *  Carried on the READY state because it is a fact about a successful read,
+   *  not a failure of it — the store answered, and part of the answer is that
+   *  some of what the reader saved cannot be shown. */
+  | { kind: "ready"; stories: SavedCard[]; unresolved: number }
+  | { kind: "failed" };
 
 /** The same object every time, so the server render and the first client
  *  render agree and useSyncExternalStore cannot loop. */
@@ -42,7 +48,7 @@ async function run() {
   try {
     const response = await getSaved(false);
     if (attempt !== generation) return;
-    set({ kind: "ready", stories: response.stories });
+    set({ kind: "ready", stories: response.stories, unresolved: response.unresolved });
   } catch (error) {
     // The driver's message belongs in the console, never on the screen: it
     // names tables and hosts, and the reader can act on none of it.
@@ -95,6 +101,7 @@ export function patchSavedStory(id: number, changes: Partial<SavedCard>): () => 
   set({
     kind: "ready",
     stories: before.stories.map((s) => (s.id === id ? { ...s, ...changes } : s)),
+    unresolved: before.unresolved,
   });
   return () => set(before);
 }
@@ -102,7 +109,11 @@ export function patchSavedStory(id: number, changes: Partial<SavedCard>): () => 
 export function removeSavedStory(id: number): () => void {
   const before = snapshot;
   if (before.kind !== "ready") return () => {};
-  set({ kind: "ready", stories: before.stories.filter((s) => s.id !== id) });
+  set({
+    kind: "ready",
+    stories: before.stories.filter((s) => s.id !== id),
+    unresolved: before.unresolved,
+  });
   return () => set(before);
 }
 
