@@ -123,8 +123,36 @@ function describe(label: string, value: CoverageSlice | null): string {
   return `${value.covered}/${value.total} (${Math.round((value.covered / value.total) * 100)}%) ${label}`;
 }
 
+/**
+ * What the reporter has to say about, including the case where it failed.
+ *
+ * THREE STATES, MIRRORING summaryLines. #164 gave the feature reporters a
+ * `{ error }` arm for the same reason: a thing that did not run and a thing
+ * that BROKE are different facts, and collapsing them means the report names
+ * the wrong one.
+ */
+export type CoverageReport = BriefCoverage | null | { error: string };
+
 /** The report lines, or the honest absence of them. */
-export function coverageLines(coverage: BriefCoverage | null): string[] {
+export function coverageLines(coverage: CoverageReport): string[] {
+  // THE ERROR ARM EXISTS BECAUSE THE null ARM HAD TWO PRODUCERS.
+  //
+  // The message below names its single true cause — no user_preferences row —
+  // and that was correct for exactly one commit. The worker's call site catches
+  // a throw and, before this arm, left `coverage` as null: so a database blip,
+  // or briefWindow raising on a stored timezone Intl cannot parse (a real path,
+  // guarded in src/notify/window.ts for the same reason), printed "seed the
+  // database" at an instance that is seeded, while the actual reason went to
+  // console.error — the log this file's own header says nobody opens.
+  //
+  // Two absences collapsed into one value and reported as the more specific of
+  // the two, which is worse than reporting neither.
+  if (coverage !== null && "error" in coverage) {
+    return [
+      `- **brief coverage: unavailable** — computing it failed: ${coverage.error}. This says nothing about how many stories carry a summary`,
+    ];
+  }
+
   if (coverage === null) {
     // THE ONLY PATH HERE IS A MISSING user_preferences ROW. An empty window
     // returns an object with `window: null` instead, so this message described

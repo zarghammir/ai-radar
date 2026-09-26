@@ -14,7 +14,7 @@ import { runSummaries } from "@/llm/run-summaries";
 import { describeError } from "@/pipeline/describe-error";
 import { runBriefDelivery } from "@/notify/run-brief";
 import { summaryLines, writeStepSummary } from "./step-summary";
-import { briefCoverage, coverageLines } from "./brief-coverage";
+import { briefCoverage, coverageLines, type CoverageReport } from "./brief-coverage";
 
 /**
  * The ingestion worker: one pass with --once, otherwise a pass every
@@ -140,10 +140,15 @@ async function runPass(): Promise<number> {
   //
   // Guarded like the features themselves: a report that could fail a pass would
   // be worse than the invisibility it exists to remove.
-  let coverage: Awaited<ReturnType<typeof briefCoverage>> = null;
+  let coverage: CoverageReport = null;
   try {
     coverage = await briefCoverage(getDb(), new Date());
   } catch (error) {
+    // Passed THROUGH rather than swallowed into null. Leaving it null made this
+    // catch a second producer of that value, and the null message names one
+    // specific cause — so a failure here printed "seed the database" at a
+    // seeded instance while the real reason went only to the console.
+    coverage = { error: describeError(error) };
     console.error(`[brief] coverage unavailable: ${describeError(error)}`);
   }
 

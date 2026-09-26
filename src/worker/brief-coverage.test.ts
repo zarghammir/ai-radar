@@ -58,6 +58,29 @@ describe("coverageLines", () => {
    * The previous test asserted the absence of a fraction and not the REASON,
    * which is why nothing caught the drift.
    */
+  /**
+   * THE ARM THAT DID NOT EXIST WHEN THE MESSAGE BELOW WAS WRITTEN.
+   *
+   * The worker catches a throw from briefCoverage — a database blip, or
+   * briefWindow raising on a stored timezone Intl cannot parse — and before this
+   * arm it left the value null. So a failure printed the "seed the database"
+   * message at an instance that is seeded.
+   *
+   * The test below asserts that message names user_preferences, which HELD THE
+   * MESSAGE TO ONE CAUSE ON THE SAME COMMIT THAT GAVE THE VALUE A SECOND. The
+   * assertion was not wrong; what it asserted about stopped being true one hunk
+   * away. This pair is what keeps the two apart.
+   */
+  it("names a failure as a failure, never as an unseeded database", () => {
+    const line = coverageLines({ error: "connect ECONNREFUSED" })[0];
+    expect(line).toContain("unavailable");
+    expect(line).toContain("ECONNREFUSED");
+    expect(line).not.toContain("user_preferences");
+    // And it must not read as a coverage figure of zero.
+    expect(line).not.toMatch(/\(\d+%\)/);
+    expect(line).not.toMatch(/\d+\/\d+/);
+  });
+
   it("names the unseeded database, not an empty window", () => {
     const line = coverageLines(null)[0];
     expect(line).toContain("user_preferences");
@@ -107,6 +130,22 @@ describe("shownIn", () => {
     expect(shown).toContain("MODEL");
     expect(shown).not.toContain("NEWS");
   });
+
+  /**
+   * AND THERE IS DELIBERATELY NO TEST THAT THE COVERAGE LINES ARE EMITTED ON A
+   * PASS WHERE SUMMARIES DID NOT RUN. It is UNGUARDED, CORRECTLY UNGUARDED.
+   *
+   * An earlier version of this claim said the property "holds by signature",
+   * and that claimed more than the signature gives. The signature makes THIS
+   * FUNCTION incapable of depending on summary state. The unconditionality is a
+   * property of src/worker/main.ts's CONTROL FLOW — straight-line, no branch, no
+   * early return — and no signature can protect that. What protects it today is
+   * that there is no branch to lose.
+   *
+   * A guard would not be a unit test. It is an assertion that a pass reporting
+   * "summaries off" still emits a coverage line, which is integration-level and
+   * belongs with the compose smoke test if anyone wants it.
+   */
 
   /**
    * THERE IS DELIBERATELY NO TEST THAT briefCoverage USES shownIn(DEFAULT_VIEW).
