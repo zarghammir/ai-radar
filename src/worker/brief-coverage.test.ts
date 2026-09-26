@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { coverageLines, type BriefCoverage } from "./brief-coverage";
+import { CONTENT_TYPES } from "@/db/schema";
+import { coverageLines, shownIn, type BriefCoverage } from "./brief-coverage";
 
 const WINDOW = { from: new Date("2026-09-26T07:30:00Z"), to: new Date("2026-09-26T12:00:00Z") };
 const base = (over: Partial<BriefCoverage> = {}): BriefCoverage => ({
@@ -48,11 +49,19 @@ describe("coverageLines", () => {
     expect(lines).toContain("gap -90 points");
   });
 
-  // An empty window is NO DENOMINATOR. Reporting zero would say the summariser
-  // failed on stories that do not exist.
-  it("says no denominator rather than reporting a figure", () => {
+  /**
+   * The ONLY path to a top-level null is a missing user_preferences row. An
+   * empty window returns an object with `window: null`, so this message must
+   * describe an unseeded database — the earlier wording said "nothing is in the
+   * reader's window", a condition that can no longer reach it.
+   *
+   * The previous test asserted the absence of a fraction and not the REASON,
+   * which is why nothing caught the drift.
+   */
+  it("names the unseeded database, not an empty window", () => {
     const line = coverageLines(null)[0];
-    expect(line).toContain("no denominator");
+    expect(line).toContain("user_preferences");
+    expect(line).not.toContain("nothing is in the reader's window");
     // The SHAPE of a reported figure, not the substring "0%" — the message
     // explains itself in prose and a literal check would fire on that.
     expect(line).not.toMatch(/\(\d+%\)/);
@@ -71,4 +80,40 @@ describe("coverageLines", () => {
     // No gap, because there is nothing to subtract from.
     expect(lines).not.toContain("gap");
   });
+});
+
+/**
+ * The non-drift claim, made checkable.
+ *
+ * `typesForView` has two branches: "all" returns every content type, anything
+ * else filters on VIEW_OF. An in-memory reimplementation that reads VIEW_OF
+ * directly loses the first — and "all" is overloaded here, being both a VIEW
+ * meaning everything and a VIEW_OF bucket labelling the reporting-layer five.
+ *
+ * These agreed with the page only because DEFAULT_VIEW happens to be "built",
+ * while the comment claimed they agreed by construction. This is the test that
+ * would have caught that.
+ */
+describe("shownIn", () => {
+  it('shows EVERY content type on the "all" view, not the reporting bucket', () => {
+    const shown = CONTENT_TYPES.filter((contentType) => shownIn("all")({ contentType }));
+    expect(shown).toEqual([...CONTENT_TYPES]);
+  });
+
+  it('shows a strict subset on "built"', () => {
+    const shown = CONTENT_TYPES.filter((contentType) => shownIn("built")({ contentType }));
+    expect(shown.length).toBeGreaterThan(0);
+    expect(shown.length).toBeLessThan(CONTENT_TYPES.length);
+    expect(shown).toContain("MODEL");
+    expect(shown).not.toContain("NEWS");
+  });
+
+  /**
+   * THERE IS DELIBERATELY NO TEST THAT briefCoverage USES shownIn(DEFAULT_VIEW).
+   *
+   * I wrote one and deleted it: it compared a value against itself through a
+   * conditional on DEFAULT_VIEW and could not fail. The linkage is a single call
+   * site, verified by reading it, and a test that cannot fail is worse than no
+   * test because it reads as coverage of exactly the thing nobody checked.
+   */
 });
