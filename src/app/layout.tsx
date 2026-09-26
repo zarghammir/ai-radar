@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Archivo, Archivo_Narrow, JetBrains_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import { brand } from "@/config/brand";
 import { ThemeScript } from "@/components/theme-script";
 import { BottomNav, Sidebar } from "@/components/app-nav";
@@ -8,27 +8,237 @@ import { FirstRunGate } from "@/components/onboarding/first-run-gate";
 import "./globals.css";
 
 /**
- * next/font downloads these at BUILD time and serves them from our own origin.
- * No request reaches Google from a reader's browser, which is what the README's
- * self-host promise and PRODUCT.md's no-external-reporting line require.
+ * THE THREE BRAND FACES, SERVED FROM FILES IN THIS REPOSITORY.
+ *
+ * WHY THEY ARE VENDORED (#160). These used next/font/google, which fetches from
+ * fonts.gstatic.com AT BUILD TIME. That put a third party inside every build:
+ * four of one week's five red CI runs were that fetch failing, each one green on
+ * a re-run with no code changed. A retry makes green cheaper to obtain; it does
+ * not make the dependency stop existing. The files are committed instead.
+ *
+ * The reader-facing promise is unchanged and was already true: no request reached
+ * Google from a reader's browser before, because next/font self-hosted what it
+ * downloaded. What changes is that THE BUILD no longer reaches Google either.
+ *
+ * WHY TWELVE CALLS AND NOT THREE. Google ships each family split by unicode-range
+ * — one file per subset — so a reader downloads only the ranges their text needs.
+ * next/font/local takes ONE set of `declarations` per call, so unicode-range
+ * cannot vary between entries of a single call. One call per subset is the only
+ * way to keep that split, and keeping it is why this change costs a reader ZERO
+ * extra bytes: same files, same ranges, same lazy fetching. The alternative —
+ * one unsubsetted file per family — was measured and rejected: the only
+ * unsubsetted artefacts published anywhere are variable TTFs totalling 939,108
+ * bytes against 94,144 bytes of woff2 that a latin-only reader fetches today.
+ *
+ * THE TRAP IN THIS SHAPE, and the reason for adjustFontFallback: false below.
+ * Each call emits its own metric-adjusted "<Name> Fallback" family, which is a
+ * local Arial carrying NO unicode-range and can therefore serve any character.
+ * Chained naively, --font-sans would read: archivo-latin, archivo-latin Fallback,
+ * archivo-latin-ext, … — so a Polish or Vietnamese character, which the latin
+ * face declines by unicode-range, would be served by adjusted Arial WHILE THE
+ * REAL latin-ext FILE SAT UNUSED. Every glyph in English would be correct, which
+ * is exactly why it would survive review. So the fallback is switched off on
+ * every call but the LAST of each family, leaving one fallback after the real
+ * faces. All subsets of one typeface share its metrics, so which file computes
+ * them does not matter — verified: the emitted percentages are unchanged.
+ *
+ * Provenance, licences and sha256 for every file: src/app/fonts/PROVENANCE.md.
+ * `node scripts/verify-vendored-fonts.mjs` checks the bytes still match it.
  */
-const archivo = Archivo({
-  variable: "--font-archivo",
-  subsets: ["latin"],
+
+// Archivo — body and headings. font-stretch is declared because the upstream face
+// carries a wdth axis and next/font/google emitted font-stretch:100% for it.
+const archivoLatin = localFont({
+  src: "./fonts/archivo-latin.woff2",
+  variable: "--font-archivo-latin",
+  weight: "100 900",
+  style: "normal",
   display: "swap",
+  declarations: [
+    { prop: "font-stretch", value: "100%" },
+    {
+      prop: "unicode-range",
+      value:
+        "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD",
+    },
+  ],
 });
 
-const archivoNarrow = Archivo_Narrow({
-  variable: "--font-archivo-narrow",
-  subsets: ["latin"],
-  weight: ["600", "700"],
+const archivoLatinExt = localFont({
+  src: "./fonts/archivo-latin-ext.woff2",
+  variable: "--font-archivo-latin-ext",
+  weight: "100 900",
+  style: "normal",
   display: "swap",
+  declarations: [
+    { prop: "font-stretch", value: "100%" },
+    {
+      prop: "unicode-range",
+      value:
+        "U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF",
+    },
+  ],
+  adjustFontFallback: false,
 });
 
-const jetbrainsMono = JetBrains_Mono({
-  variable: "--font-jetbrains-mono",
-  subsets: ["latin"],
+const archivoVietnamese = localFont({
+  src: "./fonts/archivo-vietnamese.woff2",
+  variable: "--font-archivo-vietnamese",
+  weight: "100 900",
+  style: "normal",
   display: "swap",
+  declarations: [
+    { prop: "font-stretch", value: "100%" },
+    {
+      prop: "unicode-range",
+      value:
+        "U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB",
+    },
+  ],
+  adjustFontFallback: false,
+});
+
+// Archivo Narrow — labels. NOT variable in this app: layout asked for weights 600
+// and 700, and Google answers that with two @font-face blocks per subset pointing
+// at ONE file. The two-entry src array reproduces exactly that.
+const narrowLatin = localFont({
+  src: [
+    { path: "./fonts/archivo-narrow-latin.woff2", weight: "600", style: "normal" },
+    { path: "./fonts/archivo-narrow-latin.woff2", weight: "700", style: "normal" },
+  ],
+  variable: "--font-archivo-narrow-latin",
+  display: "swap",
+  declarations: [
+    {
+      prop: "unicode-range",
+      value:
+        "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD",
+    },
+  ],
+});
+
+const narrowLatinExt = localFont({
+  src: [
+    { path: "./fonts/archivo-narrow-latin-ext.woff2", weight: "600", style: "normal" },
+    { path: "./fonts/archivo-narrow-latin-ext.woff2", weight: "700", style: "normal" },
+  ],
+  variable: "--font-archivo-narrow-latin-ext",
+  display: "swap",
+  declarations: [
+    {
+      prop: "unicode-range",
+      value:
+        "U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF",
+    },
+  ],
+  adjustFontFallback: false,
+});
+
+const narrowVietnamese = localFont({
+  src: [
+    { path: "./fonts/archivo-narrow-vietnamese.woff2", weight: "600", style: "normal" },
+    { path: "./fonts/archivo-narrow-vietnamese.woff2", weight: "700", style: "normal" },
+  ],
+  variable: "--font-archivo-narrow-vietnamese",
+  display: "swap",
+  declarations: [
+    {
+      prop: "unicode-range",
+      value:
+        "U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB",
+    },
+  ],
+  adjustFontFallback: false,
+});
+
+// JetBrains Mono — timestamps, counts and tabular numerals.
+const monoLatin = localFont({
+  src: "./fonts/jetbrains-mono-latin.woff2",
+  variable: "--font-jetbrains-mono-latin",
+  weight: "100 800",
+  style: "normal",
+  display: "swap",
+  declarations: [
+    {
+      prop: "unicode-range",
+      value:
+        "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD",
+    },
+  ],
+});
+
+const monoLatinExt = localFont({
+  src: "./fonts/jetbrains-mono-latin-ext.woff2",
+  variable: "--font-jetbrains-mono-latin-ext",
+  weight: "100 800",
+  style: "normal",
+  display: "swap",
+  declarations: [
+    {
+      prop: "unicode-range",
+      value:
+        "U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF",
+    },
+  ],
+  adjustFontFallback: false,
+});
+
+const monoVietnamese = localFont({
+  src: "./fonts/jetbrains-mono-vietnamese.woff2",
+  variable: "--font-jetbrains-mono-vietnamese",
+  weight: "100 800",
+  style: "normal",
+  display: "swap",
+  declarations: [
+    {
+      prop: "unicode-range",
+      value:
+        "U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB",
+    },
+  ],
+  adjustFontFallback: false,
+});
+
+const monoGreek = localFont({
+  src: "./fonts/jetbrains-mono-greek.woff2",
+  variable: "--font-jetbrains-mono-greek",
+  weight: "100 800",
+  style: "normal",
+  display: "swap",
+  declarations: [
+    {
+      prop: "unicode-range",
+      value: "U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF",
+    },
+  ],
+  adjustFontFallback: false,
+});
+
+const monoCyrillic = localFont({
+  src: "./fonts/jetbrains-mono-cyrillic.woff2",
+  variable: "--font-jetbrains-mono-cyrillic",
+  weight: "100 800",
+  style: "normal",
+  display: "swap",
+  declarations: [
+    { prop: "unicode-range", value: "U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116" },
+  ],
+  adjustFontFallback: false,
+});
+
+const monoCyrillicExt = localFont({
+  src: "./fonts/jetbrains-mono-cyrillic-ext.woff2",
+  variable: "--font-jetbrains-mono-cyrillic-ext",
+  weight: "100 800",
+  style: "normal",
+  display: "swap",
+  declarations: [
+    {
+      prop: "unicode-range",
+      value: "U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F",
+    },
+  ],
+  adjustFontFallback: false,
 });
 
 export const metadata: Metadata = {
@@ -69,7 +279,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${archivo.variable} ${archivoNarrow.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      className={`${archivoLatin.variable} ${archivoLatinExt.variable} ${archivoVietnamese.variable} ${narrowLatin.variable} ${narrowLatinExt.variable} ${narrowVietnamese.variable} ${monoLatin.variable} ${monoLatinExt.variable} ${monoVietnamese.variable} ${monoGreek.variable} ${monoCyrillic.variable} ${monoCyrillicExt.variable} h-full antialiased`}
     >
       <head>
         <ThemeScript />

@@ -241,9 +241,22 @@ As of issue #12 the system is implemented, not just described.
   `accent` is the reserved orange, and `accentText` carries the light/dark split that palette
   law two requires. `app/manifest.ts` and the root metadata read from it, so renaming the
   product renames the installed app.
-- The three faces are self-hosted by `next/font` at build time. The production build contains
+- The three faces are served from `woff2` files **committed to this repository** under
+  `src/app/fonts`, wired with `next/font/local` — twelve calls, one per unicode-range subset,
+  so a reader still downloads only the ranges their text needs. The production build contains
   **no reference to `fonts.googleapis.com` or `fonts.gstatic.com`** and emits 12 `woff2` files
   from our own origin. A reader's browser never contacts Google.
+- **That last sentence was already true before the fonts were vendored, and saying so is the
+  point.** `next/font/google` downloaded the faces at build time and rewrote the CSS to local
+  paths, so the built output never carried a Google URL either — which is why grepping the
+  build output for `fonts.gstatic.com` cannot tell the two arrangements apart. What #160
+  changed is the BUILD: it no longer fetches from a third party, so it no longer fails when
+  that third party is unreachable. The check that distinguishes them is the absence of
+  `@vercel/turbopack-next/internal/font/google/font` from the build, which is present when
+  `next/font/google` is in use and absent when it is not.
+- Provenance, licences (all three SIL Open Font License 1.1) and a `sha256` per file are in
+  `src/app/fonts/PROVENANCE.md`; `node scripts/verify-vendored-fonts.mjs` re-checks the bytes
+  against it and fails on a changed, missing or unlisted file.
 - Layout switches on **real CSS media queries** (Tailwind's `lg:`, min-width 64rem): the
   sidebar is `hidden lg:flex`, the bottom bar `lg:hidden`. Nothing switches on a class toggled
   from JavaScript.

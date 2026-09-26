@@ -105,6 +105,20 @@ jobs:
       - name: The migration gate classifies correctly
         run: node scripts/migration-gate.mjs --self-test
 
+      # THE VENDORED FONTS ARE STILL THE BYTES WE SAID THEY WERE.
+      #
+      # #160 committed twelve woff2 files and the claim that each is identical to
+      # what next/font/google was downloading, recorded as a sha256 per file in
+      # src/app/fonts/PROVENANCE.md. A hash written in a document beside a binary
+      # rots without anyone noticing, and nothing else in this run would see a
+      # swapped, missing or added font file. The self-test runs first because a
+      # checker nobody has watched fail is not evidence: it drives the comparison
+      # with a changed file, a missing file and an unlisted one.
+      - name: The vendored-font checker works, then the fonts match it
+        run: |
+          node scripts/verify-vendored-fonts.mjs --self-test
+          node scripts/verify-vendored-fonts.mjs
+
       # `typecheck` is `next typegen && tsc --noEmit`. The typegen half is not
       # decoration: LayoutProps and friends live in gitignored .next/types, so a
       # clean checkout cannot typecheck without it.
@@ -263,6 +277,26 @@ jobs:
           echo "the server never answered 200; last code was '${CODE:-none}'" >&2
           cat /tmp/next-server.log >&2
           exit 1
+
+      # A NON-LATIN CHARACTER MUST REACH ITS REAL FACE, NOT A FALLBACK.
+      #
+      # #160 split each family into one next/font/local call per unicode-range
+      # subset. Each call can emit its own metric-adjusted Arial fallback, which
+      # carries no unicode-range and will therefore serve ANY character — so a
+      # mis-ordered chain in globals.css renders Polish, Vietnamese, Greek and
+      # Cyrillic in adjusted Arial while the real subset file sits unused.
+      #
+      # THIS RUNS IN CI BECAUSE NOTHING ELSE CAN SEE IT. Every glyph in English
+      # is correct, the build is green, the fonts are byte-identical, and every
+      # screenshot of an English page looks right. The order in globals.css puts
+      # latin LAST, which reads like a mistake, so it will be tidied one day.
+      # Each probe carries its own control: the mis-ordered chain must actually
+      # fall through, or "the real chain differs from the fallback" proves
+      # nothing.
+      - name: Non-latin text renders in the real font, not a fallback
+        env:
+          BASE_URL: http://127.0.0.1:3210
+        run: node scripts/verify-font-fallback-order.mjs
 
       # THE REACHABLE-BUT-EMPTY STATE, EXERCISED HERE AND NOWHERE ELSE.
       #
