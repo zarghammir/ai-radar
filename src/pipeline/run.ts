@@ -16,8 +16,14 @@ import { slugify } from "./normalize/text";
 /** A transaction handle, taken from the db type so it cannot drift from it. */
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
-/** How long a story stays open to absorb later reports of the same thing. */
-export const STORY_WINDOW_HOURS = 72;
+/**
+ * How long a story stays open to absorb later reports of the same thing.
+ * DEFINED IN A LEAF MODULE and re-exported here: the brief needs this number
+ * too, and importing it from this file pulled the entire source registry into
+ * the brief route. See src/pipeline/story-window.ts.
+ */
+export { STORY_WINDOW_HOURS } from "./story-window";
+import { STORY_WINDOW_HOURS } from "./story-window";
 /** Most recently active stories considered as cluster candidates for one item. */
 export const CANDIDATE_LIMIT = 300;
 

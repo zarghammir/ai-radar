@@ -8,7 +8,7 @@ import { BRIEF_LENGTHS } from "./reading-budget";
 import { notAdjacentTech, notHidden } from "./radar";
 // IMPORTED, NOT COPIED. The brief's bound and the ranker's horizon must be the
 // same number or the brief sorts on scores the ranker has stopped maintaining.
-import { STORY_WINDOW_HOURS } from "@/pipeline/run";
+import { STORY_WINDOW_HOURS } from "@/pipeline/story-window";
 import { buildCards, type StoryCard } from "./stories";
 
 // One implementation, in a module with no database imports so the fixtures can
