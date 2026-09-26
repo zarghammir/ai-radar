@@ -1,4 +1,4 @@
-import { and, desc, inArray, sql, type SQL } from "drizzle-orm";
+import { and, desc, gte, inArray, sql, type SQL } from "drizzle-orm";
 import type { Db } from "@/db/client";
 import type { ContentType } from "@/db/schema";
 import { ingestRuns, stories } from "@/db/schema";
@@ -8,7 +8,7 @@ import { BRIEF_LENGTHS } from "./reading-budget";
 import { notAdjacentTech, notHidden } from "./radar";
 // IMPORTED, NOT COPIED. The brief's bound and the ranker's horizon must be the
 // same number or the brief sorts on scores the ranker has stopped maintaining.
-import { STORY_WINDOW_HOURS } from "@/pipeline/story-window";
+import { RANKING_WINDOW_HOURS, STORY_WINDOW_HOURS } from "@/pipeline/story-window";
 import { buildCards, type StoryCard } from "./stories";
 
 // One implementation, in a module with no database imports so the fixtures can
@@ -267,32 +267,54 @@ function arrivedSince(from: Date): SQL {
  * Score order keeps it on top for a while, and with no admission filter the
  * screen still cannot be empty while the collector works.
  *
- * SO "RECENT" HAS TO MEAN SOMETHING, AND THIS IS THE BOUND.
+ * SO "RECENT" HAS TO MEAN SOMETHING, AND THERE ARE TWO BOUNDS, FOR TWO
+ * DIFFERENT REASONS. Only one of them is a technical necessity, and an
+ * earlier version of this comment claimed both were — which foreclosed a
+ * product question by dressing it as arithmetic.
  *
- * With no filter and score ordering, the top five would otherwise be the
- * all-time best rather than today's — and worse than that, they would be the
- * best according to a STALE number. `stories.score` is computed and STORED,
- * and the pipeline only recomputes it for stories whose `lastActivityAt` is
- * within STORY_WINDOW_HOURS (src/pipeline/run.ts). Past that horizon a story
- * keeps whatever score it had when it was fresh — recency is 14 points of it
- * (ten-hour half-life), so a once-hot story stays permanently inflated and
- * would lead the brief forever.
+ * BOUND ONE, ARRIVAL WITHIN STORY_WINDOW_HOURS: A PRODUCT JUDGEMENT.
  *
- * The bound is therefore THE SAME HORIZON THE RANKER MAINTAINS, imported
- * rather than copied. Beyond it the ordering key is meaningless, so this is
- * not a policy about what the reader deserves to see — it is the range over
- * which the number being sorted on is still true.
+ * Recency is at most 14 points of a score that sums to roughly 84, so an
+ * older story with strong structure — primary source 20, corroboration 16,
+ * topic match 22 — outranks a fresh weaker one ON A PERFECTLY CURRENT SCORE.
+ * Nothing is stale and nothing is broken; without a bound the brief simply
+ * fills with correct rankings of old things. That is a choice about what the
+ * reader should see, the owner asked for "recent", and three days is a fair
+ * reading of it. IT IS ARGUABLE, AND IT IS SUPPOSED TO BE.
  *
- * IT IS MEASURED BY ARRIVAL, NOT PUBLICATION, and that is #148 surviving. A
- * story published last week and fetched this morning is news to this reader;
- * bounding on publication would have re-created the exact defect #148 fixed,
- * one layer down, while looking like a tidy-up.
+ * (The earlier claim that an out-of-window story "freezes holding whatever
+ * score it had when it was fresh" was simply wrong. A story is re-scored on
+ * every pass while it is inside the ranking window, so by the time it leaves,
+ * recency has decayed to about 0.0001 points. Nothing inflates.)
  *
- * AND IT IS NOT THE WINDOW THAT WAS REMOVED. That one was anchored to the
- * READER'S OWN briefTime: personal, re-anchored every day, and capable of
- * being five minutes wide at 09:05. This is fixed, product-wide, three days
- * long, and cannot go empty while the collector is working — if a sweep has
- * run, something has activity inside 72 hours.
+ * BOUND TWO, ACTIVITY WITHIN RANKING_WINDOW_HOURS: THE NECESSITY.
+ *
+ * `stories.score` defaults to 0 and rank-all.ts only maintains it for stories
+ * whose `lastActivityAt` is inside RANKING_WINDOW_HOURS. A story published
+ * more than seven days ago and fetched this morning is therefore NEVER
+ * SCORED — and ordering by score would put it dead last behind everything
+ * ever ranked, so at length=5 the reader never sees it.
+ *
+ * A DEFAULT IS NOT A LOW SCORE; IT IS THE ABSENCE OF A SCORE, and sorting on
+ * it is this project's own defect family living in the ordering key. So the
+ * brief must never admit a story the ranker cannot have scored.
+ *
+ * THE TWO CLOCKS ARE THE TRAP. Admission is measured on ARRIVAL
+ * (raw_items.fetched_at) and both horizons are measured on PUBLICATION
+ * (stories.lastActivityAt, set from the newest source's publishedAt). So this
+ * is not 72 against 168; it is 72 of one clock against 168 of another, and a
+ * story can be recent on one and ancient on the other. That gap is exactly
+ * what #148 was about, one layer down: #148's own sentence is "a story
+ * published last week and fetched this morning is news to this reader", and
+ * the ordering key contradicted it while the admission filter honoured it.
+ *
+ * THE NARROW FIX IS HERE AND THE WIDE ONE IS TICKETED. Bound two excludes
+ * what cannot be ranked, so nothing is ever sorted on a default — but it also
+ * means a story published nine days ago and fetched today does not appear at
+ * all. The invariant that removes that limitation is "a story admitted to the
+ * brief must have a maintained score", achieved by ranking on the same fact
+ * admission uses rather than by excluding. That is a pipeline change and it
+ * is filed separately.
  */
 export async function recentStories(db: Db, options: BriefOptions = {}): Promise<StoryCard[]> {
   const { includeAdjacent = false, types } = options;
@@ -301,12 +323,13 @@ export async function recentStories(db: Db, options: BriefOptions = {}): Promise
     .from(stories)
     .where(
       and(
-        // The bound, not a window — see the note above. BY ARRIVAL, not by
-        // publication: #148's ruling is that a story which reached this app
-        // recently is news to the reader even if it was published earlier, and
-        // bounding on publication would have thrown that away again. A story
-        // fetched this morning and published last week still counts.
+        // BOUND ONE — the product judgement, measured on ARRIVAL.
         arrivedSince(briefHorizon()),
+        // BOUND TWO — the necessity, measured on PUBLICATION. Without it a
+        // story the ranker never scored is admitted carrying score 0 and
+        // sorted below everything, which is worse than absent because it
+        // looks fine. See the note above.
+        gte(stories.lastActivityAt, rankedSince()),
         notHidden(),
         ...(includeAdjacent ? [] : [notAdjacentTech()]),
         types && types.length > 0 ? inArray(stories.contentType, [...types]) : undefined,
@@ -343,6 +366,16 @@ export async function recentStories(db: Db, options: BriefOptions = {}): Promise
  */
 export function briefHorizon(now: Date = new Date()): Date {
   return new Date(now.getTime() - STORY_WINDOW_HOURS * 60 * 60 * 1000);
+}
+
+/**
+ * The oldest PUBLICATION activity whose score rank-all.ts still maintains.
+ *
+ * Anything older carries whatever `score` it last had, or the column default
+ * of 0 if it was never ranked at all. The brief must not order by that.
+ */
+export function rankedSince(now: Date = new Date()): Date {
+  return new Date(now.getTime() - RANKING_WINDOW_HOURS * 60 * 60 * 1000);
 }
 
 /**

@@ -16,7 +16,7 @@ import { bailIfBroken, isFloorBail, reportControl, sectionStart } from "./lib/fl
 import { markOnboarded } from "./lib/seed.mjs";
 
 // VIEW PINNED TO "all" THROUGHOUT THIS FILE. #102 made the app open on built
-// things, which is 4 of the 7 fixture stories — and a 5-minute budget cannot
+// things, which is 4 of the 7 fixture stories — and a 5-story selection cannot
 // shorten a 4-story list, so the reading-length assertions below started failing
 // on a filter that was working perfectly. The two are separate axes: this file
 // measures LENGTH, so it holds the view still. The default view is exercised by
@@ -31,8 +31,8 @@ await requireServer(base);
  * anything changing about the instrument.
  *
  * VERIFY_CONTROL=no-budget asks for `length=all` on BOTH legs that are
- * supposed to ask for a budget — the five-minute one and the ten-minute one.
- * Neither budget is then applied, each short list is the long list, and both
+ * supposed to ask for a count — the five-story one and the ten-story one.
+ * Neither count is then applied, each short list is the long list, and both
  * named assertions MUST fail. It changes an input to the app in the same way
  * AUDIT_CONTROL=narrow changes the viewport; it does not edit the assertions,
  * which would prove nothing about them.
@@ -105,8 +105,8 @@ try {
       waitUntil: "networkidle",
     });
     const ten = await cards(page).count();
-    // Under the control this asks for `all`, so the "five minute" leg is not a
-    // five-minute leg at all and the comparison below cannot hold.
+    // Under the control this asks for `all`, so the "five story" leg is not a
+    // five-story leg at all and the comparison below cannot hold.
     await page.goto(`${base}/?length=${CONTROL ? "all" : "5"}&view=all`, {
       waitUntil: "networkidle",
     });

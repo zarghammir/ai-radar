@@ -1873,6 +1873,36 @@ withDb("API routes", () => {
      * asserts the PROPERTY: a story the brief admits is inside the period the
      * brief reports on.
      */
+    /**
+     * NEVER SORT ON A DEFAULT.
+     *
+     * `stories.score` defaults to 0 and rank-all.ts only maintains it inside
+     * RANKING_WINDOW_HOURS, measured on PUBLICATION. The brief admits on
+     * ARRIVAL. So a story published nine days ago and fetched this morning
+     * passed the arrival bound, was never ranked, and carried score 0 —
+     * `orderBy(desc(score))` then put it behind every story ever scored, and
+     * at length=5 the reader never saw it.
+     *
+     * PRESENT-BUT-LAST IS WORSE THAN ABSENT, because nothing looks wrong. A
+     * default is not a low score; it is the absence of a score.
+     *
+     * Removing the lastActivityAt bound from recentStories reddens this and
+     * nothing else.
+     */
+    it("does not admit a story the ranker cannot have scored", async () => {
+      const nineDaysAgo = new Date(Date.now() - 9 * 24 * 3_600_000);
+      // Published beyond the ranking horizon, fetched a minute ago.
+      await fileStory("published-long-ago-fetched-now", nineDaysAgo, new Date());
+      // A companion inside both bounds, so a blanket-empty response cannot
+      // pass this test.
+      const recent = new Date(Date.now() - 3_600_000);
+      await fileStory("published-and-fetched-today", recent, recent);
+
+      const slugs = await briefSlugs();
+      expect(slugs).toContain("published-and-fetched-today");
+      expect(slugs).not.toContain("published-long-ago-fetched-now");
+    });
+
     it("reports on a period that covers the oldest story it will admit", async () => {
       const thirtyHoursAgo = new Date(Date.now() - 30 * 3_600_000);
       await fileStory("arrived-thirty-hours-ago", thirtyHoursAgo, thirtyHoursAgo);

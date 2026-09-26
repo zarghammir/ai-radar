@@ -1,27 +1,34 @@
 /**
- * How long a story stays open to absorb later reports of the same thing —
- * and, because of that, how long the pipeline keeps its score up to date.
+ * THE PIPELINE'S TWO HORIZONS, AND THEY ARE MEASURED ON DIFFERENT CLOCKS.
  *
- * IT LIVES IN A LEAF MODULE ON PURPOSE. It used to sit in pipeline/run.ts, and
- * the brief imported it from there so the two could not drift. That was right
- * about the duplication and wrong about the cost: run.ts pulls the whole
- * ingestion pipeline — the source registry, every adapter, the HTTP client —
- * so a single numeric constant dragged all of it into the brief route's
- * bundle. The route-cost guard caught it, which is exactly what that guard is
- * for.
+ * They live in a leaf module with no imports because the brief needs to read
+ * them and their home modules are heavy: importing STORY_WINDOW_HOURS from
+ * pipeline/run.ts pulled the source registry, every adapter and the HTTP
+ * client into the brief route's bundle, and the route-cost guard caught it.
+ * RANKING_WINDOW_HOURS has the same problem — rank-all.ts imports run.ts.
+ * Both modules re-export their own constant, so nothing that already imported
+ * one had to change.
  *
- * So the number moved down here, where it has no imports at all and anything
- * may read it. run.ts re-exports it, so nothing that already imported it from
- * there had to change.
+ * THE DISTINCTION MATTERS MORE THAN THE NUMBERS.
  *
- * TWO CONSUMERS, AND THE SECOND IS THE NON-OBVIOUS ONE:
+ *   STORY_WINDOW_HOURS    72   CLUSTERING only. How long a story stays open
+ *                              to absorb later reports of the same thing —
+ *                              pipeline/run.ts, the candidate query.
  *
- *   src/pipeline/run.ts   clustering, and the set of stories it re-scores.
- *   src/api/brief.ts      the brief's recency bound. Past this horizon a
- *                         story's stored score is no longer maintained, so
- *                         ordering by it would rank on a stale number.
+ *   RANKING_WINDOW_HOURS  168  RE-SCORING. Which stories rank-all.ts keeps a
+ *                              current score for. THIS, not the one above, is
+ *                              the set whose `score` column is maintained.
  *
- * Those two must be the SAME number or the brief sorts by scores the pipeline
- * has stopped updating. That is why it is one constant and not two.
+ * An earlier version of the brief's docblock said run.ts re-scored inside
+ * STORY_WINDOW_HOURS. It does not; that constant governs clustering alone.
+ * Getting this wrong is easy and the consequence is not cosmetic: it is the
+ * difference between knowing which stories carry a real score and guessing.
+ *
+ * AND BOTH ARE MEASURED ON PUBLICATION, via `stories.lastActivityAt`, which
+ * run.ts sets from the newest source's `publishedAt`. The brief admits on
+ * ARRIVAL (`raw_items.fetched_at`). So the two are not 72 versus 168 — they
+ * are 72 of one clock against 168 of another, and a story can be recent on
+ * one and ancient on the other. See src/api/brief.ts.
  */
 export const STORY_WINDOW_HOURS = 72;
+export const RANKING_WINDOW_HOURS = 7 * 24;
