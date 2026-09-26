@@ -47,7 +47,21 @@ const WORKER_COMMAND = "worker:once";
  * honest move is to teach the matcher, not to add an exception.
  */
 const FORBIDDEN_ENV_ACCESS: { pattern: RegExp; what: string }[] = [
-  { pattern: /process\.env\s*\[/g, what: 'process.env["X"] — computed access' },
+  {
+    // `(?:process\.)?` because the read matcher accepts BOTH forms and the ban
+    // must not be narrower than the matcher in the direction that matters:
+    // `env["LLM_PROVIDER"]` against a narrowed parameter is invisible to the
+    // matcher AND was permitted by the old pattern — and it is the MORE likely
+    // form, because the narrowed `env` parameter is what every optional feature
+    // here already uses. Zero instances at this head, which is when a ban is
+    // free.
+    //
+    // It also matches an unrelated `config.env[...]`, which is a false positive
+    // that FAILS CLOSED: someone is told to rename a variable rather than being
+    // told their environment read is verified when it is not.
+    pattern: /(?:process\.)?env\s*\[/g,
+    what: 'env["X"] or process.env["X"] — computed access',
+  },
   {
     pattern: /(?:const|let|var)\s*\{[^}]*\}\s*=\s*(?:process\.)?env\b/g,
     what: "destructuring out of process.env",
@@ -158,6 +172,45 @@ function readsReachableFrom(entry: string): {
  * every job. There is none today; supporting it is cheaper than discovering the
  * omission from a wrong answer.
  */
+/**
+ * Does this job body actually RUN the worker?
+ *
+ * Read from `run:` rather than from anywhere in the job, because the previous
+ * version matched the string anywhere — so a future COMMENT mentioning
+ * `worker:once` in a second job would have tripped the ambiguity refusal. That
+ * fails closed, so the risk was a false alarm rather than a missed gap; the
+ * reason to fix it anyway is that a checker which cries wolf is a checker
+ * somebody eventually loosens, and loosening this one removes a real guard.
+ *
+ * Handles both shapes this repository uses: `run: npm run worker:once` on one
+ * line, and a `run: |` block with the command on a following line.
+ */
+function runsWorker(body: string[]): boolean {
+  let blockIndent: number | null = null;
+  for (const line of body) {
+    // A full-line comment is never a command.
+    if (/^\s*#/.test(line)) continue;
+
+    if (blockIndent !== null) {
+      const indent = line.search(/\S/);
+      if (indent === -1) continue;
+      if (indent > blockIndent) {
+        if (line.includes(WORKER_COMMAND)) return true;
+        continue;
+      }
+      blockIndent = null;
+    }
+
+    const block = /^(\s*)(?:- )?run:\s*[|>]/.exec(line);
+    if (block) {
+      blockIndent = block[1].length;
+      continue;
+    }
+    if (/(?:^|\s)run:/.test(line) && line.includes(WORKER_COMMAND)) return true;
+  }
+  return false;
+}
+
 function scopedEnv(path: string): {
   provided: Set<string>;
   job: string | null;
@@ -206,7 +259,7 @@ function scopedEnv(path: string): {
   // aimed wrong and revealed something anyway.
   const runners = jobStarts.filter((start, j) => {
     const to = j + 1 < jobStarts.length ? jobStarts[j + 1].at : lines.length;
-    return lines.slice(start.at, to).some((line) => line.includes(WORKER_COMMAND));
+    return runsWorker(lines.slice(start.at, to));
   });
 
   if (runners.length > 1) {
@@ -220,7 +273,7 @@ function scopedEnv(path: string): {
     const from = jobStarts[j].at;
     const to = j + 1 < jobStarts.length ? jobStarts[j + 1].at : lines.length;
     const body = lines.slice(from, to);
-    if (!body.some((line) => line.includes(WORKER_COMMAND))) continue;
+    if (!runsWorker(body)) continue;
 
     let inJobEnv = false;
     for (const line of body) {
@@ -253,15 +306,33 @@ function main(): void {
   // Floors first. A parser that matched nothing, or a graph walk that resolved
   // nothing, would otherwise print a clean bill of health — the exact shape of
   // instrument this repository keeps deleting.
-  if (ambiguous) {
-    problems.push(
-      `${ambiguous.length} jobs in ${WORKFLOW} run \`${WORKER_COMMAND}\` (${ambiguous.join(", ")}). This checker compares against ONE env block and cannot tell you which is authoritative, and unioning them would reintroduce the very confusion the scoping removes — a variable forwarded to only one would read as visible to both. Split them, or teach this script which one is the scheduled pass.`,
+  // ── When the scope cannot be determined, SAY SO AND STOP ────────────────
+  //
+  // This is an early exit rather than another problem in the list, and the
+  // reason is the family this whole file was written to catch. With the scope
+  // undetermined, `provided` is empty — not because the workflow forwards
+  // nothing, but BECAUSE NOTHING WAS PARSED. Falling through to the loops below
+  // then reported twelve variables as "not passed" and one as "no longer
+  // forwarded": fourteen problems of which ONE was true, and thirteen were
+  // absence asserted where the honest answer is "I did not look".
+  //
+  // It printed exactly that during this checker's own ambiguity control, and
+  // the control was recorded as a pass because the output was read through
+  // `head -6` and the ambiguity refusal was the first line.
+  const undetermined = ambiguous
+    ? `${ambiguous.length} jobs in ${WORKFLOW} run \`${WORKER_COMMAND}\` (${ambiguous.join(", ")}). This checker compares against ONE env block and cannot tell you which is authoritative, and unioning them would reintroduce the very confusion the scoping removes — a variable forwarded to only one would read as visible to both. Split them, or teach this script which one is the scheduled pass.`
+    : job === null
+      ? `no job in ${WORKFLOW} runs \`${WORKER_COMMAND}\`, so there is no env block to compare against. Either the workflow changed or this checker is pointed at the wrong file.`
+      : null;
+
+  if (undetermined !== null) {
+    console.error(
+      `FAIL: the scope could not be determined, so nothing below was checked.\n\n  - ${undetermined}\n\n` +
+        `  Reporting which variables are unforwarded would be reporting an absence this run did not establish.\n`,
     );
-  } else if (job === null) {
-    problems.push(
-      `no job in ${WORKFLOW} runs \`${WORKER_COMMAND}\`, so there is no env block to compare against. Either the workflow changed or this checker is pointed at the wrong file.`,
-    );
+    process.exit(1);
   }
+
   if (modules < MINIMUM_MODULES) {
     problems.push(
       `the import walk reached only ${modules} modules from ${WORKER_ENTRY} (expected at least ${MINIMUM_MODULES}). The graph is broken, so no absence below can be trusted.`,
