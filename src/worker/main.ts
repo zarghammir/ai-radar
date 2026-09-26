@@ -13,6 +13,7 @@ import { readInternalSecret } from "./secret";
 import { runSummaries } from "@/llm/run-summaries";
 import { describeError } from "@/pipeline/describe-error";
 import { runBriefDelivery } from "@/notify/run-brief";
+import { summaryLines, writeStepSummary } from "./step-summary";
 
 /**
  * The ingestion worker: one pass with --once, otherwise a pass every
@@ -93,12 +94,15 @@ async function runPass(): Promise<number> {
   // it. The cost of being wrong went up when #137 started opening a GitHub
   // issue on a failed run — a transient database error inside an optional
   // enhancement would file an outage.
+  let summaryState: Parameters<typeof summaryLines>[0];
   try {
     const summaries = await runSummaries(getDb());
+    summaryState = summaries;
     if (summaries.skipped) {
       console.log(`[worker] summaries off: ${summaries.skipped}.`);
     }
   } catch (error) {
+    summaryState = { error: describeError(error) };
     console.error(`[worker] summaries failed: ${describeError(error)}`);
   }
 
@@ -106,16 +110,25 @@ async function runPass(): Promise<number> {
   // summariser is, and it matters more here: a push service having a bad
   // morning is not a collector outage, and #137 files a GitHub issue on a red
   // run. Its result does not touch the exit code.
+  let briefState: Parameters<typeof summaryLines>[1];
   try {
     const brief = await runBriefDelivery(getDb());
+    briefState = brief;
     // "not due" is the common case — most passes are not at the brief time —
     // so it is logged only when it carries a reason an operator would act on.
     if (brief.outcome === "not-due" && brief.detail && !brief.detail.startsWith("not yet")) {
       console.log(`[brief] not sent: ${brief.detail}.`);
     }
   } catch (error) {
+    briefState = { error: describeError(error) };
     console.error(`[brief] delivery failed: ${describeError(error)}`);
   }
+
+  // Where the owner will see it. The console lines above go into a log nobody
+  // opens, and "summaries are off" is a SUCCESSFUL run, so the failure alarm
+  // never mentions it. #162 made the on state reachable; this makes the
+  // current state legible.
+  writeStepSummary(summaryLines(summaryState, briefState), process.env);
 
   return exitCodeFor(ingest);
 }
