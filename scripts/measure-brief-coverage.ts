@@ -8,7 +8,7 @@ import {
   type BriefLength,
 } from "@/api/brief";
 import { userPreferences } from "@/db/schema";
-import { briefCoverage, coverageLine } from "@/worker/brief-coverage";
+import { briefCoverage, coverageLines } from "@/worker/brief-coverage";
 
 /**
  * How much of the brief the reader would open carries a summary? (#149-adjacent)
@@ -57,7 +57,7 @@ async function main(): Promise<void> {
   // here: the same number will be reported on every ingest pass once the step
   // summary from #164 can call it, and two implementations of one figure is how
   // a script and a report start disagreeing.
-  console.log(coverageLine(await briefCoverage(db, now)));
+  for (const line of coverageLines(await briefCoverage(db, now))) console.log(line);
   console.log("");
 
   console.log(`measured at   ${now.toISOString()}`);

@@ -126,10 +126,32 @@ export function orderCandidates(
  * and adjacent-tech filters and the same ordering. A second copy of that logic
  * here would drift, and the drift would look exactly like this defect returning.
  *
- * The reader's LENGTH preference is deliberately not applied. It lives in the
- * browser (#94) so the worker cannot know it, and it does not need to: the brief
- * serves a PREFIX of this ordering whatever length is chosen, so covering the
- * front of the list covers the front of every length.
+ * ── ONE ARGUMENT DIFFERS, AND IT IS NAMED HERE RATHER THAN OMITTED ──────────
+ *
+ * The page passes `{ types: typesForView(view) }`; this call passes none, so it
+ * reads the SUPERSET of what the reader's view shows. That is forced rather than
+ * chosen: the view is a cookie, so the worker cannot know it, and summarising
+ * for a view the reader may not be on would be worse than summarising for all
+ * of them. But the sets are NOT identical, and an earlier draft of this comment
+ * claimed the shared filters made them so — which would have told the next
+ * reader there was nothing left to check.
+ *
+ * The size of the gap is reported on every pass by src/worker/brief-coverage.ts
+ * and is the number that decides whether this selection needs the same
+ * treatment. See the ticket referenced there; do not guess at it.
+ *
+ * ── AND WHY LENGTH CAN BE IGNORED WHERE VIEW CANNOT ────────────────────────
+ *
+ *   LENGTH TRUNCATES.  takeWithinReadingTime breaks on the first story that
+ *                      would overrun, so every length is a PREFIX of this
+ *                      ordering. Covering the front covers the front of each.
+ *
+ *   VIEW FILTERS.      typesForView keeps a SUBSEQUENCE, and the front of the
+ *                      whole is not the front of the part.
+ *
+ * Both settings live in the reader's browser for the same reason (#94), and only
+ * one of them is safe for a server-side selector to ignore. The test is whether
+ * the operation is a prefix, not where the setting is stored.
  *
  * Whatever budget survives the window goes to the older backlog, in score
  * order, which is what this function used to do with all of it.
@@ -184,14 +206,22 @@ export async function selectStoriesToSummarize(
   );
 
   // ── Their items, in the chosen order ───────────────────────────────────
+  //
+  // Titles in ONE query. The previous shape did a select per chosen story, so a
+  // full budget was twenty extra round trips a pass for two columns the
+  // candidate query used to return. Trivial against a half-hourly cron and
+  // still not a reason to keep it.
+  if (chosen.length === 0) return [];
+  const titleRows = await db
+    .select({ id: stories.id, title: stories.title })
+    .from(stories)
+    .where(inArray(stories.id, chosen));
+  const titles = new Map(titleRows.map((row) => [row.id, row.title]));
+
   const out: StoryForSummary[] = [];
   for (const id of chosen) {
-    const [story] = await db
-      .select({ id: stories.id, title: stories.title })
-      .from(stories)
-      .where(eq(stories.id, id))
-      .limit(1);
-    if (!story) continue;
+    const title = titles.get(id);
+    if (title === undefined) continue;
 
     const items = await db
       .select({
@@ -201,14 +231,14 @@ export async function selectStoriesToSummarize(
       })
       .from(rawItems)
       .innerJoin(sources, eq(rawItems.sourceId, sources.id))
-      .where(eq(rawItems.storyId, story.id))
+      .where(eq(rawItems.storyId, id))
       .orderBy(desc(rawItems.publishedAt))
       .limit(MAX_ITEMS_IN_PROMPT);
 
     // A story with no items cannot be summarised from stored text, and asking
     // anyway would spend a call to be told so. Left untouched, which keeps it
     // "never attempted" rather than recording a failure it did not have.
-    if (items.length > 0) out.push({ id: story.id, title: story.title, items });
+    if (items.length > 0) out.push({ id, title, items });
   }
   return out;
 }
