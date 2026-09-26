@@ -1,6 +1,7 @@
-import { and, desc, eq, gte, isNull, lt, or } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lt, notInArray, or } from "drizzle-orm";
 import type { Db } from "@/db/client";
-import { rawItems, sources, stories } from "@/db/schema";
+import { briefWindow, storiesInWindow } from "@/api/brief";
+import { rawItems, sources, stories, userPreferences } from "@/db/schema";
 import { applyUsage, readDailyCap, remainingToday, usageDay } from "./budget";
 import { createLlmClient, type FetchLike, type LlmClient } from "./client";
 import { isPaidProvider, readLlmSettings, type LlmEnv } from "./config";
@@ -52,11 +53,86 @@ const IDLE: SummaryRunResult = {
 };
 
 /**
- * Stories worth spending on, best first.
+ * The subset of `ids` that is worth spending on, in the order given.
  *
- * Ordered by score so that when the cap binds — which is the normal case, not
- * the exception — the budget goes to what the reader actually sees at the top
- * of the brief rather than to whatever happened to be inserted first.
+ * Takes ids rather than building its own query because the ORDER is the
+ * caller's: this exists only to apply the two facts the brief's own selection
+ * cannot see — that a story already has a summary, and that a failed attempt is
+ * inside its retry cooldown.
+ */
+async function eligibleAmong(db: Db, ids: number[], now: Date): Promise<number[]> {
+  if (ids.length === 0) return [];
+  const retryBefore = new Date(now.getTime() - RETRY_AFTER_HOURS * 3_600_000);
+  const rows = await db
+    .select({ id: stories.id })
+    .from(stories)
+    .where(
+      and(
+        inArray(stories.id, ids),
+        isNull(stories.summary),
+        or(isNull(stories.summarizedAt), lt(stories.summarizedAt, retryBefore)),
+      ),
+    );
+  const eligible = new Set(rows.map((r) => r.id));
+  return ids.filter((id) => eligible.has(id));
+}
+
+/**
+ * Brief-window ids first, then backlog, deduplicated, capped.
+ *
+ * Pure, and separated because this is the decision the whole change is about:
+ * everything else here is plumbing that fetches the two lists.
+ *
+ * THE DEDUPLICATION IS NOT BELT-AND-BRACES. The backlog query excludes the
+ * already-chosen ids in SQL, so in production the two lists cannot overlap —
+ * but a story summarised twice in one pass would spend twice from a cap of
+ * twenty, and that consequence is too expensive to rest on one `notInArray`
+ * surviving every future edit to that query. Two mechanisms, and this is the
+ * one a test can exercise without a database.
+ */
+export function orderCandidates(
+  briefIds: readonly number[],
+  backlogIds: readonly number[],
+  limit: number,
+): number[] {
+  const out: number[] = [];
+  const seen = new Set<number>();
+  for (const id of [...briefIds, ...backlogIds]) {
+    if (out.length >= limit) break;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+/**
+ * Stories worth spending on — THE BRIEF'S OWN ORDER FIRST.
+ *
+ * THE DEFECT THIS FIXES. The first version ordered by `stories.score` over a
+ * seven-day window, which is a reasonable-looking ordering and NOT THE ONE THE
+ * READER SEES. On a live pass it wrote seventeen summaries and exactly ONE of
+ * them landed in the ten stories the brief was serving: the summariser selected
+ * across 845 scored stories, the brief shows what arrived in the reader's
+ * window, and nothing connected the two sets. The owner opened his app, saw no
+ * summaries, and was right.
+ *
+ * With a cap of twenty a day, an ordering that is not the reader's spends most
+ * of the money on stories nobody opens — and from outside it is indistinguishable
+ * from the feature not working.
+ *
+ * SO THE BRIEF'S SELECTION IS READ, NOT REIMPLEMENTED. `storiesInWindow` is the
+ * same function `GET /api/brief` calls, with the same window, the same hidden
+ * and adjacent-tech filters and the same ordering. A second copy of that logic
+ * here would drift, and the drift would look exactly like this defect returning.
+ *
+ * The reader's LENGTH preference is deliberately not applied. It lives in the
+ * browser (#94) so the worker cannot know it, and it does not need to: the brief
+ * serves a PREFIX of this ordering whatever length is chosen, so covering the
+ * front of the list covers the front of every length.
+ *
+ * Whatever budget survives the window goes to the older backlog, in score
+ * order, which is what this function used to do with all of it.
  */
 export async function selectStoriesToSummarize(
   db: Db,
@@ -65,24 +141,58 @@ export async function selectStoriesToSummarize(
 ): Promise<StoryForSummary[]> {
   if (limit <= 0) return [];
 
+  // ── The brief's window, in the brief's order ────────────────────────────
+  const [prefs] = await db
+    .select({ briefTime: userPreferences.briefTime, timezone: userPreferences.timezone })
+    .from(userPreferences)
+    .limit(1);
+
+  let briefIds: number[] = [];
+  if (prefs) {
+    // No preferences row means a database not yet seeded, which is not a reason
+    // to skip summarising: the backlog pass below still runs.
+    const window = briefWindow(now, prefs.briefTime, prefs.timezone);
+    const inBrief = await storiesInWindow(db, window);
+    const unsummarised = inBrief.filter((card) => card.summary === null).map((card) => card.id);
+    briefIds = await eligibleAmong(db, unsummarised, now);
+  }
+
+  // ── Then the backlog, in score order ───────────────────────────────────
   const windowStart = new Date(now.getTime() - SUMMARY_WINDOW_HOURS * 3_600_000);
   const retryBefore = new Date(now.getTime() - RETRY_AFTER_HOURS * 3_600_000);
+  const backlog =
+    briefIds.length >= limit
+      ? []
+      : await db
+          .select({ id: stories.id })
+          .from(stories)
+          .where(
+            and(
+              isNull(stories.summary),
+              gte(stories.lastActivityAt, windowStart),
+              or(isNull(stories.summarizedAt), lt(stories.summarizedAt, retryBefore)),
+              briefIds.length > 0 ? notInArray(stories.id, briefIds) : undefined,
+            ),
+          )
+          .orderBy(desc(stories.score))
+          .limit(limit - briefIds.length);
 
-  const candidates = await db
-    .select({ id: stories.id, title: stories.title })
-    .from(stories)
-    .where(
-      and(
-        isNull(stories.summary),
-        gte(stories.lastActivityAt, windowStart),
-        or(isNull(stories.summarizedAt), lt(stories.summarizedAt, retryBefore)),
-      ),
-    )
-    .orderBy(desc(stories.score))
-    .limit(limit);
+  const chosen = orderCandidates(
+    briefIds,
+    backlog.map((r) => r.id),
+    limit,
+  );
 
+  // ── Their items, in the chosen order ───────────────────────────────────
   const out: StoryForSummary[] = [];
-  for (const story of candidates) {
+  for (const id of chosen) {
+    const [story] = await db
+      .select({ id: stories.id, title: stories.title })
+      .from(stories)
+      .where(eq(stories.id, id))
+      .limit(1);
+    if (!story) continue;
+
     const items = await db
       .select({
         title: rawItems.title,
@@ -96,9 +206,8 @@ export async function selectStoriesToSummarize(
       .limit(MAX_ITEMS_IN_PROMPT);
 
     // A story with no items cannot be summarised from stored text, and asking
-    // anyway would spend a call to be told so. It is left untouched, which
-    // keeps it "never attempted" rather than recording a failure it did not
-    // have.
+    // anyway would spend a call to be told so. Left untouched, which keeps it
+    // "never attempted" rather than recording a failure it did not have.
     if (items.length > 0) out.push({ id: story.id, title: story.title, items });
   }
   return out;

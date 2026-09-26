@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Db } from "@/db/client";
 import { llmUsage, rawItems, stories } from "@/db/schema";
 import type { LlmClient } from "./client";
-import { runSummaries } from "./run-summaries";
+import { orderCandidates, runSummaries } from "./run-summaries";
 
 /**
  * A database stand-in, so the guard that protects the owner's money is tested
@@ -349,5 +349,49 @@ describe("runSummaries — the database being the broken thing", () => {
     expect(result.attempted).toBe(1);
     expect(result.succeeded).toBe(0);
     expect(result.failed).toBe(0);
+  });
+});
+
+/**
+ * #76-style targeting: the cap must be spent on what the reader will open.
+ *
+ * The defect these cover: the summariser ordered by `stories.score` over seven
+ * days, wrote seventeen summaries on a live pass, and exactly ONE landed in the
+ * ten stories the brief was serving. The owner opened his app, saw no
+ * summaries, and was right — the money bought summaries for a backlog nobody
+ * opens, which from outside is indistinguishable from the feature not working.
+ */
+describe("orderCandidates", () => {
+  it("spends the brief's window before the backlog", () => {
+    expect(orderCandidates([11, 12], [90, 91], 10)).toEqual([11, 12, 90, 91]);
+  });
+
+  it("gives the whole budget to the brief when the brief fills it", () => {
+    expect(orderCandidates([11, 12, 13], [90, 91], 3)).toEqual([11, 12, 13]);
+  });
+
+  it("falls back to the backlog when the brief's window is fully summarised", () => {
+    expect(orderCandidates([], [90, 91], 2)).toEqual([90, 91]);
+  });
+
+  /**
+   * A story summarised twice in one pass spends twice from a cap of twenty.
+   * The backlog query excludes the chosen ids in SQL, so production cannot
+   * produce an overlap — this is the second mechanism, because that consequence
+   * is too expensive to rest on one `notInArray` surviving every future edit.
+   */
+  it("never spends twice on one story, whatever the queries return", () => {
+    expect(orderCandidates([11, 12], [12, 11, 90], 10)).toEqual([11, 12, 90]);
+  });
+
+  it("respects the budget exactly, including zero", () => {
+    expect(orderCandidates([11, 12, 13], [90], 2)).toEqual([11, 12]);
+    expect(orderCandidates([11], [90], 0)).toEqual([]);
+  });
+
+  // The order within each list is the caller's — the brief's own ordering for
+  // the first, score order for the second. This must not re-sort either.
+  it("preserves the order it was given rather than sorting", () => {
+    expect(orderCandidates([13, 11, 12], [], 3)).toEqual([13, 11, 12]);
   });
 });
