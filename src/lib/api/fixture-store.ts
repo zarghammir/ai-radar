@@ -35,12 +35,20 @@ function readJson<T>(key: string, fallback: T): T {
   }
 }
 
-function writeJson(key: string, value: unknown): void {
-  if (typeof window === "undefined") return;
+/**
+ * Returns WHETHER IT PERSISTED. It used to return void and swallow the failure
+ * silently, which is how a save could half-succeed: the small ids write landed,
+ * this one did not, and nothing anywhere knew. A caller is still free to ignore
+ * the answer — but now there is one to ignore.
+ */
+function writeJson(key: string, value: unknown): boolean {
+  if (typeof window === "undefined") return false;
   try {
     window.localStorage.setItem(key, JSON.stringify(value));
+    return true;
   } catch {
-    // Private mode refuses storage. The change still applies for this session.
+    // Private mode, or a full quota. The change still applies for this session.
+    return false;
   }
 }
 
@@ -87,12 +95,41 @@ export function localMarks(): Record<string, SavedMarks> {
   return out;
 }
 
-export function writeLocalMarks(id: number, marks: SavedMarks | null): void {
+export function writeLocalMarks(id: number, marks: SavedMarks | null): boolean {
   const all = localMarks();
   if (marks === null) delete all[String(id)];
   else all[String(id)] = marks;
-  writeJson(MARKS_KEY, all);
+  return writeJson(MARKS_KEY, all);
 }
+
+/**
+ * The raw string under a key, and a way to put it back.
+ *
+ * Exported so a WRITE ACROSS TWO KEYS can be undone as one. Reading and
+ * restoring the raw string rather than a parsed value means the undo cannot
+ * itself lose or reshape anything it did not understand.
+ */
+export function rawItem(key: string): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+export function restoreItem(key: string, previous: string | null): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (previous === null) window.localStorage.removeItem(key);
+    else window.localStorage.setItem(key, previous);
+  } catch {
+    // Nothing further to try. The caller is already reporting a failed write.
+  }
+}
+
+/** The keys this module owns, so a cross-key operation can name them. */
+export const SAVED_MARKS_KEY = MARKS_KEY;
 
 export function localReadIds(): Set<number> {
   const raw = readJson<unknown>(READ_KEY, []);

@@ -2,9 +2,12 @@ import { fixtureBrief } from "@/lib/api/fixtures";
 import {
   fixtureTopics,
   localMarks,
+  rawItem,
+  restoreItem,
   savedCards,
   localPreferences,
   patchLocalPreferences,
+  SAVED_MARKS_KEY,
   writeLocalMarks,
   writeLocalRead,
 } from "@/lib/api/fixture-store";
@@ -73,12 +76,15 @@ function readIds(key: string): Set<number> {
   }
 }
 
-function writeIds(key: string, ids: Set<number>) {
-  if (typeof window === "undefined") return;
+/** Returns WHETHER IT PERSISTED — see writeJson in fixture-store for why. */
+function writeIds(key: string, ids: Set<number>): boolean {
+  if (typeof window === "undefined") return false;
   try {
     window.localStorage.setItem(key, JSON.stringify([...ids]));
+    return true;
   } catch {
-    // Private mode. The change still applies for this session.
+    // Private mode, or a full quota.
+    return false;
   }
 }
 
@@ -134,20 +140,58 @@ export async function getBrief(length: BriefLengthParam): Promise<BriefResponse>
   return json<BriefResponse>(`/api/brief?length=${encodeURIComponent(length)}`);
 }
 
+/**
+ * ONE OPERATION ACROSS TWO KEYS — BOTH, OR NEITHER.
+ *
+ * A save lives in two places: the id, in SAVED_KEY, and the card snapshot plus
+ * note and tags, in the marks key. The Today button renders from the FIRST and
+ * the Saved page can only render from the SECOND, so a write that lands one and
+ * not the other produces a screen that says "Saved" and a bin that says
+ * "Nothing saved". That is not hypothetical: it is the owner's bug report, and
+ * it was reproduced by seeding exactly that pair.
+ *
+ * Two independent writes, each swallowing its own failure, made that state
+ * reachable and invisible. THE MARKS WRITE IS THE ONE THAT FAILS — it is around
+ * twenty times the bytes of the ids write and it GROWS WITH EVERY SAVE, so it
+ * is what a quota refuses first. So it goes FIRST: the expensive, failure-prone
+ * half is attempted before anything has been claimed.
+ *
+ * If either half refuses, both keys are put back to the exact strings they held
+ * and this THROWS — which is what StoryActions already expects. It rolls the
+ * button back and tells the reader "Could not save that. Try again." A refused
+ * save that says so is recoverable; a refused save that reports success is not.
+ *
+ * THE PERSISTED SHAPE IS UNCHANGED. Both keys hold what they have always held,
+ * so no migration is needed and a device already carrying the broken half-state
+ * is read exactly as before — see the unresolved count, which is how that
+ * device is now told the truth rather than silently shown an empty bin.
+ */
 export async function setSaved(story: StoryCard, saved: boolean): Promise<void> {
+  if (typeof window === "undefined") return;
+
+  const previousIds = rawItem(SAVED_KEY);
+  const previousMarks = rawItem(SAVED_MARKS_KEY);
+
   const ids = localSavedIds();
   if (saved) ids.add(story.id);
   else ids.delete(story.id);
-  writeIds(SAVED_KEY, ids);
-  // The note, the tags and the date saved live in a second key. Unsaving drops
+
+  // The note, the tags and the date saved live in the marks key. Unsaving drops
   // them: a note that survived an unsave would come back attached to a story
   // the reader thought they had cleared.
-  writeLocalMarks(
+  const marksWritten = writeLocalMarks(
     story.id,
     // The card travels with the save: the ids are this browser's and the
     // catalogue is shared, and nothing turns one into the other. See SavedMarks.
     saved ? { note: null, tags: [], savedAt: new Date().toISOString(), card: story } : null,
   );
+  const idsWritten = marksWritten && writeIds(SAVED_KEY, ids);
+
+  if (!marksWritten || !idsWritten) {
+    restoreItem(SAVED_KEY, previousIds);
+    restoreItem(SAVED_MARKS_KEY, previousMarks);
+    throw new Error("saved: this device refused the write, so nothing was changed");
+  }
 }
 
 export async function setHidden(story: StoryCard, hidden: boolean): Promise<void> {
@@ -170,9 +214,11 @@ export async function getSaved(archived = false): Promise<SavedResponse> {
   // no request here: /api/saved still exists and still answers, and the screen
   // no longer asks it anything, because its answer is one list shared by every
   // reader of the same instance.
-  if (archived) return { stories: [], nextCursor: null, hasMore: false };
+  if (archived) return { stories: [], nextCursor: null, hasMore: false, unresolved: 0 };
   const marks = localMarks();
-  const { cards } = savedCards(localSavedIds());
+  // `unresolved` is CARRIED, not discarded. An id with no card is this device
+  // holding a save it cannot render — see SavedResponse.unresolved.
+  const { cards, unresolved } = savedCards(localSavedIds());
   const stories: SavedCard[] = cards.map((card) => ({
     ...card,
     note: marks[String(card.id)]?.note ?? null,
@@ -182,7 +228,7 @@ export async function getSaved(archived = false): Promise<SavedResponse> {
     savedAt: marks[String(card.id)]?.savedAt ?? "",
   }));
   stories.sort((a, b) => b.savedAt.localeCompare(a.savedAt));
-  return { stories, nextCursor: null, hasMore: false };
+  return { stories, nextCursor: null, hasMore: false, unresolved };
 }
 
 /**
