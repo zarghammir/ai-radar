@@ -38,7 +38,8 @@
     "backfill:content-types": "tsx scripts/reclassify-content-types.ts",
     "measure:keyword-gate": "tsx scripts/measure-keyword-gate.ts",
     "backfill:ai-vocabulary": "tsx scripts/backfill-ai-vocabulary.ts",
-    "migrations:check": "tsx scripts/check-migrations.ts"
+    "migrations:check": "tsx scripts/check-migrations.ts",
+    "env:check": "tsx scripts/check-worker-env.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.126.0",

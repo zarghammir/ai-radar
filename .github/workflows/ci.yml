@@ -135,6 +135,16 @@ jobs:
       - name: Route cost and guard rules
         run: npm run routes:check
 
+      # Can the worker SEE what it reads? (#138, #146)
+      #
+      # Three secrets were added to switch summaries on and nothing happened,
+      # because ingest.yml never forwarded them. Ten of the fourteen variables
+      # the worker reads were unreachable in production. Every test passed the
+      # whole time, because every test exercised the off state — the only state
+      # that was reachable.
+      - name: Worker environment wiring
+        run: npm run env:check
+
       - name: Unit tests
         run: npm test
 
