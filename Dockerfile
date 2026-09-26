@@ -8,7 +8,13 @@
 
 # ---- builder ────────────────────────────────────────────────────────────────
 # Everything expensive happens here and none of it reaches the final image.
-FROM node:22-alpine AS builder
+# mirror.gcr.io rather than Docker Hub: Hub rate-limits anonymous pulls at 100 an
+# hour PER SOURCE IP, and CI runners share egress addresses, so the budget is spent
+# by strangers (#160). Same image, no credentials, digest compared against Hub's.
+# A readable TAG rather than a digest so this keeps receiving Node patch releases;
+# ci.yml pins a digest instead, because CI wants identical bytes and you want
+# current ones. Prefer Hub? Change both FROM lines back to `node:22-alpine`.
+FROM mirror.gcr.io/library/node:22-alpine AS builder
 WORKDIR /app
 
 # Only what the install itself reads, so the npm ci layer is reused whenever
@@ -78,7 +84,7 @@ RUN test -f ops/migrate.cjs \
   && echo "build artefacts present at the paths the entrypoints use"
 
 # ---- runner ─────────────────────────────────────────────────────────────────
-FROM node:22-alpine AS runner
+FROM mirror.gcr.io/library/node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production \
   PORT=3000 \

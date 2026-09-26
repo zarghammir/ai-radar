@@ -80,7 +80,7 @@ editing:
 ```bash
 docker run --name ai-radar-db -d -p 5432:5432 \
   -e POSTGRES_USER=ai_radar -e POSTGRES_PASSWORD=ai_radar -e POSTGRES_DB=ai_radar \
-  postgres:17-alpine
+  mirror.gcr.io/library/postgres:17-alpine
 ```
 
 Already running Postgres? Create a matching role and database instead, or point

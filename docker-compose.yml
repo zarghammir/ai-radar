@@ -10,7 +10,21 @@ name: ai-radar
 
 services:
   postgres:
-    image: postgres:17-alpine
+    # mirror.gcr.io, not Docker Hub, and a TAG rather than a digest.
+    #
+    # Hub rate-limits anonymous pulls at 100 an hour per source IP, which is what
+    # turned one CI run a week red (#160). This is Google's pull-through cache for
+    # Hub's library images: the same image, no credentials, no advertised per-IP
+    # limit. The digest was compared against Hub's and matches.
+    #
+    # A TAG here and a digest in ci.yml is deliberate. CI wants identical bytes
+    # every run. You, running this at home, want Postgres PATCH RELEASES — a
+    # frozen digest would quietly stop you receiving them, and a sha256 in the
+    # file you are most likely to read is worse than a version you recognise.
+    #
+    # Prefer Docker Hub? Change this one line to `postgres:17-alpine`. Nothing
+    # else depends on the registry.
+    image: mirror.gcr.io/library/postgres:17-alpine
     environment:
       POSTGRES_USER: ai_radar
       POSTGRES_PASSWORD: ai_radar

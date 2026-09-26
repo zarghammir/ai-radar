@@ -41,9 +41,29 @@ jobs:
 
     # Available for any test that needs a real database. Tests that do not
     # touch it simply ignore DATABASE_URL.
+    #
+    # NOT postgres:17-alpine FROM DOCKER HUB, AND NOT BECAUSE WE PULL TOO MUCH.
+    # Hub answers an anonymous request with `ratelimit-limit: 100;w=3600` and
+    # `docker-ratelimit-source: <the caller's IP>` — a hundred pulls an hour PER
+    # SOURCE ADDRESS. GitHub's runners share NAT egress, so this pull competes
+    # with every other anonymous puller behind the same address and the budget is
+    # spent by strangers. Reducing our own pull count cannot help; that is the
+    # obvious wrong fix. One red build a week came from this (#160).
+    #
+    # mirror.gcr.io is Google's pull-through cache for Docker Hub's library
+    # images. It serves the IDENTICAL image — the digest below was read from Hub
+    # and from the mirror and they match — needs no credentials, and advertises no
+    # per-IP hourly limit. That last point is worth stating precisely: no limit in
+    # a response is NOT proof there is no limit. What is proved is digest identity.
+    #
+    # Pinned by digest here and by TAG in docker-compose.yml, on purpose. CI wants
+    # the same bytes every run; a self-hoster wants Postgres patch releases. One
+    # artefact cannot serve both, so they are allowed to differ. The digest is a
+    # multi-arch OCI index (amd64, arm64 and six more), so it works on a
+    # contributor's Apple Silicon as well as on a runner.
     services:
       postgres:
-        image: postgres:17-alpine
+        image: mirror.gcr.io/library/postgres@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
         env:
           POSTGRES_USER: ai_radar
           POSTGRES_PASSWORD: ai_radar
@@ -135,6 +155,27 @@ jobs:
       - name: Route cost and guard rules
         run: npm run routes:check
 
+      # EVERY IMAGE NAMES A REGISTRY, AND THE TWO DOCUMENTS AGREE.
+      #
+      # Docker Hub rate-limits anonymous pulls at 100 an hour PER SOURCE IP, and
+      # CI runners share NAT egress, so the budget is spent by strangers — one red
+      # build a week (#160). Writing `postgres:17-alpine` instead of the mirrored
+      # reference reintroduces that, and NOTHING would notice: both forms work on
+      # any laptop, and the failure arrives weeks later on a shared address,
+      # looking like flakiness.
+      #
+      # It also checks the README and quick-start.yml still name the SAME image.
+      # quick-start exists to run the README's command verbatim; if they drift it
+      # keeps passing while testing something nobody was told to run.
+      #
+      # The self-test runs first, and it earns its place: it holds the two shapes
+      # that fooled earlier versions of this check — a comment mentioning the old
+      # value, and `-p 5432:5432`, whose `5432:5432` was read as an image.
+      - name: Container images name a registry, and the docs agree
+        run: |
+          node scripts/check-image-registries.mjs --self-test
+          node scripts/check-image-registries.mjs
+
       # Can the worker SEE what it reads? (#138, #146)
       #
       # Three secrets were added to switch summaries on and nothing happened,
@@ -187,9 +228,11 @@ jobs:
     needs: ci
     timeout-minutes: 20
 
+    # Same registry and digest as the `ci` job above, for the same reason. These
+    # are the two pulls that happen on EVERY push and pull request.
     services:
       postgres:
-        image: postgres:17-alpine
+        image: mirror.gcr.io/library/postgres@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
         env:
           POSTGRES_USER: ai_radar
           POSTGRES_PASSWORD: ai_radar

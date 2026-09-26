@@ -229,11 +229,11 @@ jobs:
       # command it gives. Before 0335763 this step did not exist because the
       # document did not mention it, and the job went red at db:migrate with
       # ECONNREFUSED — run 35170475688. That red is why the README changed.
-      - name: docker run ... postgres:17-alpine
+      - name: docker run ... the Postgres image the README names
         run: |
           docker run --name ai-radar-db -d -p 5432:5432 \
             -e POSTGRES_USER=ai_radar -e POSTGRES_PASSWORD=ai_radar -e POSTGRES_DB=ai_radar \
-            postgres:17-alpine
+            mirror.gcr.io/library/postgres:17-alpine
           for i in $(seq 1 60); do
             docker exec ai-radar-db pg_isready -U ai_radar -d ai_radar >/dev/null 2>&1 && break
             sleep 1
