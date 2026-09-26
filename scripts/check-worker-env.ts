@@ -29,6 +29,30 @@ import { dirname, join, normalize } from "node:path";
 
 const WORKER_ENTRY = "src/worker/main.ts";
 const WORKFLOW = ".github/workflows/ingest.yml";
+/** The step that identifies the job whose env block is in scope. See scopedEnv. */
+const WORKER_COMMAND = "worker:once";
+
+/**
+ * Ways of reading the environment this checker CANNOT follow, and therefore
+ * refuses outright.
+ *
+ * `process.env["LLM_PROVIDER"]` and `const { LLM_PROVIDER } = process.env` are
+ * both legitimate TypeScript and both invisible to the matcher below, so either
+ * would be a variable the worker reads and this check reports as absent —
+ * FAILING OPEN, which is the one direction a guard must never fail.
+ *
+ * Refused rather than matched because the count is currently ZERO: banning a
+ * form nobody uses costs nothing today and is impossible once somebody writes
+ * one and the ban starts breaking their build. If you need one of these, the
+ * honest move is to teach the matcher, not to add an exception.
+ */
+const FORBIDDEN_ENV_ACCESS: { pattern: RegExp; what: string }[] = [
+  { pattern: /process\.env\s*\[/g, what: 'process.env["X"] — computed access' },
+  {
+    pattern: /(?:const|let|var)\s*\{[^}]*\}\s*=\s*(?:process\.)?env\b/g,
+    what: "destructuring out of process.env",
+  },
+];
 
 /**
  * Variables the worker reads that the hosted workflow deliberately does NOT
@@ -43,6 +67,26 @@ const DELIBERATELY_ABSENT: Record<string, string> = {
   NODE_ENV: "set by the Node runtime and by next build; never ours to pass",
   INGEST_INTERVAL_MINUTES:
     "the hosted schedule IS the cron in this workflow. `worker:once` runs a single pass and never sleeps, so an interval here would be a second, contradictory statement of the same thing",
+  GITHUB_STEP_SUMMARY:
+    "the Actions runner sets this to a per-step file path. Forwarding our own value would override the runner's and write the report somewhere nothing collects it",
+};
+
+/**
+ * Keys the workflow passes that the worker does NOT read, each with the reason.
+ *
+ * The mirror of DELIBERATELY_ABSENT, and it exists because of an asymmetry the
+ * first version of this file had: it looped over what the walk FOUND, and A
+ * LOOP OVER WHAT YOU FOUND CANNOT SEE WHAT YOU STOPPED FINDING. A degraded
+ * walk — an import pattern that stops resolving, a renamed module — would drop
+ * the seven summariser reads out of `reads`, sail through every floor below,
+ * and print OK while verifying nothing about the wiring it exists to verify.
+ *
+ * Asserting from this end closes it: the workflow still forwards those keys, so
+ * a key that is forwarded and no longer read means either the code stopped
+ * reading it or THE WALK STOPPED SEEING IT, and both are worth failing for.
+ */
+const INFRASTRUCTURE: Record<string, string> = {
+  NEXT_TELEMETRY_DISABLED: "read by the Next.js CLI, not by our code",
 };
 
 /** A walk that reaches almost nothing reports almost no problems. */
@@ -78,7 +122,10 @@ function importsOf(file: string): string[] {
 }
 
 /** Every environment variable read anywhere the worker can reach. */
-function readsReachableFrom(entry: string): { reads: Map<string, string>; modules: number } {
+function readsReachableFrom(entry: string): {
+  reads: Map<string, string>;
+  files: string[];
+} {
   const seen = new Set<string>();
   const reads = new Map<string, string>();
   const stack = [entry];
@@ -94,47 +141,103 @@ function readsReachableFrom(entry: string): { reads: Map<string, string>; module
     }
     for (const next of importsOf(current)) stack.push(next);
   }
-  return { reads, modules: seen.size };
+  return { reads, files: [...seen] };
 }
 
 /**
- * The keys the workflow hands to the job that runs the worker.
+ * The keys in scope for the job that actually runs the worker.
  *
- * Only the JOB-level block, at four spaces of indent. The step-level `env:`
- * further down belongs to the alarm step and is not in scope for the worker —
- * reading both would let a variable passed only to the alarm look as though the
- * worker could see it, which is this defect with extra steps.
+ * SCOPED TO THAT ONE JOB, not to every four-space `env:` in the file. The first
+ * version unioned them all, which is fine while there is one job and wrong the
+ * moment there are two: a variable forwarded only to a SECOND job would read as
+ * visible to the worker. That is the same mistake as reading the alarm step's
+ * env block, one level up — and the alarm step is why the step-level blocks are
+ * still excluded.
+ *
+ * Workflow-level `env:` (column zero) IS in scope, because GitHub applies it to
+ * every job. There is none today; supporting it is cheaper than discovering the
+ * omission from a wrong answer.
  */
-function providedByWorkflow(path: string): Set<string> {
+function scopedEnv(path: string): { provided: Set<string>; job: string | null } {
+  const lines = readFileSync(path, "utf8").split("\n");
   const provided = new Set<string>();
-  let inside = false;
-  for (const line of readFileSync(path, "utf8").split("\n")) {
-    if (/^ {4}env:\s*$/.test(line)) {
-      inside = true;
+
+  // Workflow-level env, before `jobs:`.
+  let inTopEnv = false;
+  for (const line of lines) {
+    if (/^jobs:/.test(line)) break;
+    if (/^env:\s*$/.test(line)) {
+      inTopEnv = true;
       continue;
     }
-    if (inside) {
-      const entry = /^ {6}([A-Z][A-Z0-9_]*):/.exec(line);
+    if (inTopEnv) {
+      const entry = /^ {2}([A-Z][A-Z0-9_]*):/.exec(line);
       if (entry) {
         provided.add(entry[1]);
         continue;
       }
-      // A comment or a blank line inside the block is still the block.
       if (/^\s*(#.*)?$/.test(line)) continue;
-      inside = false;
+      inTopEnv = false;
     }
   }
-  return provided;
+
+  // Split into jobs by their two-space keys, then pick the one that runs the
+  // worker. A job is identified by what it DOES, not by being named "ingest":
+  // renaming the job must not silently move this check to a different one.
+  const jobStarts: { name: string; at: number }[] = [];
+  let inJobs = false;
+  for (let i = 0; i < lines.length; i++) {
+    if (/^jobs:\s*$/.test(lines[i])) {
+      inJobs = true;
+      continue;
+    }
+    if (!inJobs) continue;
+    const head = /^ {2}([A-Za-z0-9_-]+):\s*$/.exec(lines[i]);
+    if (head) jobStarts.push({ name: head[1], at: i });
+  }
+
+  for (let j = 0; j < jobStarts.length; j++) {
+    const from = jobStarts[j].at;
+    const to = j + 1 < jobStarts.length ? jobStarts[j + 1].at : lines.length;
+    const body = lines.slice(from, to);
+    if (!body.some((line) => line.includes(WORKER_COMMAND))) continue;
+
+    let inJobEnv = false;
+    for (const line of body) {
+      if (/^ {4}env:\s*$/.test(line)) {
+        inJobEnv = true;
+        continue;
+      }
+      if (inJobEnv) {
+        const entry = /^ {6}([A-Z][A-Z0-9_]*):/.exec(line);
+        if (entry) {
+          provided.add(entry[1]);
+          continue;
+        }
+        if (/^\s*(#.*)?$/.test(line)) continue;
+        inJobEnv = false;
+      }
+    }
+    return { provided, job: jobStarts[j].name };
+  }
+
+  return { provided, job: null };
 }
 
 function main(): void {
-  const { reads, modules } = readsReachableFrom(WORKER_ENTRY);
-  const provided = providedByWorkflow(WORKFLOW);
+  const { reads, files } = readsReachableFrom(WORKER_ENTRY);
+  const { provided, job } = scopedEnv(WORKFLOW);
+  const modules = files.length;
   const problems: string[] = [];
 
   // Floors first. A parser that matched nothing, or a graph walk that resolved
-  // nothing, would otherwise print a clean bill of health — which is the exact
-  // shape of instrument this repository keeps deleting.
+  // nothing, would otherwise print a clean bill of health — the exact shape of
+  // instrument this repository keeps deleting.
+  if (job === null) {
+    problems.push(
+      `no job in ${WORKFLOW} runs \`${WORKER_COMMAND}\`, so there is no env block to compare against. Either the workflow changed or this checker is pointed at the wrong file.`,
+    );
+  }
   if (modules < MINIMUM_MODULES) {
     problems.push(
       `the import walk reached only ${modules} modules from ${WORKER_ENTRY} (expected at least ${MINIMUM_MODULES}). The graph is broken, so no absence below can be trusted.`,
@@ -151,12 +254,32 @@ function main(): void {
     );
   }
 
+  // Forms this checker cannot follow. Refused, because a read it cannot see is
+  // a read it reports as absent — failing OPEN.
+  for (const file of files) {
+    const source = readFileSync(file, "utf8");
+    for (const { pattern, what } of FORBIDDEN_ENV_ACCESS) {
+      pattern.lastIndex = 0;
+      if (pattern.test(source)) {
+        problems.push(
+          `${file} reads the environment via ${what}, which this checker cannot follow and therefore cannot verify. Use \`env.NAME\` or \`process.env.NAME\`, or teach the matcher — do not leave a read it will silently report as wired.`,
+        );
+      }
+    }
+  }
+
+  // ── Direction one: everything the worker READS is forwarded or declared ──
   for (const [name, file] of [...reads].sort()) {
     const absentOnPurpose = name in DELIBERATELY_ABSENT;
     if (provided.has(name)) {
       if (absentOnPurpose) {
         problems.push(
           `${name} is declared deliberately absent ("${DELIBERATELY_ABSENT[name]}") but ${WORKFLOW} passes it. One of the two is wrong and a stale declaration is how a real gap hides.`,
+        );
+      }
+      if (name in INFRASTRUCTURE) {
+        problems.push(
+          `${name} is listed as infrastructure ("${INFRASTRUCTURE[name]}") but ${file} reads it. The label is now wrong, and a wrong label is what excuses it from the check above.`,
         );
       }
       continue;
@@ -167,16 +290,51 @@ function main(): void {
     );
   }
 
+  // ── Direction two: everything FORWARDED is read, or declared infrastructure ──
+  //
+  // THIS IS THE HALF THAT SURVIVES A DEGRADED WALK. The floors catch a walk
+  // that collapses; they do not catch one that quietly loses a subtree, because
+  // a loop over what was found cannot see what stopped being found. The
+  // workflow still forwards those keys, so this end notices.
+  for (const name of [...provided].sort()) {
+    if (reads.has(name)) continue;
+    if (name in INFRASTRUCTURE) continue;
+    problems.push(
+      `${WORKFLOW} forwards ${name} and nothing the worker can reach reads it. Either the code stopped reading it — in which case drop it from the workflow — or THE IMPORT WALK STOPPED SEEING THE MODULE THAT DOES, which would silently retire this check for that feature. Add it to INFRASTRUCTURE only if it is genuinely read by tooling rather than by us.`,
+    );
+  }
+
+  // ── And every declaration is still live ─────────────────────────────────
+  for (const [name, why] of Object.entries(DELIBERATELY_ABSENT)) {
+    if (!reads.has(name)) {
+      problems.push(
+        `${name} is declared deliberately absent ("${why}") but nothing the worker reaches reads it any more. Drop the declaration: an entry nobody needs is an exception waiting to excuse a real gap.`,
+      );
+    }
+  }
+  for (const [name, why] of Object.entries(INFRASTRUCTURE)) {
+    if (!provided.has(name)) {
+      problems.push(
+        `${name} is listed as infrastructure ("${why}") but ${WORKFLOW} no longer forwards it. Drop the entry.`,
+      );
+    }
+  }
+
   if (problems.length > 0) {
     console.error(`FAIL: ${problems.length} problem(s).\n`);
     for (const problem of problems) console.error(`  - ${problem}\n`);
     process.exit(1);
   }
 
-  const declared = Object.keys(DELIBERATELY_ABSENT).length;
+  // THE LINE PUBLISHES ITS OWN SUBJECT, and that is deliberate: a one-time
+  // control expires on the next edit, a printed quantity does not. If the walk
+  // starts reaching 12 modules instead of 43, this line says so on every run
+  // and nobody has to remember that a control was ever run.
+  const wired = [...reads].filter(([name]) => provided.has(name)).length;
   console.log(
-    `OK ${reads.size} environment reads across ${modules} modules reachable from ${WORKER_ENTRY}; ` +
-      `${reads.size - declared} forwarded by ${WORKFLOW}, ${declared} declared deliberately absent.`,
+    `OK job "${job}" runs ${WORKER_COMMAND}: ${reads.size} environment reads across ${modules} modules reachable from ${WORKER_ENTRY}; ` +
+      `${wired} forwarded and read, ${Object.keys(DELIBERATELY_ABSENT).length} declared deliberately absent, ` +
+      `${provided.size} keys in scope of which ${Object.keys(INFRASTRUCTURE).length} are infrastructure.`,
   );
 }
 
