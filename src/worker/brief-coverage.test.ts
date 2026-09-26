@@ -20,10 +20,16 @@ describe("coverageLine", () => {
    * say the summariser failed on stories that do not exist — the same
    * absence-read-as-failure shape this project keeps removing.
    */
-  it("says no denominator rather than 0% for an empty window", () => {
+  it("says no denominator rather than reporting a figure", () => {
     const line = coverageLine(null);
     expect(line).toContain("no denominator");
-    expect(line).not.toContain("0%");
+    // Asserted on the SHAPE of a reported figure, not on the substring "0%".
+    // The message deliberately explains itself with "which is not 0%", so the
+    // literal check failed on the explanation — the property is that no
+    // coverage FRACTION or PERCENTAGE is presented as a measurement, and these
+    // are the two forms coverageLine uses when it has one.
+    expect(line).not.toMatch(/\(\d+%\)/);
+    expect(line).not.toMatch(/\d+\/\d+/);
   });
 
   it("rounds rather than printing a long fraction", () => {
