@@ -2,10 +2,39 @@ import type { ContentType, ScoreComponents, SourceTier, VerificationLevel } from
 
 export interface RankInput {
   /**
-   * AGE IS MEASURED FROM FIRST SIGHTING, and this replaced lastActivityAt.
+   * AGE IS MEASURED FROM THE STORY'S EARLIEST PUBLICATION, and this replaced
+   * lastActivityAt.
+   *
+   * THE COLUMN IS NAMED FOR SOMETHING IT DOES NOT MEASURE, so read it as what it
+   * is: `src/pipeline/run.ts:171` sets `firstSeenAt: item.publishedAt` and `:235`
+   * sets it from `byAge[0].publishedAt`. It is the earliest item's PUBLICATION —
+   * a fact about the world — not when this app could first have shown the reader
+   * anything. An earlier version of this docblock said "first sighting" five
+   * times and was wrong five times.
+   *
+   * IT IS A PROXY FOR FIRST SIGHTING AND IT HOLDS WHILE THE COLLECTOR IS
+   * CURRENT. Fetched an hour after publication, the proxy costs 0.5^(1/48) —
+   * 1.4%, invisible, and the normal case for a live feed.
+   *
+   * WHERE IT BREAKS, with the arithmetic: a story PUBLISHED FOUR DAYS BEFORE IT
+   * WAS FETCHED enters at 0.5^(96/48) = 25% OF ITS STRUCTURAL SCORE and can
+   * never lead. New to the reader, scored as four days stale. That is the #148
+   * class — Show HN, papers, anything a feed surfaces late — and #148's own
+   * sentence is "a story published last week and fetched this morning is news to
+   * this reader".
+   *
+   * THIS CHANGE DOES NOT CREATE THAT AND IT RAISES THE STAKES. The same proxy
+   * fed a 14-point tiebreak before; it is now the input to the HEADLINE
+   * ORDERING, which is a different order of consequence. `src/api/brief.ts`
+   * documents the same asymmetry from the admission side — "THE TWO CLOCKS ARE
+   * THE TRAP", arrival on raw_items.fetched_at against horizons on publication —
+   * and the fix is one arrival-derived value, tracked on #171. Do not repair it
+   * by returning to lastActivityAt: that clock let a story reset its own age
+   * forever, which is the defect this replaced.
    *
    * The reader's complaint was "I'm seeing the same news as I saw a couple of
-   * days ago" — a statement about FIRST SIGHTING, not about coverage. A sixth
+   * days ago" — a statement about WHEN A STORY ENTERED HIS WORLD, not about
+   * how long it has kept being covered. A sixth
    * outlet picking up a five-day-old story does not make it news to him again,
    * and under the old clock that pickup reset the story's age and held it at the
    * top of his brief: the leading story was 139 hours old and last active 34,
