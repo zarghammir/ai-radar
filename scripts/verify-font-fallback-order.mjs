@@ -81,6 +81,14 @@
  * voids the whole declaration, and the element silently inherits the body's sans
  * chain. An earlier version measured sans three times and called it mono.
  *
+ * IT ENDS WITH A JSON SUMMARY, and that is a requirement rather than a courtesy.
+ * .github/scripts/measured-digest.mjs reads the trailing JSON object and FAILS the
+ * job when there is none, or when it holds no numeric leaf: "a check that exits 0
+ * without reporting a measurement is the failure this job exists to prevent", and
+ * every floor in this repository is a quantity. So the widths this check compares
+ * are printed, not just the verdicts it drew from them. The JSON must be LAST —
+ * the digest scans backwards for a line that is exactly `{` and parses to the end.
+ *
  * EXIT CODES, the three-state contract the other verification scripts use:
  *   0  every role renders non-latin text in its real face
  *   1  a role fell through to a fallback, or a control did not behave
@@ -206,6 +214,8 @@ if (CONTROL) {
 }
 
 let failures = 0;
+/** Every width this check compared, so the summary reports quantities not verdicts. */
+const measured = [];
 try {
   const page = await browser.newPage();
   const response = await page.goto(BASE, { waitUntil: "networkidle" });
@@ -247,6 +257,14 @@ try {
       // real face and the system's Arial substitute is not a fact about our CSS.
       const gap = Math.abs(m.broken - m.face);
       if (gap >= EPSILON) discriminating++;
+      measured.push({
+        role: role.cls,
+        face: probe.face,
+        realPx: Number(m.real.toFixed(2)),
+        facePx: Number(m.face.toFixed(2)),
+        misorderedPx: Number(m.broken.toFixed(2)),
+        gapPx: Number(gap.toFixed(2)),
+      });
 
       if (realOk) {
         console.log(
@@ -289,5 +307,21 @@ console.log(
   failures === 0
     ? `RESULT: ${total} probes across ${ROLES.length} families; every family's chain order discriminated`
     : `RESULT: ${failures} failed`,
+);
+
+// LAST, and nothing may print after it. See the header.
+console.log(
+  JSON.stringify(
+    {
+      probes: total,
+      families: ROLES.length,
+      discriminatingProbes: measured.filter((m) => m.gapPx >= EPSILON).length,
+      failures,
+      tolerancePx: EPSILON,
+      measurements: measured,
+    },
+    null,
+    2,
+  ),
 );
 process.exit(failures === 0 ? 0 : 1);
