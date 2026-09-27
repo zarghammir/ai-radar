@@ -13,9 +13,11 @@ const now = new Date("2026-09-16T12:00:00Z");
 const reuters = { sourceKey: "reuters", tier: "HIGH_QUALITY_REPORTING" as const };
 const verge = { sourceKey: "verge", tier: "HIGH_QUALITY_REPORTING" as const };
 const base = {
-  // Age is scored from first sighting since the decay change, and `now` equals
-  // this instant in these tests — so `base` is a story at age ZERO and every
-  // assertion below measures structure with no decay applied to it.
+  // Age is scored from first sighting since the decay change. `now` is 12:00, so
+  // BASE IS ONE HOUR OLD and carries a small decay — about 1.4% of its score.
+  // An earlier version of this comment claimed base was age zero; it is not, and
+  // CI caught it through `ageDecay` being -0.2 rather than 0. Use `atZeroAge`
+  // below wherever a test needs decay out of the way.
   firstSeenAt: new Date("2026-09-16T11:00:00Z"),
   contentType: "NEWS" as const,
   sources: [verge],
@@ -24,6 +26,15 @@ const base = {
   // Carries no penalty, so the tests below measure what they say they measure.
   verification: "CORROBORATED" as const,
 };
+/**
+ * The same story with no age at all, for assertions about STRUCTURE.
+ *
+ * Multiplicative decay scales every component including the penalties, so a
+ * test measuring a penalty's magnitude against the total must remove age from
+ * the picture or it measures both at once.
+ */
+const atZeroAge = { ...base, firstSeenAt: now };
+
 /** Seven separate items, all from the same outlet. */
 const sevenFromOneOutlet = Array.from({ length: 7 }, () => ({ ...reuters }));
 
@@ -42,15 +53,16 @@ describe("rankStory", () => {
    * measured fresh-to-pack gap of 18.18 against a cap of 14 said was required.
    */
   it("halves the whole score at the half-life", () => {
-    const atZero = rankStory(base, now).score;
+    const atZero = rankStory(atZeroAge, now).score;
     const halfLife = new Date(now.getTime() - WEIGHTS.ageHalfLifeHours * 3_600_000);
     const aged = rankStory({ ...base, firstSeenAt: halfLife }, now).score;
-    expect(aged).toBeCloseTo(atZero / 2, 1);
+    // Components round to one decimal, so the halved total can be off by that
+    // much. A tighter tolerance would fail on correct arithmetic.
+    expect(aged).toBeCloseTo(atZero / 2, 0);
   });
 
-  it("costs nothing at age zero and everything is structure", () => {
-    const r = rankStory(base, now);
-    expect(r.components.ageDecay).toBe(0);
+  it("costs nothing at all at age zero", () => {
+    expect(rankStory(atZeroAge, now).components.ageDecay).toBe(0);
   });
 
   /**
@@ -264,7 +276,12 @@ describe("rankStory and the verification penalty", () => {
     expect(unverified.components.unverifiedPenalty).toBeLessThan(0);
     expect(unverified.components.unverifiedPenalty).toBe(-WEIGHTS.unverifiedPenalty);
     expect(corroborated.components.unverifiedPenalty).toBeUndefined();
-    expect(corroborated.score - unverified.score).toBeCloseTo(WEIGHTS.unverifiedPenalty, 5);
+    // Measured at ZERO AGE, because multiplicative decay scales the penalty
+    // along with everything else: at one hour old the gap is 5.9 rather than 6,
+    // which is correct and would make this assertion a test of the decay.
+    const u0 = rankStory({ ...atZeroAge, verification: "UNVERIFIED" }, now);
+    const c0 = rankStory({ ...atZeroAge, verification: "CORROBORATED" }, now);
+    expect(c0.score - u0.score).toBeCloseTo(WEIGHTS.unverifiedPenalty, 5);
   });
 
   it("pushes an emerging story down by less", () => {

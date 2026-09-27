@@ -244,7 +244,13 @@ withDb("rankAllStories", () => {
     const s = await reload(strong.id);
     expect(w.scoreComponents.unverifiedPenalty).toBe(-WEIGHTS.unverifiedPenalty);
     expect(w.score).toBeLessThan(s.score);
-    expect(s.score - w.score).toBeCloseTo(WEIGHTS.unverifiedPenalty, 1);
+    // NOT an exact difference any more. Age decays the whole score, penalties
+    // included, so the penalty's effect on the total is its magnitude scaled by
+    // the story's decay — at most the magnitude, and less once it has any age.
+    // Asserting the exact figure here would be asserting the decay factor, and
+    // the exact penalty is already pinned on the component above.
+    expect(s.score - w.score).toBeGreaterThan(0);
+    expect(s.score - w.score).toBeLessThanOrEqual(WEIGHTS.unverifiedPenalty);
   });
 
   it("uses the best engagement signal on the story", async () => {
