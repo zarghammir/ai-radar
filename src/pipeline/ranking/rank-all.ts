@@ -59,6 +59,11 @@ export async function rankOneInTransaction(
       contentType: stories.contentType,
       verification: stories.verification,
       lastActivityAt: stories.lastActivityAt,
+      // Age is scored from FIRST SIGHTING since the decay change — see the note
+      // on RankInput.firstSeenAt. lastActivityAt is still selected because the
+      // window query below bounds on it: what the pipeline keeps up to date and
+      // what the reader experiences as newness are different clocks.
+      firstSeenAt: stories.firstSeenAt,
     })
     .from(stories)
     .where(eq(stories.id, storyId));
@@ -87,7 +92,7 @@ export async function rankOneInTransaction(
 
   const { score, components } = rankStory(
     {
-      lastActivityAt: story.lastActivityAt,
+      firstSeenAt: story.firstSeenAt,
       contentType: story.contentType,
       verification: story.verification,
       sources,

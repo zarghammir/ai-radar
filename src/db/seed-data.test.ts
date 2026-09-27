@@ -334,7 +334,7 @@ describe("the shipped catalogue produces the badges the product promises", () =>
       const s = item(key);
       return rankStory(
         {
-          lastActivityAt: new Date("2026-09-16T11:00:00Z"),
+          firstSeenAt: new Date("2026-09-16T11:00:00Z"),
           contentType: "NEWS",
           sources: [{ sourceKey: s.sourceKey, tier: s.tier }],
           // Held constant so this measures the tier difference and nothing

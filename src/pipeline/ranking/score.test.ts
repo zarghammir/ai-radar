@@ -1,12 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { COMPONENT_LABELS, labelFor, rankStory, scoreComponentList, WEIGHTS } from "./score";
+import {
+  COMPONENT_LABELS,
+  LEGACY_COMPONENT_LABELS,
+  labelFor,
+  rankStory,
+  scoreComponentList,
+  WEIGHTS,
+} from "./score";
 import { deriveVerification } from "../clustering/verification";
 
 const now = new Date("2026-09-16T12:00:00Z");
 const reuters = { sourceKey: "reuters", tier: "HIGH_QUALITY_REPORTING" as const };
 const verge = { sourceKey: "verge", tier: "HIGH_QUALITY_REPORTING" as const };
 const base = {
-  lastActivityAt: new Date("2026-09-16T11:00:00Z"),
+  // Age is scored from first sighting since the decay change, and `now` equals
+  // this instant in these tests — so `base` is a story at age ZERO and every
+  // assertion below measures structure with no decay applied to it.
+  firstSeenAt: new Date("2026-09-16T11:00:00Z"),
   contentType: "NEWS" as const,
   sources: [verge],
   topicKeys: [] as string[],
@@ -25,12 +35,41 @@ describe("rankStory", () => {
     expect(r.components.qualityReporting).toBe(WEIGHTS.highQualityReporting);
     expect(r.components.contentType).toBe(WEIGHTS.contentType.NEWS);
   });
-  it("decays with time", () => {
-    const fresh = rankStory(base, now).components.recency;
-    const old = rankStory({ ...base, lastActivityAt: new Date("2026-09-14T11:00:00Z") }, now)
-      .components.recency;
-    expect(fresh).toBeGreaterThan(old);
-    expect(old).toBeLessThan(1);
+  /**
+   * THE DECAY IS MULTIPLICATIVE, and this asserts the property rather than the
+   * direction. An additive term could satisfy "older scores less"; only a
+   * multiplier halves the WHOLE score at the half-life, which is the thing the
+   * measured fresh-to-pack gap of 18.18 against a cap of 14 said was required.
+   */
+  it("halves the whole score at the half-life", () => {
+    const atZero = rankStory(base, now).score;
+    const halfLife = new Date(now.getTime() - WEIGHTS.ageHalfLifeHours * 3_600_000);
+    const aged = rankStory({ ...base, firstSeenAt: halfLife }, now).score;
+    expect(aged).toBeCloseTo(atZero / 2, 1);
+  });
+
+  it("costs nothing at age zero and everything is structure", () => {
+    const r = rankStory(base, now);
+    expect(r.components.ageDecay).toBe(0);
+  });
+
+  /**
+   * The cost SCALES WITH THE SCORE, which is what makes a big story fade slowly
+   * in absolute terms and a weak one vanish. An additive term would take the
+   * same points off both, which is the defect this replaced.
+   */
+  it("takes more from a bigger story than a smaller one at the same age", () => {
+    const day = new Date(now.getTime() - 24 * 3_600_000);
+    const big = rankStory(
+      { ...base, firstSeenAt: day, sources: [{ sourceKey: "openai", tier: "PRIMARY" }] },
+      now,
+    );
+    const small = rankStory(
+      { ...base, firstSeenAt: day, sources: [{ sourceKey: "hn", tier: "COMMUNITY" }] },
+      now,
+    );
+    expect(big.score).toBeGreaterThan(small.score);
+    expect(Math.abs(big.components.ageDecay)).toBeGreaterThan(Math.abs(small.components.ageDecay));
   });
   it("prefers primary sources over reporting over community", () => {
     const p = rankStory(
@@ -147,11 +186,14 @@ describe("rankStory counts outlets, not items", () => {
 });
 
 describe("rankStory date safety", () => {
-  it("never produces a NaN score from an unparseable last activity date", () => {
-    const r = rankStory({ ...base, lastActivityAt: new Date("not a date") }, now);
+  it("never produces a NaN score from an unparseable first-seen date", () => {
+    const r = rankStory({ ...base, firstSeenAt: new Date("not a date") }, now);
     expect(Number.isFinite(r.score)).toBe(true);
-    expect(Number.isFinite(r.components.recency)).toBe(true);
-    expect(r.components.recency).toBe(WEIGHTS.recencyMax);
+    expect(Number.isFinite(r.components.ageDecay)).toBe(true);
+    // Treated as "just now", so the decay costs nothing rather than poisoning
+    // every component with NaN. Asserted as exactly 0, which is why the
+    // implementation special-cases a zero cost instead of negating it into -0.
+    expect(r.components.ageDecay).toBe(0);
   });
 });
 
@@ -260,7 +302,7 @@ describe("rankStory and the verification penalty", () => {
     const weak = rankStory(
       {
         ...base,
-        lastActivityAt: new Date("2026-09-10T11:00:00Z"),
+        firstSeenAt: new Date("2026-09-10T11:00:00Z"),
         contentType: "DISCUSSION",
         sources: [{ sourceKey: "hn", tier: "COMMUNITY" }],
         verification: "UNVERIFIED",
@@ -302,7 +344,7 @@ describe("every component the ranker can emit has a label", () => {
       { ...base, engagementPoints: 100, engagementComments: 20 },
       { ...base, verification: "UNVERIFIED" },
       { ...base, verification: "EMERGING" },
-      { ...base, contentType: "RELEASE", lastActivityAt: at },
+      { ...base, contentType: "RELEASE", firstSeenAt: at },
     ];
     const keys = new Set<string>();
     for (const input of runs) {
@@ -311,13 +353,33 @@ describe("every component the ranker can emit has a label", () => {
     return keys;
   };
 
-  it("emits exactly the components the label map names", () => {
+  /**
+   * TWO DIRECTIONS, AND THEY GUARD DIFFERENT THINGS. The original asserted exact
+   * equality, which was right until a component was retired: `recency` still has
+   * a label because rows scored before the decay change still carry one and the
+   * story page renders them, so equality would now fail on correct code.
+   *
+   * Split rather than weakened. The reader-facing invariant — no emitted
+   * component reaches a screen unlabelled — is unchanged and absolute. The other
+   * direction is now "every label with no producer is DECLARED", which is
+   * stricter than a shrug: a label that quietly loses its producer is still red.
+   */
+  it("labels every component it emits", () => {
+    const labelled = new Set(Object.keys(COMPONENT_LABELS));
+    for (const key of emitted()) expect(labelled).toContain(key);
+  });
+
+  it("declares every label that nothing produces any more", () => {
     const keys = emitted();
-    const labelled = Object.keys(COMPONENT_LABELS);
-    // Tied to the map rather than a hard-coded number, so a branch this matrix
-    // stops reaching becomes a red instead of a shrug.
-    expect(keys.size).toBe(labelled.length);
-    expect([...keys].sort()).toEqual([...labelled].sort());
+    const orphaned = Object.keys(COMPONENT_LABELS).filter((k) => !keys.has(k));
+    expect(orphaned.sort()).toEqual([...LEGACY_COMPONENT_LABELS].sort());
+  });
+
+  // The matrix must keep reaching a branch for each live component, which is
+  // what the original count was protecting.
+  it("reaches every live component", () => {
+    const live = Object.keys(COMPONENT_LABELS).filter((k) => !LEGACY_COMPONENT_LABELS.includes(k));
+    expect(emitted().size).toBe(live.length);
   });
 
   it("labels every one of them, and falls back visibly rather than blankly", () => {

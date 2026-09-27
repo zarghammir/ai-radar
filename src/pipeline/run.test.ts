@@ -430,7 +430,7 @@ withDb("pipeline orchestration", () => {
     expect(deriveVerification(attached).level).toBe(story.verification);
     const ranked = rankStory(
       {
-        lastActivityAt: story.lastActivityAt,
+        firstSeenAt: story.firstSeenAt,
         contentType: story.contentType,
         sources: attached,
         // The stored level, so this really is the story's own data going into
