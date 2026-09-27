@@ -7,7 +7,7 @@
  *
  * Every check carries a FLOOR and the script exits 1 if it measured nothing.
  * The floor that matters most here is the story count: a Today page rendering
- * ZERO cards would make "the 5-minute switch shortens the list" trivially true
+ * ZERO cards would make "the 5-story switch shortens the list" trivially true
  * (0 is not more than 0), "hide removed the card" trivially true (there was no
  * card), and the whole run would sweep clean while the page was blank.
  */
@@ -16,7 +16,7 @@ import { bailIfBroken, isFloorBail, reportControl, sectionStart } from "./lib/fl
 import { markOnboarded } from "./lib/seed.mjs";
 
 // VIEW PINNED TO "all" THROUGHOUT THIS FILE. #102 made the app open on built
-// things, which is 4 of the 7 fixture stories — and a 5-minute budget cannot
+// things, which is 4 of the 7 fixture stories — and a 5-story selection cannot
 // shorten a 4-story list, so the reading-length assertions below started failing
 // on a filter that was working perfectly. The two are separate axes: this file
 // measures LENGTH, so it holds the view still. The default view is exercised by
@@ -31,8 +31,8 @@ await requireServer(base);
  * anything changing about the instrument.
  *
  * VERIFY_CONTROL=no-budget asks for `length=all` on BOTH legs that are
- * supposed to ask for a budget — the five-minute one and the ten-minute one.
- * Neither budget is then applied, each short list is the long list, and both
+ * supposed to ask for a count — the five-story one and the ten-story one.
+ * Neither count is then applied, each short list is the long list, and both
  * named assertions MUST fail. It changes an input to the app in the same way
  * AUDIT_CONTROL=narrow changes the viewport; it does not edit the assertions,
  * which would prove nothing about them.
@@ -49,17 +49,22 @@ await requireServer(base);
 const CONTROL = process.env.VERIFY_CONTROL === "no-budget";
 /** The needles identifying THIS file's named assertions, kept beside the control. */
 const CONTROL_NEEDLES = [
-  "the 5-minute brief did not shorten the list",
-  "the ten-minute brief did not shorten the list",
+  "the 5-story brief did not shorten the list",
+  "the ten-story brief did not shorten the list",
 ];
 
 /** The brief must never be emptier than this for the assertions to mean anything. */
 const MIN_STORIES = 2;
 
 /**
- * The finite reading budgets this file actually requests, and therefore the
- * ones its corpus has to be able to exercise. `all` is not a budget, it is the
+ * The finite story counts this file actually requests, and therefore the ones
+ * its corpus has to be able to exercise. `all` is not a count, it is the
  * absence of one.
+ *
+ * THESE WERE MINUTES AND ARE NOW STORIES. The owner specified the setting as a
+ * count, so the precondition below counts stories rather than summing their
+ * estimated reading time. The SHAPE of the guard is unchanged and #114's
+ * correction still governs it.
  *
  * DERIVED FROM WHAT THIS FILE TESTS rather than copied from BRIEF_LENGTHS,
  * because a .mjs script cannot import the TypeScript source and a hand-copied
@@ -68,8 +73,8 @@ const MIN_STORIES = 2;
  * budget to the assertions without adding it here and the precondition stops
  * covering it, which is the defect #114 was filed about one level up.
  */
-const BUDGETS_TESTED = [5, 10];
-const LONGEST_BUDGET_TESTED = Math.max(...BUDGETS_TESTED);
+const COUNTS_TESTED = [5, 10];
+const LARGEST_COUNT_TESTED = Math.max(...COUNTS_TESTED);
 
 const out = {};
 const floor = [];
@@ -100,8 +105,8 @@ try {
       waitUntil: "networkidle",
     });
     const ten = await cards(page).count();
-    // Under the control this asks for `all`, so the "five minute" leg is not a
-    // five-minute leg at all and the comparison below cannot hold.
+    // Under the control this asks for `all`, so the "five story" leg is not a
+    // five-story leg at all and the comparison below cannot hold.
     await page.goto(`${base}/?length=${CONTROL ? "all" : "5"}&view=all`, {
       waitUntil: "networkidle",
     });
@@ -111,31 +116,31 @@ try {
       floor.push(`only ${all} stories at length=all; the page is effectively empty`);
     if (five < 1) floor.push("length=5 rendered no stories at all");
 
-    // A COUNT FLOOR IS NOT ENOUGH HERE, and that gap is why this file went red
-    // on a working build. MIN_STORIES guards against an empty page, but the
-    // assertions below need something stronger: the brief has to run LONGER
-    // than the longest budget they test before that budget can shorten
-    // anything. Stories clear MIN_STORIES easily and still leave the
+    // MIN_STORIES IS NOT ENOUGH HERE, and that gap is why this file once went
+    // red on a working build. MIN_STORIES guards against an empty page, but the
+    // assertions below need something stronger: the brief has to hold MORE
+    // stories than the largest count they test before that count can shorten
+    // anything. A corpus clears MIN_STORIES easily and still leaves the
     // comparisons impossible to satisfy, so the check reports that the
-    // reading-length switch is broken on a switch that is working.
+    // length switch is broken on a switch that is working.
     //
-    // IT GUARDS THE LONGEST BUDGET TESTED, NOT THE SHORTEST, and that is #114's
-    // correction. Guarding five proves the five-minute setting can cut and says
-    // nothing about the ten — so once `ten < all` existed, a corpus of eight
-    // minutes would have passed this precondition and then failed the ten
-    // assertion, blaming the product for a corpus problem. The longest budget
-    // guards every shorter one by construction.
+    // IT GUARDS THE LARGEST COUNT TESTED, NOT THE SMALLEST, and that is #114's
+    // correction, which survives the change from minutes to stories unaltered
+    // — the units moved, the hole did not. Guarding five proves the five-story
+    // setting can cut and says nothing about the ten, so a corpus of eight
+    // would pass the precondition and then fail the ten assertion, blaming the
+    // product for a corpus problem.
     //
     // The same hole existed in verify-saved-settings.mjs and is fixed there
     // too. The general shape: a test whose quantity cannot vary across the
     // defect is vacuous, and a vacuous test that FAILS is worse than one that
     // passes, because it sends the next person hunting a bug that is not there.
     const wholeBrief = await fetch(`${base}/api/brief?view=all&length=all`).then((r) => r.json());
-    if (!(wholeBrief.readingMinutes > LONGEST_BUDGET_TESTED)) {
+    if (!(wholeBrief.count > LARGEST_COUNT_TESTED)) {
       floor.push(
-        `the corpus is too short to measure the reading-length switch: the whole brief runs ` +
-          `${wholeBrief.readingMinutes} minute(s), so the ${LONGEST_BUDGET_TESTED}-minute budget has ` +
-          `nothing to cut. Seed more stories rather than relaxing the assertions below.`,
+        `the corpus is too small to measure the length switch: the whole brief holds ` +
+          `${wholeBrief.count} story(s), so selecting ${LARGEST_COUNT_TESTED} has nothing to cut. ` +
+          `Seed more stories rather than relaxing the assertions below.`,
       );
     }
     bailIfBroken(floor, mark);
@@ -147,16 +152,16 @@ try {
       shortens: five < all,
       narrowsMonotonically: five <= ten && ten <= all,
       tenIsNotEverything: ten < all,
-      // The contract: at least one story even if it exceeds the budget.
+      // The contract: a short brief still returns something.
       neverEmpty: five >= 1,
     };
     if (!(five < all))
       floor.push(
-        `the 5-minute brief did not shorten the list (${five} vs ${all}) and the whole brief runs ` +
-          `${wholeBrief.readingMinutes} minutes, so the budget HAD something to cut`,
+        `the 5-story brief did not shorten the list (${five} vs ${all}) and the whole brief holds ` +
+          `${wholeBrief.count} stories, so selecting five HAD something to cut`,
       );
 
-    // THE TEN-MINUTE BUDGET, WHICH THIS FILE MEASURED AND NEVER CHECKED (#114).
+    // THE TEN-STORY SETTING, WHICH THIS FILE MEASURED AND NEVER CHECKED (#114).
     //
     // `ten` was computed, written into out.readingLength, and asserted by
     // nothing — the quietest kind of gap, because the number appears in the
@@ -177,12 +182,12 @@ try {
     if (!(five <= ten && ten <= all))
       floor.push(
         `the reading-length settings do not narrow in order (five=${five} ten=${ten} all=${all}) — ` +
-          `a longer budget returned fewer stories than a shorter one`,
+          `a longer setting returned fewer stories than a shorter one`,
       );
     if (!(ten < all))
       floor.push(
-        `the ten-minute brief did not shorten the list (${ten} vs ${all}) and the whole brief runs ` +
-          `${wholeBrief.readingMinutes} minutes, so the budget HAD something to cut`,
+        `the ten-story brief did not shorten the list (${ten} vs ${all}) and the whole brief holds ` +
+          `${wholeBrief.count} stories, so selecting ten HAD something to cut`,
       );
     await ctx.close();
   }

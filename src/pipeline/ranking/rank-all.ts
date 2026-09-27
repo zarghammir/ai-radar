@@ -8,7 +8,8 @@ import { rankStory } from "./score";
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 /** How far back a story is still worth scoring. */
-export const RANKING_WINDOW_HOURS = 7 * 24;
+export { RANKING_WINDOW_HOURS } from "../story-window";
+import { RANKING_WINDOW_HOURS } from "../story-window";
 
 export interface RankAllResult {
   /** Stories inside the window that were scored. */

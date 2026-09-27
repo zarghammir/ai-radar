@@ -3,8 +3,9 @@ import { getDb, getSql } from "@/db/client";
 import {
   BRIEF_LENGTHS,
   briefWindow,
-  storiesInWindow,
-  takeWithinReadingTime,
+  recentStories,
+  reportingWindow,
+  takeBriefStories,
   type BriefLength,
 } from "@/api/brief";
 import { userPreferences } from "@/db/schema";
@@ -50,8 +51,8 @@ async function main(): Promise<void> {
     return;
   }
 
-  const window = briefWindow(now, prefs.briefTime, prefs.timezone);
-  const cards = await storiesInWindow(db, window);
+  const reported = reportingWindow(now, prefs.briefTime, prefs.timezone);
+  const cards = await recentStories(db);
 
   // The headline figure comes from the SHARED module, not from arithmetic done
   // here: the same number will be reported on every ingest pass once the step
@@ -62,9 +63,9 @@ async function main(): Promise<void> {
 
   console.log(`measured at   ${now.toISOString()}`);
   console.log(`brief time    ${prefs.briefTime} ${prefs.timezone}`);
-  console.log(`window        ${window.from.toISOString()}  ->  ${window.to.toISOString()}`);
+  console.log(`reported on   ${reported.from.toISOString()}  ->  ${reported.to.toISOString()}`);
   console.log(
-    `              (${((window.to.getTime() - window.from.getTime()) / 3_600_000).toFixed(1)} hours wide)`,
+    `              (${((reported.to.getTime() - reported.from.getTime()) / 3_600_000).toFixed(1)} hours of ACTIVITY REPORTING — the brief itself is no longer windowed)`,
   );
   console.log("");
 
@@ -87,7 +88,7 @@ async function main(): Promise<void> {
   console.log("");
   console.log("what a reader would actually open:");
   for (const length of BRIEF_LENGTHS as readonly BriefLength[]) {
-    const shown = takeWithinReadingTime(cards, length);
+    const shown = takeBriefStories(cards, length);
     if (shown.length === 0) {
       console.log(`  length ${String(length).padEnd(4)} no stories fit`);
       continue;

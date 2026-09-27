@@ -20,7 +20,7 @@
  *   - `whyItMatters: null` everywhere, likewise;
  *   - a QUIET DAY and an EMPTY DAY as whole scenarios.
  */
-import { takeWithinReadingTime } from "@/api/reading-budget";
+import { takeBriefStories } from "@/api/reading-budget";
 import { typesForView, type BriefView } from "@/lib/api/views";
 import type { BriefResponse, SourceRef, StoryCard } from "@/lib/api/types";
 import type { StoryDetail } from "@/api/stories";
@@ -359,7 +359,7 @@ export function fixtureBrief(
   // The SERVER's rule, imported rather than reimplemented. A copy of it here
   // used `continue` where the server uses `break`, which agreed only because
   // every fixture story is one minute — see src/api/reading-budget.ts.
-  return brief(takeWithinReadingTime(ranked, length), length, view);
+  return brief(takeBriefStories(ranked, length), length, view);
 }
 
 /** A quiet day: the brief is real but thin. */

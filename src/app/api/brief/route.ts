@@ -3,9 +3,10 @@ import {
   DEFAULT_BRIEF_LENGTH,
   briefWindow,
   parseBriefLength,
-  storiesInWindow,
+  recentStories,
+  reportingWindow,
   sweepSummary,
-  takeWithinReadingTime,
+  takeBriefStories,
 } from "@/api/brief";
 import { getPreferences } from "@/api/reader";
 import { handle, json } from "@/api/http";
@@ -34,20 +35,20 @@ export async function GET(request: Request): Promise<Response> {
     // matches parseBriefLength on the line below, which throws rather than
     // guessing, and the same rule #105 sets for its own axis.
     const view = parseViewOrThrow(new URL(request.url).searchParams.get("view"), "all");
-    const window = briefWindow(now, prefs.briefTime, prefs.timezone);
-    const ranked = await storiesInWindow(getDb(), window, { types: typesForView(view) });
-    const stories = takeWithinReadingTime(ranked, length);
+    const reported = reportingWindow(now, prefs.briefTime, prefs.timezone);
+    const ranked = await recentStories(getDb(), { types: typesForView(view) });
+    const stories = takeBriefStories(ranked, length);
     // The route carries it too, so a client of the API gets the same account of
     // an empty brief that the page does. Two answers to "why is this empty"
     // would be one more than there should be.
-    const sweep = await sweepSummary(getDb(), window.from);
+    const sweep = await sweepSummary(getDb(), reported.from);
 
     return json({
       window: {
-        from: window.from.toISOString(),
-        to: window.to.toISOString(),
-        briefTime: window.briefTime,
-        timezone: window.timezone,
+        from: reported.from.toISOString(),
+        to: reported.to.toISOString(),
+        briefTime: reported.briefTime,
+        timezone: reported.timezone,
       },
       length,
       view,

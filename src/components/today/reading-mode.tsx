@@ -5,16 +5,31 @@ import { usePathname } from "next/navigation";
 import type { BriefLengthParam } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
 
+/**
+ * THE LABELS SAY WHAT THE CONTROL DOES, WHICH IS NOW A COUNT.
+ *
+ * They used to read "5 min" and "10 min", and while selection was a
+ * reading-time budget that was a measurement. It is a count now, so "min"
+ * would be a guess about the READER dressed as a measurement of the CONTENT —
+ * and this is the second time a label on this control has claimed more than it
+ * knew. The first was "Everything", which meant one thing here and another in
+ * the filter above it; the owner's complaint about this page was a control
+ * that needed a sentence underneath to explain itself.
+ *
+ * The test applied: does the label describe something the app COMPUTES, or
+ * something it PROMISES? It promises five stories. So it says five stories.
+ *
+ * #147/#154 still holds — no word appears in two controls. The filter above
+ * owns "Launches"; this one owns "stories".
+ */
 const OPTIONS: { value: BriefLengthParam; label: string }[] = [
-  { value: "5", label: "5 min" },
-  { value: "10", label: "10 min" },
-  // #147/#154: no word appears in two controls. The filter above owns
-  // "Launches"; this one owns the reading time.
+  { value: "5", label: "5 stories" },
+  { value: "10", label: "10 stories" },
   { value: "all", label: "Full brief" },
 ];
 
 /**
- * How much to read. LINKS rather than buttons, so the choice is in the URL:
+ * How many stories. LINKS rather than buttons, so the choice is in the URL:
  * it survives a reload, it can be shared, and it works before JavaScript runs.
  *
  * This is the OVERRIDE FOR ONE VISIT. The durable default is `briefLength` in
@@ -51,14 +66,14 @@ export function ReadingMode({ current }: { current: BriefLengthParam }) {
     <div
       className="mt-2.5 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[12.5px]"
       role="group"
-      aria-label="How much to read"
+      aria-label="How many stories"
     >
       {/* text-ash, NOT text-soft. The accessibility sweep caught text-soft
           failing contrast at this size on the dark theme — a quiet control
           still has to be readable, and "secondary" is a matter of weight and
           position, not of being harder to see. The options beside it already
           use text-ash and pass. */}
-      <span className="text-ash">Reading time</span>
+      <span className="text-ash">Show me</span>
       {OPTIONS.map((option, i) => {
         const selected = option.value === current;
         return (

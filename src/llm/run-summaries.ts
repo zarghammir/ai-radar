@@ -1,6 +1,6 @@
 import { and, desc, eq, gte, inArray, isNull, lt, notInArray, or } from "drizzle-orm";
 import type { Db } from "@/db/client";
-import { briefWindow, storiesInWindow } from "@/api/brief";
+import { recentStories } from "@/api/brief";
 import { rawItems, sources, stories, userPreferences } from "@/db/schema";
 import { applyUsage, readDailyCap, remainingToday, usageDay } from "./budget";
 import { createLlmClient, type FetchLike, type LlmClient } from "./client";
@@ -173,8 +173,7 @@ export async function selectStoriesToSummarize(
   if (prefs) {
     // No preferences row means a database not yet seeded, which is not a reason
     // to skip summarising: the backlog pass below still runs.
-    const window = briefWindow(now, prefs.briefTime, prefs.timezone);
-    const inBrief = await storiesInWindow(db, window);
+    const inBrief = await recentStories(db);
     const unsummarised = inBrief.filter((card) => card.summary === null).map((card) => card.id);
     briefIds = await eligibleAmong(db, unsummarised, now);
   }

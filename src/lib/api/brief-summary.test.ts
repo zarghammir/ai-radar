@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { briefSummary, emptyBriefReason } from "@/lib/api/brief-summary";
 import { fixtureBrief, fixtureEmptyBrief } from "@/lib/api/fixtures";
-import { takeWithinReadingTime } from "@/api/reading-budget";
 import type { BriefResponse, StoryCard } from "@/lib/api/types";
 
 function briefOf(stories: Partial<StoryCard>[], length: BriefResponse["length"]): BriefResponse {
@@ -29,88 +28,37 @@ describe("briefSummary", () => {
     const empty = briefSummary(fixtureEmptyBrief());
     expect(empty.count).toBe("Nothing yet");
     expect(empty.minutes).toBeNull();
-    expect(empty.overBudget).toBeNull();
   });
 
-  describe("the over-budget brief", () => {
-    // The contract returns at least one story even when that story alone is
-    // longer than the budget. An empty brief on a day with news is worse. But
-    // the header must not present it as though nothing happened.
-    it("explains a brief that runs longer than the selected budget", () => {
-      const s = briefSummary(briefOf([{ readingMinutes: 6 }], "5"));
-      expect(s.count).toBe("1 story");
-      expect(s.minutes).toBe("6 minutes");
-      expect(s.overBudget).toBe(
-        "longer than your 5-minute setting — the top story alone runs 6 minutes",
-      );
+  /**
+   * THE OVER-BUDGET BLOCK IS GONE, AND ITS REMOVAL IS THE POINT.
+   *
+   * It asserted the header explained a brief running longer than the reader's
+   * MINUTE budget. Selection is now a COUNT, so there is no budget to overrun
+   * and the sentence it guarded would have fired on an ordinary five-story
+   * brief while naming a setting that no longer means minutes.
+   *
+   * The field is removed from BriefSummary rather than left returning null, so
+   * anything still reading it fails to compile. That compile error is the
+   * guard this block used to be — a runtime test cannot assert the absence of
+   * a field that no longer exists on the type.
+   *
+   * What survives is below: the header still reports the reading time of what
+   * it actually selected, which is a measurement of the CONTENT and was never
+   * the thing that broke.
+   */
+  describe("reading time is still reported, as a measurement of what was chosen", () => {
+    it("adds up the minutes of the stories actually in the brief", () => {
+      const s = briefSummary(briefOf([{ readingMinutes: 4 }, { readingMinutes: 3 }], "5"));
+      expect(s.count).toBe("2 stories");
+      expect(s.minutes).toBe("7 minutes");
     });
 
-    it("stays silent when the brief fits", () => {
-      expect(briefSummary(briefOf([{ readingMinutes: 4 }], "5")).overBudget).toBeNull();
-    });
-
-    it("stays silent when the brief exactly fills the budget", () => {
-      // The boundary: 5 minutes under a 5-minute setting is not over.
-      expect(briefSummary(briefOf([{ readingMinutes: 5 }], "5")).overBudget).toBeNull();
-    });
-
-    it("never fires on 'all', which has no budget to exceed", () => {
-      expect(briefSummary(briefOf([{ readingMinutes: 40 }], "all")).overBudget).toBeNull();
-    });
-
-    /**
-     * The copy says "the top story alone", which is only honest if an
-     * over-budget selection can hold exactly one story and never two.
-     *
-     * An earlier version of this test asked the FIXTURES for that state:
-     *   if (b.readingMinutes > Number(length)) expect(b.count).toBe(1);
-     * Every fixture story is one minute, so the condition was never true and
-     * the assertion never ran — changing toBe(1) to toBe(999) left the suite
-     * green. Worse, the PR body said in plain words that the over-budget state
-     * is unreachable with these fixtures, so the fact that this guard could not
-     * fire was already written down one document away from the test depending
-     * on it firing. Both statements could not be load-bearing.
-     *
-     * It now exercises the RULE against a story set built to force the state,
-     * which is the thing the copy actually depends on.
-     */
-    it("holds exactly one story when the top story alone exceeds the budget", () => {
-      const base = fixtureBrief("all").stories;
-      const long = { ...base[0], id: 9001, score: 99, readingMinutes: 6 };
-      const others = [
-        { ...base[1], id: 9002, score: 50, readingMinutes: 1 },
-        { ...base[2], id: 9003, score: 40, readingMinutes: 1 },
-      ];
-      const chosen = takeWithinReadingTime([long, ...others], "5");
-      // Unconditional: no `if` can skip these.
-      expect(chosen).toHaveLength(1);
-      expect(chosen[0].id).toBe(9001);
-      expect(chosen.reduce((t, s) => t + s.readingMinutes, 0)).toBeGreaterThan(5);
-    });
-
-    /**
-     * STOPS at the first story that will not fit; it does not keep looking for
-     * a smaller one to squeeze in. docs/api.md: "until the cumulative reading
-     * time would exceed the target".
-     *
-     * An earlier version of this test asserted [9101, 9103] — the first story,
-     * then SKIPPING the one that did not fit and taking a later one that did.
-     * That was greedy-fill, which is what the fixtures' own copy of the rule
-     * did, and this test pinned the divergence in place while claiming to
-     * verify it. The two rules agreed only because every fixture story is one
-     * minute. This input is the smallest one that tells them apart.
-     */
-    it("stops at the first story that does not fit, rather than filling the gap", () => {
-      const base = fixtureBrief("all").stories;
-      const stories = [
-        { ...base[0], id: 9101, score: 99, readingMinutes: 4 },
-        { ...base[1], id: 9102, score: 80, readingMinutes: 4 },
-        { ...base[2], id: 9103, score: 70, readingMinutes: 1 },
-      ];
-      const chosen = takeWithinReadingTime(stories, "5");
-      expect(chosen.map((s) => s.id)).toEqual([9101]);
-      // Greedy-fill would have produced this, and did until it was caught.
-      expect(chosen.map((s) => s.id)).not.toEqual([9101, 9103]);
+    it("says seven minutes for a five-story brief without calling it an overrun", () => {
+      // Exactly the case the retired copy would have shouted about.
+      const s = briefSummary(briefOf([{ readingMinutes: 7 }], "5"));
+      expect(s.minutes).toBe("7 minutes");
+      expect(JSON.stringify(s)).not.toMatch(/setting|budget|longer than/i);
     });
   });
 

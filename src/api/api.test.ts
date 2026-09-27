@@ -1385,7 +1385,20 @@ withDb("API routes", () => {
       expect(cards[0].whyItMatters).toBe("Because it matters.");
     });
 
-    it("leaves out anything older than the window", async () => {
+    /**
+     * THIS TEST USED TO ASSERT THE OPPOSITE, and the inversion is the change.
+     *
+     * It required the older story to be ABSENT, because the brief ran from the
+     * reader's briefTime to now. That anchor is gone: one setting was deciding
+     * both when the push is sent and what the reader is allowed to see, and
+     * only the first is legitimate. The owner opened the app shortly after his
+     * brief time and found it empty — "It doesn't need to be open at 9. It
+     * needs to consistently receive news."
+     *
+     * So the old story is now KEPT, and the recency it used to gate is
+     * expressed as ORDER instead of as exclusion.
+     */
+    it("keeps a story the old brief-time window would have hidden", async () => {
       const src = await source("verge-ai");
       await story({
         slug: "recent",
@@ -1393,15 +1406,76 @@ withDb("API routes", () => {
         lastActivityAt: new Date(Date.now() - 60_000),
       });
       await story({
-        slug: "ancient",
+        slug: "yesterday",
         sourceIds: [src],
         lastActivityAt: new Date(Date.now() - 40 * 3_600_000),
       });
       const { GET } = await import("@/app/api/brief/route");
       const data = await body(await GET(req("/api/brief")));
-      expect((data.stories as unknown as { slug: string }[]).map((x) => x.slug)).toEqual([
-        "recent",
-      ]);
+      const slugs = (data.stories as unknown as { slug: string }[]).map((x) => x.slug);
+
+      // BOTH present. The brief-time anchor would have hidden the older one
+      // for anyone opening the app in the morning, which is the bug the owner
+      // hit: "It doesn't need to be open at 9."
+      expect(slugs).toContain("recent");
+      expect(slugs).toContain("yesterday");
+    });
+
+    /**
+     * THE BOUND HAS TO MEAN SOMETHING, or score ordering surfaces the all-time
+     * best rather than today's. `stories.score` is STORED and only recomputed
+     * inside the pipeline's horizon, so an old story keeps the score it had
+     * when it was fresh and would lead the brief forever.
+     */
+    it("leaves out a story that has not been fetched for far longer than the horizon", async () => {
+      const src = await source("verge-ai");
+      const longAgo = new Date(Date.now() - 30 * 24 * 3_600_000);
+      await story({
+        slug: "stale-but-once-hot",
+        sourceIds: [src],
+        // The helper writes published_at AND fetched_at from this one value,
+        // so this story both happened and ARRIVED thirty days ago — which is
+        // what the arrival bound is measuring.
+        lastActivityAt: longAgo,
+        // Deliberately the highest score in the table: if the bound were
+        // missing, this would be story number one on every brief.
+        score: 999,
+      });
+      await story({
+        slug: "ordinary-and-recent",
+        sourceIds: [src],
+        lastActivityAt: new Date(Date.now() - 60_000),
+        score: 1,
+      });
+      const { GET } = await import("@/app/api/brief/route");
+      const data = await body(await GET(req("/api/brief?view=all&length=all")));
+      const slugs = (data.stories as unknown as { slug: string }[]).map((x) => x.slug);
+
+      expect(slugs).toContain("ordinary-and-recent");
+      expect(slugs).not.toContain("stale-but-once-hot");
+    });
+
+    it("orders by score, because the owner asked for the most IMPORTANT recent ones", async () => {
+      const src = await source("verge-ai");
+      // The newer story scores lower. Chronological order would put it first;
+      // his ruling puts the bigger story on top and keeps it there.
+      await story({
+        slug: "minor-but-newest",
+        sourceIds: [src],
+        lastActivityAt: new Date(Date.now() - 60_000),
+        score: 5,
+      });
+      await story({
+        slug: "major-but-older",
+        sourceIds: [src],
+        lastActivityAt: new Date(Date.now() - 6 * 3_600_000),
+        score: 90,
+      });
+      const { GET } = await import("@/app/api/brief/route");
+      const data = await body(await GET(req("/api/brief?view=all&length=all")));
+      const slugs = (data.stories as unknown as { slug: string }[]).map((x) => x.slug);
+
+      expect(slugs.indexOf("major-but-older")).toBeLessThan(slugs.indexOf("minor-but-newest"));
     });
 
     it("leaves a hidden story out of the brief too", async () => {
@@ -1754,13 +1828,109 @@ withDb("API routes", () => {
       expect(await briefSlugs()).toContain("overnight-but-fetched-today");
     });
 
-    it("still excludes a story that arrived before the window, so the window means something", async () => {
-      const threeDaysAgo = new Date(Date.now() - 3 * 24 * 3_600_000);
-      await fileStory("old-and-already-seen", threeDaysAgo, threeDaysAgo);
+    /**
+     * THE CONTROL THIS REPLACES WAS GUARDING A RULE WE HAVE SINCE DELETED.
+     *
+     * It asserted that a story fetched days ago stays OUT, so that "admit by
+     * arrival" could not quietly become "admit everything". Admitting
+     * everything is now the intended behaviour, so that control is not merely
+     * failing — it is asserting a rule the product no longer has, and keeping
+     * it would pin the defect the owner reported.
+     *
+     * What still needs guarding is that the brief is not simply returning the
+     * whole table in arbitrary order, so the replacement pins ORDER, which is
+     * the property that took the window's place.
+     */
+    /**
+     * THIS TEST ASSERTED THE OPPOSITE ONE COMMIT AGO, AND THE CONTRADICTION IS
+     * THE FINDING.
+     *
+     * It required a story published twenty days ago and fetched today to be
+     * ADMITTED, on #148's reasoning that it is news to this reader. That is
+     * still true about the reader. It was false about what the app could then
+     * do with the story: the ranker keys on PUBLICATION, so it had never been
+     * scored, carried the column default of 0, and landed behind everything
+     * ever ranked. It was admitted and then buried.
+     *
+     * So the two assertions could not both stand. Admitting it and sorting it
+     * on a default is worse than leaving it out, because nothing looks wrong.
+     * #168 takes the narrow fix — do not admit what cannot be scored — and
+     * #171 carries the wide one, which makes the ranker cover what the brief
+     * admits so this story can come back.
+     *
+     * THE LIMITATION IS ASSERTED HERE RATHER THAN LEFT AS A GAP, so that when
+     * #171 lands this test fails and whoever is holding it is told that the
+     * behaviour they just enabled was a known cost, not an accident.
+     */
+    it("leaves out a story published beyond the ranking horizon, until #171", async () => {
+      const twentyDaysAgo = new Date(Date.now() - 20 * 24 * 3_600_000);
+      await fileStory("old-news-new-to-us", twentyDaysAgo, new Date());
+      // Not a silent absence: it is absent BECAUSE nothing could score it.
+      expect(await briefSlugs()).not.toContain("old-news-new-to-us");
+    });
 
-      // The control. Without this, "admit everything" would pass the test
-      // above and the window would have stopped meaning anything at all.
-      expect(await briefSlugs()).not.toContain("old-and-already-seen");
+    /**
+     * THE REPORT MUST COVER WHAT THE BRIEF CAN CONTAIN.
+     *
+     * For one commit it did not: the query bounded at STORY_WINDOW_HOURS and
+     * the reported period was a separate 24-hour constant, so the response
+     * described a day while selecting over three. The Intelligence lane caught
+     * it in the coverage step, where it would have printed a 24-hour period
+     * beside a figure computed over 72.
+     *
+     * It reached the READER too, which is why this test is here and not only
+     * in that worker: sweepSummary counts arrivals since this same `from`, so
+     * a story that arrived 30 hours ago and was filtered out of the view would
+     * have been invisible to the count and the empty state would have said
+     * "genuinely quiet" on a day that was not.
+     *
+     * Asserting the two constants are equal would be tautological. This
+     * asserts the PROPERTY: a story the brief admits is inside the period the
+     * brief reports on.
+     */
+    /**
+     * NEVER SORT ON A DEFAULT.
+     *
+     * `stories.score` defaults to 0 and rank-all.ts only maintains it inside
+     * RANKING_WINDOW_HOURS, measured on PUBLICATION. The brief admits on
+     * ARRIVAL. So a story published nine days ago and fetched this morning
+     * passed the arrival bound, was never ranked, and carried score 0 —
+     * `orderBy(desc(score))` then put it behind every story ever scored, and
+     * at length=5 the reader never saw it.
+     *
+     * PRESENT-BUT-LAST IS WORSE THAN ABSENT, because nothing looks wrong. A
+     * default is not a low score; it is the absence of a score.
+     *
+     * Removing the lastActivityAt bound from recentStories reddens this and
+     * nothing else.
+     */
+    it("does not admit a story the ranker cannot have scored", async () => {
+      const nineDaysAgo = new Date(Date.now() - 9 * 24 * 3_600_000);
+      // Published beyond the ranking horizon, fetched a minute ago.
+      await fileStory("published-long-ago-fetched-now", nineDaysAgo, new Date());
+      // A companion inside both bounds, so a blanket-empty response cannot
+      // pass this test.
+      const recent = new Date(Date.now() - 3_600_000);
+      await fileStory("published-and-fetched-today", recent, recent);
+
+      const slugs = await briefSlugs();
+      expect(slugs).toContain("published-and-fetched-today");
+      expect(slugs).not.toContain("published-long-ago-fetched-now");
+    });
+
+    it("reports on a period that covers the oldest story it will admit", async () => {
+      const thirtyHoursAgo = new Date(Date.now() - 30 * 3_600_000);
+      await fileStory("arrived-thirty-hours-ago", thirtyHoursAgo, thirtyHoursAgo);
+
+      const { GET } = await import("@/app/api/brief/route");
+      const d = await body(await GET(req("/api/brief?view=all&length=all")));
+      const slugs = (d.stories as unknown as { slug: string }[]).map((x) => x.slug);
+      const from = new Date((d.window as unknown as { from: string }).from);
+
+      // It is admitted...
+      expect(slugs).toContain("arrived-thirty-hours-ago");
+      // ...so the reported period has to reach back at least that far.
+      expect(from.getTime()).toBeLessThanOrEqual(thirtyHoursAgo.getTime());
     });
 
     it("reports what the collector has done, so an empty brief can say why", async () => {

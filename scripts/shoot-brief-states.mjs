@@ -41,7 +41,7 @@ const WIDTHS = [
   { key: "phone", width: 390, height: 900, colorScheme: "dark" },
 ];
 const FILTER = '[role="group"][aria-label="What kind of stories"]';
-const READING = '[role="group"][aria-label="How much to read"]';
+const READING = '[role="group"][aria-label="How many stories"]';
 
 const floor = [];
 const shots = [];
