@@ -278,26 +278,6 @@ jobs:
           cat /tmp/next-server.log >&2
           exit 1
 
-      # A NON-LATIN CHARACTER MUST REACH ITS REAL FACE, NOT A FALLBACK.
-      #
-      # #160 split each family into one next/font/local call per unicode-range
-      # subset. Each call can emit its own metric-adjusted Arial fallback, which
-      # carries no unicode-range and will therefore serve ANY character — so a
-      # mis-ordered chain in globals.css renders Polish, Vietnamese, Greek and
-      # Cyrillic in adjusted Arial while the real subset file sits unused.
-      #
-      # THIS RUNS IN CI BECAUSE NOTHING ELSE CAN SEE IT. Every glyph in English
-      # is correct, the build is green, the fonts are byte-identical, and every
-      # screenshot of an English page looks right. The order in globals.css puts
-      # latin LAST, which reads like a mistake, so it will be tidied one day.
-      # Each probe carries its own control: the mis-ordered chain must actually
-      # fall through, or "the real chain differs from the fallback" proves
-      # nothing.
-      - name: Non-latin text renders in the real font, not a fallback
-        env:
-          BASE_URL: http://127.0.0.1:3210
-        run: node scripts/verify-font-fallback-order.mjs
-
       # THE REACHABLE-BUT-EMPTY STATE, EXERCISED HERE AND NOWHERE ELSE.
       #
       # Today has three states and two of them must never look alike: a quiet
@@ -744,6 +724,7 @@ jobs:
             [verify:isolation]="VERIFY_CONTROL=shared-identity"
             [verify:today]="VERIFY_CONTROL=no-budget"
             [verify:shell]="VERIFY_CONTROL=no-service-worker"
+            [verify:fonts]="VERIFY_CONTROL=latin-first"
           )
 
           while IFS= read -r check; do

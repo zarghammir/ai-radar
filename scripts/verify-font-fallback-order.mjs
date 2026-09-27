@@ -89,7 +89,22 @@
 
 import { launchBrowser, requireServer } from "./lib/browser.mjs";
 
-const BASE = process.env.BASE_URL ?? "http://localhost:3311";
+// The repository's convention for every verify:* script, so ci.yml's enumeration
+// drives this one exactly as it drives the others.
+const BASE =
+  process.argv[2] || process.env.VERIFY_URL || process.env.BASE_URL || "http://127.0.0.1:3210";
+
+/**
+ * VERIFY_CONTROL=latin-first measures the MIS-ORDERED chain in place of the
+ * application's, which is the defect this script exists to catch, so every probe
+ * must fail and the script must exit 1.
+ *
+ * #83's rule applies here as much as anywhere: a check that has never been
+ * observed failing is an unreported unknown, not a pass. ci.yml exercises this
+ * before running the check for real, and refuses to run at all if a script
+ * declares a control its map does not exercise.
+ */
+const CONTROL = process.env.VERIFY_CONTROL === "latin-first";
 
 /** Widths this close together are the same font; below the width of one hairline. */
 const EPSILON = 0.5;
@@ -138,9 +153,9 @@ const ROLES = [
  * Measures one string three ways on one page. Widths only — nothing here reads
  * document.fonts, for the reason in the header.
  */
-async function measure(page, { cls, text, latinFamily, face }) {
+async function measure(page, { cls, text, latinFamily, face, control }) {
   return page.evaluate(
-    async ({ cls, text, latinFamily, face }) => {
+    async ({ cls, text, latinFamily, face, control }) => {
       const make = (fontFamily, className) => {
         const el = document.createElement("div");
         el.textContent = text;
@@ -151,7 +166,12 @@ async function measure(page, { cls, text, latinFamily, face }) {
         return el;
       };
       const q = (n) => `"${n}"`;
-      const real = make(null, cls);
+      // Under the control, `real` IS the mis-ordered chain — latin and its
+      // unrestricted fallback ahead of the subset faces — so everything below
+      // measures the defect instead of the application and must go red.
+      const real = control
+        ? make(`${q(latinFamily)}, ${q(latinFamily + " Fallback")}, sans-serif`, null)
+        : make(null, cls);
       const faceOnly = make(q(face), null);
       const broken = make(`${q(latinFamily)}, ${q(latinFamily + " Fallback")}, sans-serif`, null);
       const resolved = getComputedStyle(real).fontFamily;
@@ -174,12 +194,16 @@ async function measure(page, { cls, text, latinFamily, face }) {
       [real, faceOnly, broken].forEach((el) => el.remove());
       return out;
     },
-    { cls, text, latinFamily, face },
+    { cls, text, latinFamily, face, control },
   );
 }
 
 const browser = await launchBrowser();
 await requireServer(BASE);
+
+if (CONTROL) {
+  console.log("CONTROL latin-first: measuring the mis-ordered chain. Every probe must FAIL.");
+}
 
 let failures = 0;
 try {
@@ -200,12 +224,15 @@ try {
         text: probe.text,
         latinFamily: role.latinFamily,
         face: probe.face,
+        control: CONTROL,
       });
       const label = `${role.cls.padEnd(11)} ${probe.why.padEnd(18)}`;
 
       // Is the chain even the one the application uses? A probe measuring some
       // other font proves nothing either way.
-      if (!m.resolved.includes(role.latinFamily)) {
+      // Skipped under the control, where `real` is a literal chain rather than the
+      // utility, so this guard would fire for the wrong reason.
+      if (!CONTROL && !m.resolved.includes(role.latinFamily)) {
         failures++;
         console.log(`  FAIL  ${label} .${role.cls} resolved to "${m.resolved}"`);
         console.log(`        ${role.latinFamily} is not in that chain — wrong thing measured.`);
