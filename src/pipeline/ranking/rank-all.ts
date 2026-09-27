@@ -59,6 +59,13 @@ export async function rankOneInTransaction(
       contentType: stories.contentType,
       verification: stories.verification,
       lastActivityAt: stories.lastActivityAt,
+      // Age is scored from the story's EARLIEST PUBLICATION since the decay
+      // change — the column is called firstSeenAt and does not measure sighting;
+      // see the note on RankInput.firstSeenAt for the proxy and where it breaks.
+      // lastActivityAt is still selected because the window query below bounds on
+      // it: what the pipeline keeps up to date and what the reader experiences as
+      // newness are different clocks, which src/api/brief.ts calls the trap.
+      firstSeenAt: stories.firstSeenAt,
     })
     .from(stories)
     .where(eq(stories.id, storyId));
@@ -87,7 +94,7 @@ export async function rankOneInTransaction(
 
   const { score, components } = rankStory(
     {
-      lastActivityAt: story.lastActivityAt,
+      firstSeenAt: story.firstSeenAt,
       contentType: story.contentType,
       verification: story.verification,
       sources,

@@ -127,10 +127,16 @@ among a story's sources counts:
 | `COMMUNITY`              | 4                                                     |
 | `DISCOVERY`              | **0** — the word does not appear in `score.ts` at all |
 
-For comparison, recency contributes at most 14 and a topic match at most 22. So
-calling a source `PRIMARY` when it is a newsletter _about_ primary sources
-outranks a genuinely fresh story from a newsroom. Tier means "whose word is
-this", not "how good is it".
+For comparison a topic match contributes at most 22. So calling a source
+`PRIMARY` when it is a newsletter _about_ primary sources outranks a story from
+a newsroom. Tier means "whose word is this", not "how good is it".
+
+**Age is no longer one of these numbers.** It used to add at most 14, and
+measurement showed that could not work: stories first seen within 24 hours had a
+mean structural score of **23.95** against **42.06** for the two-day-old pack, a
+gap of 18.18 that a bonus capped at 14 cannot close _even at age zero_. Age is
+now a multiplier on the whole score, halving it every 48 hours, so tier still
+decides importance and age decides how long that importance lasts.
 
 **`defaultContentType` adds a smaller amount**, from `WEIGHTS.contentType`:
 `RELEASE` and `MODEL` 6, `TOOL` 4, `REGULATION` 3, `NEWS`, `BUSINESS` and

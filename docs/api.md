@@ -309,13 +309,24 @@ Everything in `StoryCard`, plus:
     }
   ],
   "scoreComponents": [
-    { "key": "recency", "label": "Recently active", "value": 13.1 },
     { "key": "primarySource", "label": "Primary source", "value": 20 },
     { "key": "corroboration", "label": "Corroborating sources", "value": 8 },
-    { "key": "contentType", "label": "Content type", "value": 2 }
+    { "key": "contentType", "label": "Content type", "value": 2 },
+    { "key": "ageDecay", "label": "Age", "value": -8.7 }
   ]
 }
 ```
+
+**`ageDecay` is negative and it is the whole score's decay, not a term competing
+with the others.** Age multiplies the total, halving it every 48 hours, and the
+cost is recorded as a negative component so the parts still sum to the score —
+the same form the verification penalties use. A story at age zero carries
+`ageDecay: 0`.
+
+**A story scored before that change carries `recency` instead**, a positive
+component capped at 14. `rank-all` only re-scores inside its window, so an older
+story keeps the old shape until it leaves the corpus; a client must render
+whatever keys it is given rather than assuming either set.
 
 `role` is `primary`, `report` or `discussion`.
 
