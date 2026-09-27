@@ -2,7 +2,6 @@ import "dotenv/config";
 import { getDb, getSql } from "@/db/client";
 import {
   BRIEF_LENGTHS,
-  briefWindow,
   recentStories,
   reportingWindow,
   takeBriefStories,
@@ -22,14 +21,14 @@ import { briefCoverage, coverageLines } from "@/worker/brief-coverage";
  * summary in a ten-story brief; this is the number that was not.
  *
  * ── WHY THE INSTANT AND THE BOUNDS ARE PRINTED WITH IT ───────────────────
- * The brief's window is computed from `briefTime` and `timezone` and IT MOVES.
- * The worker summarises on a pass; the reader opens the app later; the window
- * has rolled in between. So a bare fraction cannot distinguish two different
- * failures:
+ * The brief has NO admission window since #168 — it has TWO CUTOFFS, arrival
+ * and activity, and both MOVE with the clock. The worker summarises on a pass;
+ * the reader opens the app later; the cutoffs have advanced in between. So a
+ * bare fraction cannot distinguish two different failures:
  *
- *   selection is wrong    the worker summarised stories outside the window
- *   the window moved      the worker summarised the right stories and the
- *                         window has since rolled past them
+ *   selection is wrong    the worker summarised stories the brief does not admit
+ *   the cutoffs moved     the worker summarised the right stories and the
+ *                         cutoffs have since advanced past them
  *
  * Both look like "few summaries in my brief". Printing the instant and the
  * bounds is what keeps them separable, so we do not fix the wrong one twice.
@@ -46,7 +45,7 @@ async function main(): Promise<void> {
     .limit(1);
 
   if (!prefs) {
-    console.error("no user_preferences row, so there is no brief window to measure.");
+    console.error("no user_preferences row, so there are no reader settings to measure against.");
     process.exitCode = 1;
     return;
   }
@@ -70,16 +69,16 @@ async function main(): Promise<void> {
   console.log("");
 
   if (cards.length === 0) {
-    // Not zero coverage — no denominator. An empty window and a window whose
+    // Not zero coverage — no denominator. Nothing admitted and a set whose
     // stories are all unsummarised are different facts.
-    console.log("the window is EMPTY: nothing arrived since the last brief time.");
+    console.log("NOTHING IS ADMITTED: no story is inside both cutoffs.");
     console.log("that is not 0% coverage, it is no denominator. Nothing to conclude.");
     return;
   }
 
   const withSummary = cards.filter((c) => c.summary !== null).length;
   console.log(
-    `WHOLE WINDOW   ${withSummary}/${cards.length} carry a summary  (${((withSummary / cards.length) * 100).toFixed(0)}%)`,
+    `ADMITTED       ${withSummary}/${cards.length} carry a summary  (${((withSummary / cards.length) * 100).toFixed(0)}%)`,
   );
 
   // The reader sees a PREFIX of this ordering, and which prefix depends on a
