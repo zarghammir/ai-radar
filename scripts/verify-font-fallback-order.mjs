@@ -47,6 +47,26 @@
  *   broken must DIFFER      — the mis-ordered chain really does fall through,
  *                             so the first assertion is not vacuous
  *
+ * THE SECOND IS REQUIRED ONCE PER FAMILY, NOT ONCE PER PROBE, and that is not a
+ * loosening. adjustFontFallback is ONE SETTING PER localFont CALL, and exactly one
+ * call per family emits a fallback — so "is this family's fallback shadowing its
+ * own subsets?" is a single fact with a single answer. Any one probe that can see
+ * it has verified it for the whole family. A second probe on the same family adds
+ * coverage of a different question, namely whether that subset is in the chain at
+ * all, and it is measured for that.
+ *
+ * It matters because whether a probe CAN see the arrangement depends on a
+ * coincidence of metrics between the real face and whatever the system substitutes
+ * for Arial. On a Linux runner, adjusted DejaVu renders the Vietnamese probe 0.4px
+ * from the real Archivo Vietnamese — indistinguishable — while the Polish probe on
+ * the same family separates cleanly at 2.1px. Requiring every probe to be
+ * discriminating would redden correct CSS on an environment's coincidence. Widening
+ * the tolerance until it passed would have bought silence and blinded the check.
+ *
+ * A family where NO probe can discriminate still fails. That is the floor: it means
+ * nothing here is testing the arrangement for that family, and a pass would be
+ * vacuous.
+ *
  * THE EARLIER VERSION ASSERTED `real != fallback` AND CI KILLED IT. The generated
  * fallback is `src: local(Arial)`, and a Linux runner HAS NO ARIAL — the face
  * never loads, the chain walks on to sans-serif, and DejaVu rendered one of these
@@ -171,6 +191,9 @@ try {
   }
 
   for (const role of ROLES) {
+    // How many of this family's probes can actually tell a mis-ordered chain from
+    // a correct one. Zero is a failure; see the header for why one is enough.
+    let discriminating = 0;
     for (const probe of role.probes) {
       const m = await measure(page, {
         cls: role.cls,
@@ -189,26 +212,22 @@ try {
         continue;
       }
 
-      // THE CHECK: the text must render at the width of its real subset face.
+      // THE CHECK, on every probe: the text must render at the width of the real
+      // subset face that is supposed to serve it.
       const realOk = Math.abs(m.real - m.face) < EPSILON;
-      // THE CONTROL, per probe: the mis-ordered chain must NOT, or the check
-      // above would pass whatever the order is.
-      const controlOk = Math.abs(m.broken - m.face) >= EPSILON;
+      // Whether THIS probe could have seen a mis-ordered chain. Counted for the
+      // family rather than asserted here, because a metric coincidence between the
+      // real face and the system's Arial substitute is not a fact about our CSS.
+      const gap = Math.abs(m.broken - m.face);
+      if (gap >= EPSILON) discriminating++;
 
-      if (realOk && controlOk) {
+      if (realOk) {
         console.log(
-          `  ok    ${label} ${m.real.toFixed(1)}px = ${probe.face} ` +
-            `(mis-ordered would be ${m.broken.toFixed(1)}px)`,
+          `  ok    ${label} ${m.real.toFixed(1)}px = ${probe.face}` +
+            (gap >= EPSILON
+              ? `  (mis-ordered ${m.broken.toFixed(1)}px, ${gap.toFixed(1)}px apart)`
+              : `  (cannot discriminate here: ${gap.toFixed(1)}px apart)`),
         );
-      } else if (!controlOk) {
-        failures++;
-        console.log(`  FAIL  ${label} CONTROL did not behave.`);
-        console.log(
-          `        the mis-ordered chain still measured ${m.broken.toFixed(1)}px, the same as ` +
-            `${probe.face} at ${m.face.toFixed(1)}px.`,
-        );
-        console.log(`        This probe cannot tell the two arrangements apart, so its`);
-        console.log(`        pass would mean nothing. Fix the probe, not the CSS.`);
       } else {
         failures++;
         console.log(`  FAIL  ${label} ${probe.face} is NOT serving this text.`);
@@ -218,6 +237,21 @@ try {
         console.log(`        Check that the latin face sits LAST in .${role.cls}'s chain.`);
       }
     }
+
+    // THE FLOOR. If no probe on this family could tell the arrangements apart, then
+    // nothing above tested the arrangement and every green on it was vacuous.
+    if (discriminating === 0) {
+      failures++;
+      console.log(`  FAIL  ${role.cls.padEnd(11)} NO probe can see this family's chain order.`);
+      console.log(`        Every probe measured the mis-ordered chain within ${EPSILON}px of the`);
+      console.log(`        real face, so their passes say nothing about the order. Add a probe`);
+      console.log(`        whose text separates the two, rather than trusting these.`);
+    } else {
+      console.log(
+        `  ok    ${role.cls.padEnd(11)} chain order verified by ${discriminating} of ` +
+          `${role.probes.length} probe(s) on this family`,
+      );
+    }
   }
 } finally {
   await browser.close();
@@ -226,7 +260,7 @@ try {
 const total = ROLES.reduce((n, r) => n + r.probes.length, 0);
 console.log(
   failures === 0
-    ? `RESULT: ${total} probes, each with its own control, all behaved`
+    ? `RESULT: ${total} probes across ${ROLES.length} families; every family's chain order discriminated`
     : `RESULT: ${failures} failed`,
 );
 process.exit(failures === 0 ? 0 : 1);

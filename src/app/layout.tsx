@@ -101,6 +101,20 @@ const archivoVietnamese = localFont({
 // Archivo Narrow — labels. NOT variable in this app: layout asked for weights 600
 // and 700, and Google answers that with two @font-face blocks per subset pointing
 // at ONE file. The two-entry src array reproduces exactly that.
+//
+// narrowLatin KEEPS ITS FALLBACK EVEN THOUGH IT IS NOT LAST IN --font-label, which
+// is the one place the "exactly one fallback, positioned last" rule is bent. The
+// label chain runs narrow, then archivo, so narrowLatin's unrestricted fallback
+// sits ahead of three real faces. Reviewed and kept, on measurement: at
+// 10.5px/700/0.18em, "SOURCE PROVENANCE" is 132.13px in the real narrow face,
+// 132.11px in narrowLatin Fallback, and 156.84px in archivoLatin Fallback. Turning
+// narrow's fallback off would make seventeen label call sites 18.7% too wide before
+// the swap — a real regression bought to remove a hazard that cannot currently
+// fire, because the archivo tier covers exactly the ranges the narrow tier does.
+//
+// That "cannot currently fire" is a fact about the FILES, so it is checked rather
+// than trusted: verify-vendored-fonts.mjs fails if Archivo ever gains a subset
+// Narrow lacks, which is the change that would strand a face behind this fallback.
 const narrowLatin = localFont({
   src: [
     { path: "./fonts/archivo-narrow-latin.woff2", weight: "600", style: "normal" },
