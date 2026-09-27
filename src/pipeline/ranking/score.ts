@@ -138,6 +138,19 @@ export const WEIGHTS = {
    * 48 is chosen for the MARGIN, not the midpoint: it is the smallest value with
    * room on the churn side. Re-derive it with scripts/measure-brief-coverage.ts
    * against a live corpus before moving it.
+   *
+   * AND CHANGING WHAT THIS IS MEASURED AGAINST COUNTS AS MOVING IT. The
+   * dangerous case is the one where 48 STAYS 48: this number was derived against
+   * ages taken from `firstSeenAt`, which is PUBLICATION (see the note on
+   * RankInput.firstSeenAt). #171 replaces that with an arrival-derived value, and
+   * on the day it lands every age in the corpus changes while the constant sits
+   * still — so the ordering is re-rolled by a change that touches no line here.
+   *
+   * The margin is why that is not a soft landing: the churn crossover is at about
+   * 41 hours, so 48 has roughly seven hours of room. A clock change moves ages by
+   * the publication-to-fetch gap, which is hours for a live feed and DAYS for
+   * anything a feed surfaces late. Past the crossover the ordering does not
+   * degrade, IT INVERTS — the freshest story wins on freshness alone.
    */
   ageHalfLifeHours: 48,
   primarySource: 20,
