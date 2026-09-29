@@ -40,6 +40,7 @@ export function RadarRow({ story }: { story: StoryCard }) {
   return (
     <article
       data-story-id={story.id}
+      data-content-type={story.contentType}
       className="border-edge bg-paper text-ink mr-4 border-b px-4 py-3 last:border-b-0 lg:mr-0"
     >
       <div className="flex items-center gap-3">
