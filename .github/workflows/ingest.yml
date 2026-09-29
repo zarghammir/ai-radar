@@ -50,9 +50,29 @@ jobs:
   ingest:
     name: one ingestion pass
     runs-on: ubuntu-latest
-    # A pass takes seconds against a warm database. Anything near this is hung,
-    # and a hung scheduled job is how a free-tier minute budget disappears.
-    timeout-minutes: 15
+    # MEASURED, not estimated. The last successful pass before this was raised:
+    # "18 sources, 586 fetched, 70 new, 68 stories in 739.3s" — run 36530616047,
+    # 2026-09-29T06:21Z. The pass before it hit exactly 15:00 and was killed.
+    #
+    # The comment here used to say "a pass takes seconds against a warm
+    # database". That was true once and had quietly stopped being true; 739s is
+    # 82% of the budget it was reassuring us about.
+    #
+    # WHERE THE TIME GOES. Not the network. run.ts opens one transaction per
+    # FETCHED item — insert, cluster, update, refresh — so the cost tracks items
+    # rather than sources: 739.3s / 586 items = 1.26s each, and that run had
+    # summaries switched off by the daily cap, so it is nearly all loop. Seeding
+    # the seven sources that merged on 2026-09-22 adds roughly 200 items a pass,
+    # which is ~250s on the steady path and considerably more on the first pass,
+    # where every one of them is new and takes the expensive branch instead of
+    # returning early as a duplicate.
+    #
+    # 30 rather than 20 because the projection is arithmetic on one run, and the
+    # first seeded pass is the one furthest from it. Raising this is NOT the fix
+    # — batching those per-item transactions is, and #182 holds the measurement.
+    # This number exists to stop a hung job burning minutes, and at 30 it still
+    # does; it was never meant to be the thing that caps a healthy pass.
+    timeout-minutes: 30
 
     # ── What the worker can actually see ──────────────────────────────────
     #
