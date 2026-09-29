@@ -140,6 +140,27 @@ export async function getBrief(length: BriefLengthParam): Promise<BriefResponse>
   return json<BriefResponse>(`/api/brief?length=${encodeURIComponent(length)}`);
 }
 
+export interface RadarPageResponse {
+  stories: StoryCard[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
+/**
+ * The next page of the Radar feed. The FIRST page is rendered on the server
+ * by loadRadar; this is what "load more" calls, and it is the only part of
+ * that screen that needs the network.
+ *
+ * In fixture mode it answers an exhausted page rather than throwing: fixtures
+ * are one page by construction, so `hasMore` is already false there and no
+ * button exists to reach this. Throwing would make an unreachable path the
+ * loudest thing in the file.
+ */
+export async function getRadar(search: URLSearchParams): Promise<RadarPageResponse> {
+  if (USING_FIXTURES) return { stories: [], nextCursor: null, hasMore: false };
+  return json<RadarPageResponse>(`/api/radar?${search.toString()}`);
+}
+
 /**
  * ONE OPERATION ACROSS TWO KEYS — BOTH, OR NEITHER.
  *

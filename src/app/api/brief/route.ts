@@ -1,7 +1,6 @@
 import { getDb } from "@/db/client";
 import {
   DEFAULT_BRIEF_LENGTH,
-  briefWindow,
   parseBriefLength,
   recentStories,
   reportingWindow,

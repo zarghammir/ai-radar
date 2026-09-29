@@ -36,6 +36,7 @@
     "shots:filter": "node scripts/shoot-filter.mjs",
     "shots:story": "node scripts/shoot-story.mjs",
     "shots:brief": "node scripts/shoot-brief-states.mjs",
+    "shots:radar": "node scripts/shoot-radar.mjs",
     "backfill:content-types": "tsx scripts/reclassify-content-types.ts",
     "measure:keyword-gate": "tsx scripts/measure-keyword-gate.ts",
     "backfill:ai-vocabulary": "tsx scripts/backfill-ai-vocabulary.ts",

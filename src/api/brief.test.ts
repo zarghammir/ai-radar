@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { briefWindow, parseBriefLength, takeBriefStories } from "./brief";
-import type { StoryCard } from "./stories";
-
-const card = (readingMinutes: number, slug = `s${readingMinutes}`) =>
-  ({ slug, readingMinutes }) as StoryCard;
 
 describe("briefWindow", () => {
   it("starts at today's brief time once it has passed", () => {
