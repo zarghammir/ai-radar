@@ -48,8 +48,7 @@ const pending = [];
 const browser = await launchBrowser();
 
 const rows = (page) => page.locator("article[data-story-id]");
-const ids = (page) =>
-  rows(page).evaluateAll((els) => els.map((el) => Number(el.dataset.storyId)));
+const ids = (page) => rows(page).evaluateAll((els) => els.map((el) => Number(el.dataset.storyId)));
 
 async function apiIds(path) {
   const res = await fetch(`${base}${path}`);
@@ -87,7 +86,12 @@ try {
     }
 
     pending.push({ file: `${DIR}/feed-${view.key}.png`, bytes: await page.screenshot() });
-    shots.push({ file: `feed-${view.key}.png`, width: view.width, theme: view.colorScheme, rows: count });
+    shots.push({
+      file: `feed-${view.key}.png`,
+      width: view.width,
+      theme: view.colorScheme,
+      rows: count,
+    });
 
     // CHOOSING RESEARCH SHOWS ONLY PAPERS. Clicked, not navigated: a chip that
     // cannot be operated at 390px is the defect the picture is meant to catch.
@@ -118,12 +122,12 @@ try {
     await page.goto(`${base}${url}`, { waitUntil: "networkidle" });
     const chosen = await page
       .locator('[aria-current="true"][data-radar-chip], [aria-current="true"][data-radar-option]')
-      .evaluateAll((els) =>
-        els.map((el) => el.dataset.radarChip ?? el.dataset.radarOption).sort(),
-      );
+      .evaluateAll((els) => els.map((el) => el.dataset.radarChip ?? el.dataset.radarOption).sort());
     const wanted = ["research", "range:30d", "sort:importance"].sort();
     if (JSON.stringify(chosen) !== JSON.stringify(wanted)) {
-      floor.push(`${view.key}: ${url} restored ${JSON.stringify(chosen)}, not ${JSON.stringify(wanted)}`);
+      floor.push(
+        `${view.key}: ${url} restored ${JSON.stringify(chosen)}, not ${JSON.stringify(wanted)}`,
+      );
     }
     checks.push({ view: view.key, check: "a filtered URL restores its controls", chosen });
 
