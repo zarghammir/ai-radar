@@ -1,4 +1,4 @@
-name: Apply additive migrations on merge
+name: Apply schema and catalogue changes on merge
 
 # THE OUTAGE THIS EXISTS FOR. Nothing applied migrations on merge. Migration
 # 0004 added two columns, #71 began writing them in the same change, and the
@@ -33,15 +33,35 @@ name: Apply additive migrations on merge
 # race it wins by being fast rather than by being sequenced. It closes the
 # four-day window to seconds; it does not close it to zero. Sequencing properly
 # means owning the deploy.
+# THE SECOND OUTAGE, AND WHY SEEDING JOINED THIS FILE. The paths filter below
+# was correct and did its job: no migration changed after 2026-09-22, so this
+# workflow correctly did not run. The catalogue is what nothing watched. Seven
+# sources merged on 2026-09-22 (#179) and were still absent from the live
+# database on 2026-09-29 — `db:seed` ran only in ci.yml against a throwaway
+# database, in quick-start.yml, and in the manually dispatched setup-database.
+# Merging a source did not add it. The app served 18 sources while the code
+# declared 25, for a week, with every check green.
+#
+# WHY ONE WORKFLOW AND NOT TWO. A migration can add a column the catalogue then
+# writes to, so seeding must run AFTER migrating, never beside it. Two workflows
+# on the same push are concurrent, and the order that matters would have been
+# whichever runner started first. One workflow, two jobs, `needs`.
+#
+# WHY SEEDING MAY RUN UNATTENDED WHEN MIGRATING MAY NOT. src/db/seed.ts never
+# deletes a row and never writes `enabled`, so its worst case is a name or URL
+# refreshed from the catalogue. It cannot re-enable a source somebody switched
+# off, and it cannot remove one. A migration's worst case is a dropped column.
 on:
   push:
     branches: [main]
     paths:
       - "drizzle/**"
+      - "src/db/seed-data.ts"
+      - "src/db/seed.ts"
   workflow_dispatch:
 
 concurrency:
-  group: migrate-on-merge
+  group: schema-and-catalogue-on-merge
   cancel-in-progress: false
 
 permissions:
@@ -100,4 +120,67 @@ jobs:
               "A migration merged to main that this workflow will not apply automatically, because it drops, rewrites or deletes something. The database is now BEHIND the code until someone decides." \
               "Run: $RUN_URL" \
               "Apply it deliberately with the 'Set up the database' workflow, after checking that no running code still reads what it removes.")"
+          fi
+
+  seed:
+    name: seed the catalogue, verify it landed
+    needs: migrate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Pin npm to the version in packageManager
+        run: |
+          NPM_VERSION="$(node -p "require('./package.json').packageManager.split('@')[1]")"
+          npm install -g "npm@${NPM_VERSION}"
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check the secret this job needs is set
+        run: |
+          if [ -z "${DATABASE_URL:-}" ]; then
+            echo "Missing repository secret: DATABASE_URL" >&2; exit 1
+          fi
+
+      # src/db/seed.ts reads the database back after writing and exits non-zero
+      # if a catalogue entry is still missing, so this step failing means the
+      # catalogue genuinely did not land — not that a count looked wrong.
+      - name: Seed the catalogue
+        run: npm run db:seed | tee "${RUNNER_TEMP}/seed.log"
+
+      # Puts the database's own numbers on the run page. The counts in this log
+      # are read back from the database after the write, so the summary says
+      # what is live rather than what the catalogue declares.
+      - name: Put the result on the run summary
+        if: always()
+        run: |
+          {
+            echo "### Catalogue"
+            echo ""
+            echo '```'
+            cat "${RUNNER_TEMP}/seed.log" 2>/dev/null || echo "seeding did not get as far as reporting"
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Raise the alarm if the catalogue did not land
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          TITLE="The catalogue on main is not the catalogue in the database"
+          NUM="$(gh issue list --state open --search "$TITLE in:title" --json number --jq '.[0].number // empty')"
+          if [ -z "${NUM:-}" ]; then
+            gh issue create --title "$TITLE" --body "$(printf '%s\n\n%s\n\n%s' \
+              "Seeding ran on merge and did not finish with every catalogue entry present in the database. Sources or topics that main declares are not live, so the app is serving a smaller catalogue than the code describes — the failure mode that went unnoticed for a week in September." \
+              "Run: $RUN_URL" \
+              "The seeding step prints which keys are missing. Nothing was deleted: seeding only ever inserts and updates.")"
           fi
