@@ -31,9 +31,11 @@ export interface Topic {
 /**
  * What a list renders. Returned by /api/brief and /api/radar.
  *
- * /api/saved returns the WIDER `SavedCard` below. This comment used to claim
- * it returned this shape, which is how the saved list ended up with no name
- * for the note and the tags it was already being sent.
+ * The saved list renders the WIDER `SavedCard` below. This comment used to
+ * claim /api/saved returned this narrower shape, which is how the saved list
+ * ended up with no name for the note and the tags it was already being sent.
+ * That route is gone as of #183; the width still matters, because the saved
+ * screen builds the same wider card from this browser's own store.
  */
 export interface StoryCard {
   id: number;
