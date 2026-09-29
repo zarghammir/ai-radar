@@ -4,8 +4,10 @@ import {
   RADAR_KINDS,
   RADAR_RANGES,
   RADAR_SORTS,
+  RADAR_VIEWS,
   RANGE_LABELS,
   SORT_LABELS,
+  VIEW_LABELS,
   radarHref,
   type RadarQuery,
 } from "@/lib/api/radar-query";
@@ -65,6 +67,20 @@ export function RadarControls({ query }: { query: RadarQuery }) {
           current={query.range}
           href={(range) => radarHref(query, { range })}
           marker="range"
+        />
+        {/* The third choice is the only one that ADDS rows rather than
+            narrowing them: adjacent tech is stored and kept out of every
+            other screen, so if it is not reachable here it is not reachable
+            at all. It sits in the quiet row because widening is the rarer
+            intent, and it is a link like the others so the wider feed can be
+            bookmarked and sent to someone. */}
+        <Choices
+          label="Scope"
+          values={RADAR_VIEWS}
+          labels={VIEW_LABELS}
+          current={query.view}
+          href={(view) => radarHref(query, { view })}
+          marker="view"
         />
       </div>
     </div>

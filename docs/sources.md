@@ -171,7 +171,11 @@ what happens to an item with no AI vocabulary in it:
 | `"label"`          | stored, marked `matchedAiVocabulary: false`, and flagged adjacent tech |
 
 An adjacent-tech story is kept out of the default view and is still there when
-a reader widens it (`src/pipeline/run.ts`). So `label` costs storage and buys
+a reader widens it (`src/pipeline/run.ts`). Widening is the **Scope** control
+on Radar — `Adjacent tech too`, which is `/radar?view=everything` and the
+API's own `?view=ai|everything`. Today has no such control on purpose: the
+brief is the curated AI read, and Radar is the screen for looking around. So
+`label` costs storage and buys
 recall; `gate` costs recall and buys nothing back. **Use `label` when a source
 is worth reading but is not exclusively about AI, and `gate` when everything it
 publishes belongs in the reader's face.**

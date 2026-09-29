@@ -7,6 +7,8 @@ import {
   RADAR_KINDS,
   RADAR_RANGES,
   RADAR_SORTS,
+  RADAR_VIEWS,
+  VIEW_LABELS,
   extraFilterCount,
   parseRadarQuery,
   radarApiParams,
@@ -63,6 +65,13 @@ describe("parseRadarQuery", () => {
     expect(query).toEqual(DEFAULT_RADAR_QUERY);
   });
 
+  it("opens on AI and reads the widening when the URL asks for it", () => {
+    expect(parseRadarQuery({}).view).toBe("ai");
+    expect(parseRadarQuery({ view: "everything" }).view).toBe("everything");
+    // A typo must never widen: the fallback is the narrow side.
+    expect(parseRadarQuery({ view: "evrything" }).view).toBe("ai");
+  });
+
   it("keeps repeated topic and source keys, de-duplicated", () => {
     const query = parseRadarQuery({ topic: ["agents", "agents", "chips"], source: "openai-blog" });
     expect(query.topic).toEqual(["agents", "chips"]);
@@ -81,12 +90,18 @@ describe("the URL it writes back", () => {
     for (const kind of RADAR_KINDS) {
       for (const sort of RADAR_SORTS) {
         for (const range of RADAR_RANGES) {
-          const query = { ...DEFAULT_RADAR_QUERY, kind, sort, range };
-          const params = radarSearchParams(query);
-          expect(parseRadarQuery(Object.fromEntries(params))).toEqual(query);
+          for (const view of RADAR_VIEWS) {
+            const query = { ...DEFAULT_RADAR_QUERY, kind, sort, range, view };
+            const params = radarSearchParams(query);
+            expect(parseRadarQuery(Object.fromEntries(params))).toEqual(query);
+          }
         }
       }
     }
+  });
+
+  it("gives every scope a label, so the control can name both sides", () => {
+    for (const view of RADAR_VIEWS) expect(VIEW_LABELS[view]).toBeTruthy();
   });
 
   it("changes one field and keeps the rest", () => {
@@ -112,6 +127,19 @@ describe("the query it sends the API", () => {
     expect(params.get("since")).toBe("24h");
     expect(params.get("sort")).toBe("newest");
     expect(params.get("cursor")).toBe("abc");
+  });
+
+  /**
+   * The widened feed must survive "load more". Page one comes from the server
+   * component and page two from this query string: if the parameter were
+   * dropped here the reader would scroll from the wide feed into the narrow
+   * one, which looks like stories vanishing.
+   */
+  it("sends the widening, and sends nothing when the scope is the front door", () => {
+    expect(radarApiParams({ ...DEFAULT_RADAR_QUERY, view: "everything" }, null).get("view")).toBe(
+      "everything",
+    );
+    expect(radarApiParams(DEFAULT_RADAR_QUERY, null).has("view")).toBe(false);
   });
 
   it("carries topic, source and verification through", () => {

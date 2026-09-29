@@ -63,10 +63,34 @@ export const RANGE_LABELS: Record<RadarRange, string> = {
   "30d": "30 days",
 };
 
+/**
+ * The one control that widens the front door.
+ *
+ * Adjacent tech — a story from a `label` source that never used AI vocabulary,
+ * a fintech Series B on a startup feed — is STORED AND HIDDEN. Until this
+ * control existed, "hidden" meant hidden from everyone forever: the rows went
+ * in, `notAdjacentTech()` kept them out of both the brief and Radar, and no
+ * URL a reader could reach turned them back on. Keeping something nobody can
+ * ever see is not a curation policy, it is a leak with a schema.
+ *
+ * The names are the API's own (`?view=ai|everything`), not a third vocabulary
+ * for the same axis. Radar is where this lives and Today is deliberately not:
+ * the brief is the curated AI read, and a reader who wants the wider set is
+ * already on the screen built for looking around.
+ */
+export const RADAR_VIEWS = ["ai", "everything"] as const;
+export type RadarView = (typeof RADAR_VIEWS)[number];
+
+export const VIEW_LABELS: Record<RadarView, string> = {
+  ai: "AI only",
+  everything: "Adjacent tech too",
+};
+
 export const DEFAULT_RADAR_QUERY: RadarQuery = {
   kind: "all",
   sort: "newest",
   range: "7d",
+  view: "ai",
   topic: [],
   source: [],
   verification: [],
@@ -76,6 +100,7 @@ export interface RadarQuery {
   kind: RadarKind;
   sort: RadarSort;
   range: RadarRange;
+  view: RadarView;
   /** Carried through from the URL. There is no control for these yet — the
    *  filter sheet is still to come — but a link that names them must keep
    *  working, and the screen has to say they are applied. */
@@ -115,6 +140,7 @@ export function parseRadarQuery(params: Record<string, Raw>): RadarQuery {
     kind: member(RADAR_KINDS, first(params.kind)) ?? DEFAULT_RADAR_QUERY.kind,
     sort: member(RADAR_SORTS, first(params.sort)) ?? DEFAULT_RADAR_QUERY.sort,
     range: member(RADAR_RANGES, first(params.range)) ?? DEFAULT_RADAR_QUERY.range,
+    view: member(RADAR_VIEWS, first(params.view)) ?? DEFAULT_RADAR_QUERY.view,
     topic: list(params.topic),
     source: list(params.source),
     verification: list(params.verification) as VerificationLevel[],
@@ -134,6 +160,7 @@ export function radarSearchParams(query: RadarQuery): URLSearchParams {
   if (query.kind !== DEFAULT_RADAR_QUERY.kind) params.set("kind", query.kind);
   if (query.sort !== DEFAULT_RADAR_QUERY.sort) params.set("sort", query.sort);
   if (query.range !== DEFAULT_RADAR_QUERY.range) params.set("range", query.range);
+  if (query.view !== DEFAULT_RADAR_QUERY.view) params.set("view", query.view);
   for (const topic of query.topic) params.append("topic", topic);
   for (const source of query.source) params.append("source", source);
   for (const level of query.verification) params.append("verification", level);
@@ -149,6 +176,10 @@ export function radarApiParams(query: RadarQuery, cursor: string | null): URLSea
   for (const level of query.verification) params.append("verification", level);
   params.set("sort", query.sort);
   params.set("since", query.range);
+  // Omitted rather than sent as `ai`: the API treats an absent view as the
+  // front door and an unrecognised one as a caller bug, so the narrow case is
+  // the absence. Sending it would be sending the default back to its owner.
+  if (query.view === "everything") params.set("view", query.view);
   if (cursor) params.set("cursor", cursor);
   return params;
 }
