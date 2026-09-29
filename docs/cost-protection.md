@@ -100,20 +100,52 @@ ranking window, which is about **29 new stories a day**, so a cap of 20 covers r
 and the coverage is what degrades. If that trade is wrong, the number to change is the
 cap, and changing it changes the bill proportionally.
 
+## What a cheaper provider costs (2026-09-29)
+
+The table above is Claude Haiku, because that was the only paid provider anyone had
+configured. It is not the cheapest thing that produces an acceptable summary, and the
+difference is free to take: `openai-compatible` already speaks to DeepSeek, Gemini and
+Groq, so changing provider is three environment variables and no code.
+
+**Measured rather than assumed.** Sixty stories were taken from a live database and run
+through `buildPrompt`: **1,087 characters mean, 1,343 max — about 272 input tokens mean,
+336 max.** Output is capped at 400 and runs nearer 250. So one summary is ~300 in,
+~250 out.
+
+| per 1M tokens                    | input         | output        | 20 summaries/day for 30 days |
+| -------------------------------- | ------------- | ------------- | ---------------------------- |
+| Claude Haiku 4.5                 | $1.00         | $5.00         | **$1.30**                    |
+| GPT-5.4 mini                     | $0.75         | $4.50         | $1.13                        |
+| Gemini 3.x Flash (paid)          | $0.75         | $3.75         | $0.98                        |
+| DeepSeek Flash (off-peak / peak) | $0.15 / $0.30 | $0.60 / $1.20 | **$0.17 – $0.33**            |
+| Gemini or Groq free tier, Ollama | —             | —             | **$0.00**                    |
+
+**A free tier is a quota, not a price.** Gemini's and Groq's free allowances are per
+project, reset daily, and can be changed or withdrawn; Gemini's free tier also permits
+Google to use the input. They are the right default for a personal instance and the
+wrong thing to depend on for a public one without reading the terms. `deepseek-flash`
+at twenty cents a month is the option that does not depend on anyone's generosity.
+
+**READERS DO NOT MULTIPLY ANY OF THIS.** A summary is written once per story, by the
+worker, into `stories`; every reader is served the same row. One reader and a hundred
+readers produce an identical bill, and the only number that moves it is
+`LLM_MAX_STORIES_PER_DAY`. That is a property of where the call lives — in `src/llm/`,
+reached only from the worker — which `npm run routes:check` is what keeps true.
+
 ## What the schedule costs (2026-09-16)
 
 This is the one recurring cost the project has today. Nothing here is a paid API call,
 which is exactly why it is easy to miss.
 
-`.github/workflows/ingest.yml` **declares** `*/30` — 48 runs a day, about 1,440 a
-month. **GitHub does not keep that schedule.** Scheduled workflows are best-effort:
-measured 2026-09-17 to 09-22, 39 runs, about **7 a day**.
+`.github/workflows/ingest.yml` **declared** `*/30` when this section was written — 48
+runs a day, about 1,440 a month — and **GitHub never kept that schedule.** Measured over
+76 scheduled runs: about **6.2 a day**, median gap 3.87h.
 
-Every figure below is derived from the DECLARED rate, so treat them as a **ceiling
-rather than an estimate** — the real bill has been roughly a seventh of them. The
-ceiling is deliberately not corrected downward: a cost document that assumed the
-scheduler's generosity would understate the bill the day GitHub starts honouring
-the cron.
+**Since 2026-09-29 it declares `0 */3`: 8 runs a day, about 240 a month.** The figures
+below are still derived from the OLD declared rate and are therefore a ceiling six times
+higher than anything that can now happen. They are kept rather than rewritten because a
+ceiling that was never reached is the safe direction for a cost document to be wrong in;
+divide by six for the current declaration.
 
 This repository was **private** when those figures were written, so the minutes
 billed against the GitHub Free plan's **2,000 minutes a month**. It is public now
@@ -143,8 +175,10 @@ CI jobs, so the schedule is the largest line in the budget by a wide margin.
 × 30`; minutes per month = runs × 1 (rounded up) or runs × 31 ÷ 60 (actual). At hourly
 instead of half-hourly, every figure above halves.
 
-**And the other side of the same schedule:** 1,440 runs × 17 sources ≈ **24,000 requests
-a month to other people's feeds**, plus one round of 18 on every pull request from
+**And the other side of the same schedule:** at the old declaration, 1,440 runs × 17
+sources ≈ **24,000 requests a month to other people's feeds**. The catalogue is 25
+sources now and the schedule is 240 runs, so it is ≈ **6,000** — half again as many
+publishers, a quarter of the requests. Plus one round on every pull request from
 `compose-smoke`. None of it is paid, so it is not a billing risk — but it is the kind of
 thing a publisher rate-limits or blocks, and this is where a self-hoster would look for
 it. It is also why `INGEST_INTERVAL_MINUTES` has a floor: the interval is a request rate

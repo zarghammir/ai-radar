@@ -47,16 +47,27 @@ the worker service runs the loop, and that loop really is a timer — `sleep(min
 - 60_000)`in`src/worker/main.ts`, so self-hosted it does what it says.
 
 On GitHub Actions, `.github/workflows/ingest.yml` runs `npm run worker:once` on a
-`*/30` schedule **which GitHub does not keep**. Scheduled workflows are
+`0 */3` schedule **which GitHub still does not keep**. Scheduled workflows are
 best-effort and de-prioritised under load; the interval is a request, not a
 promise, and it has no upper bound.
 
-**Measured 2026-09-17 to 09-22 (39 scheduled runs): about 7 passes a day against
-48 declared, roughly one every 3.4 hours.** That is not a bug to fix — it is what
-the hosted scheduler offers. It matters because since #148 the brief admits
+**Measured over 76 scheduled runs: about 6.2 passes a day, median gap 3.87h,
+worst 8.09h — against the 48 a day the workflow used to declare.** The
+declaration was changed to three hours rather than the measurement being
+explained away, for two reasons: it is what the scheduler actually delivers,
+and it is what the catalogue warrants anyway at roughly 30 new items a day.
+It still is not a promise. It matters because since #148 the brief admits
 stories by ARRIVAL, so this interval IS the freshness a reader experiences.
 Anything that promises a number here is promising something the scheduler can
 ignore.
+
+**A schedule can also stop existing.** GitHub disables scheduled workflows in a
+public repository after 60 days with no repository activity, silently, and a
+workflow that never runs cannot raise its own alarm. The last step of the
+ingest job pushes an empty commit once 45 days have passed without one. It is
+inside that job deliberately: a separate keepalive workflow would be a
+scheduled workflow, and would be disabled by the same rule it exists to
+prevent.
 
 ## The write path
 

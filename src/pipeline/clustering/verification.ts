@@ -25,8 +25,20 @@ export interface VerificationResult {
  * newsroom among them.
  */
 export function deriveVerification(items: ItemForVerification[]): VerificationResult {
+  /**
+   * Keyed on the OUTLET, not the feed row. One publisher may be several
+   * sources — TechCrunch is an AI feed, a venture feed and a startups feed —
+   * and keying on `sourceKey` counted one newsroom twice, producing
+   * "Independently reported by TechCrunch, TechCrunch". Corroboration is
+   * about independent witnesses, and a second feed from the same newsroom is
+   * not one.
+   *
+   * `sourceName` is what a reader is shown, so two rows sharing a name are
+   * indistinguishable in the interface as well; if they should count
+   * separately they need distinct names, which is the same decision.
+   */
   const bySource = new Map<string, ItemForVerification>();
-  for (const it of items) bySource.set(it.sourceKey, it);
+  for (const it of items) bySource.set(it.sourceName, it);
   const distinct = [...bySource.values()];
   const primary = distinct.filter((i) => i.tier === "PRIMARY");
   const hq = distinct.filter((i) => i.tier === "HIGH_QUALITY_REPORTING");
