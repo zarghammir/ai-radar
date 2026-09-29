@@ -22,7 +22,8 @@
  */
 import { takeBriefStories } from "@/api/reading-budget";
 import { typesForView, type BriefView } from "@/lib/api/views";
-import type { BriefResponse, SourceRef, StoryCard } from "@/lib/api/types";
+import type { RadarSort } from "@/lib/api/radar-query";
+import type { BriefResponse, ContentType, SourceRef, StoryCard } from "@/lib/api/types";
 import type { StoryDetail } from "@/api/stories";
 
 const openai: SourceRef = {
@@ -370,6 +371,33 @@ export function fixtureQuietBrief(): BriefResponse {
 /** Nothing ingested yet, or nothing in the window. */
 export function fixtureEmptyBrief(): BriefResponse {
   return brief([], "all");
+}
+
+/**
+ * The Radar feed, from the same fixtures.
+ *
+ * ONE PAGE, ALWAYS, and `hasMore` is false even when there are more stories
+ * than a live page would hold. "Load more" against fixtures would call
+ * /api/radar, which reads the database this mode exists to do without — a
+ * button that fails is worse than a screen that shows everything it has.
+ *
+ * `trending` sorts by score here. There is no activity history in a fixture,
+ * so a trend computed from one timestamp would be a number with no meaning
+ * dressed as a measurement.
+ */
+export function fixtureRadar(
+  types: readonly ContentType[],
+  sort: RadarSort,
+): { stories: StoryCard[]; nextCursor: string | null; hasMore: boolean } {
+  const matching = FIXTURE_STORIES.filter(
+    (story) => types.length === 0 || types.includes(story.contentType),
+  );
+  const stories = [...matching].sort((a, b) =>
+    sort === "newest"
+      ? Date.parse(b.lastActivityAt) - Date.parse(a.lastActivityAt)
+      : b.score - a.score,
+  );
+  return { stories, nextCursor: null, hasMore: false };
 }
 
 /**
