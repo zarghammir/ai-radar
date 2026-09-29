@@ -265,6 +265,105 @@ export const SOURCE_SEEDS: SourceSeed[] = [
     defaultContentType: "NEWS",
   },
 
+  // ── STARTUPS: who is raising, who is launching, who is founding ──
+  //
+  // Every one of these carries `keywordPolicy: "label"`, and that single key is
+  // what makes the lane safe to add at all. The RSS adapter never gates — it
+  // stores what the feed says — so an ungated startup firehose would put "B2B
+  // logistics raises Series A" straight into the AI front door. With "label",
+  // an item that uses no AI vocabulary is stored as ADJACENT TECH: kept,
+  // searchable, reachable by widening, and out of the default view (#71).
+  //
+  // The AI half needs no special handling. "Anthropic raises at $X" says
+  // "Anthropic", matches, and appears exactly where a reader expects it.
+  //
+  // The feeds below are the ones that answered on 2026-09-29. a16z publishes
+  // no working feed (404 on /feed/ and /rss), and SEC Form D filings need an
+  // adapter rather than a catalogue entry, so neither is here.
+  {
+    key: "crunchbase-news",
+    name: "Crunchbase News",
+    kind: "rss",
+    tier: "HIGH_QUALITY_REPORTING",
+    url: "https://news.crunchbase.com/feed/",
+    homepage: "https://news.crunchbase.com",
+    defaultContentType: "NEWS",
+    config: { maxItems: 30, keywordPolicy: "label" },
+  },
+  {
+    // Same outlet as techcrunch-ai, and deliberately a second row: a funding
+    // round reported here and nowhere else is invisible to the AI feed.
+    // deriveVerification dedupes by OUTLET NAME rather than source key, so
+    // these two feeds carrying one story is one witness, not corroboration.
+    key: "techcrunch-venture",
+    name: "TechCrunch",
+    kind: "rss",
+    tier: "HIGH_QUALITY_REPORTING",
+    url: "https://techcrunch.com/category/venture/feed/",
+    homepage: "https://techcrunch.com/category/venture/",
+    defaultContentType: "NEWS",
+    config: { maxItems: 30, keywordPolicy: "label" },
+  },
+  {
+    key: "techcrunch-startups",
+    name: "TechCrunch",
+    kind: "rss",
+    tier: "HIGH_QUALITY_REPORTING",
+    url: "https://techcrunch.com/category/startups/feed/",
+    homepage: "https://techcrunch.com/category/startups/",
+    defaultContentType: "NEWS",
+    config: { maxItems: 30, keywordPolicy: "label" },
+  },
+  {
+    key: "sifted",
+    name: "Sifted",
+    kind: "rss",
+    tier: "HIGH_QUALITY_REPORTING",
+    url: "https://sifted.eu/feed",
+    homepage: "https://sifted.eu",
+    defaultContentType: "NEWS",
+    config: { maxItems: 30, keywordPolicy: "label" },
+  },
+  {
+    key: "tech-eu",
+    name: "Tech.eu",
+    kind: "rss",
+    tier: "HIGH_QUALITY_REPORTING",
+    url: "https://tech.eu/feed/",
+    homepage: "https://tech.eu",
+    defaultContentType: "NEWS",
+    config: { maxItems: 30, keywordPolicy: "label" },
+  },
+  {
+    // PRIMARY because YC is the organisation doing the thing when it announces
+    // a batch, a request for startups or a policy change — it is not reporting
+    // on someone else. No topicKeys: "y-combinator" is not a topic in the
+    // catalogue and inventing one to satisfy a default would tag every post
+    // with a company nobody filters on.
+    key: "ycombinator-blog",
+    name: "Y Combinator",
+    kind: "rss",
+    tier: "PRIMARY",
+    url: "https://www.ycombinator.com/blog/rss",
+    homepage: "https://www.ycombinator.com/blog",
+    defaultContentType: "NEWS",
+    config: { maxItems: 20, keywordPolicy: "label" },
+  },
+  {
+    // COMMUNITY, not PRIMARY: the makers publish, Product Hunt aggregates. A
+    // launch here on its own is UNVERIFIED and should be — it is a listing,
+    // not a report. maxItems is well under the 50 the feed returns, because
+    // eight passes a day at 50 is mostly re-reading the same launches.
+    key: "producthunt",
+    name: "Product Hunt",
+    kind: "rss",
+    tier: "COMMUNITY",
+    url: "https://www.producthunt.com/feed",
+    homepage: "https://www.producthunt.com",
+    defaultContentType: "RELEASE",
+    config: { maxItems: 25, keywordPolicy: "label" },
+  },
+
   // ── ANALYST: named experts reading the news rather than reporting it ──
   // Valuable for ranking, but two of them agreeing is two readings of one
   // story, not two witnesses. deriveVerification enforces that.
@@ -547,19 +646,61 @@ export const TOPIC_SEEDS: TopicSeed[] = [
     ],
   },
   {
+    // The rounds moved OUT of here and into "fundraising" below. Splitting
+    // them is the point rather than a tidy-up: "who is raising right now" is
+    // the thing this reader opens the app for, and it was unfilterable while
+    // it shared a chip with layoffs, revenue and an IPO. Same key, so anyone
+    // who already selected this topic keeps it; what it contains narrows.
     key: "business",
-    name: "Business & funding",
+    name: "Business & markets",
     group: "domain",
+    keywords: ["acquisition", "acquires", "valuation", "ipo", "revenue", "layoffs"],
+  },
+  {
+    key: "fundraising",
+    name: "Fundraising",
+    group: "domain",
+    // "series a" is a substring match and will occasionally catch "series
+    // announcement" — inherited from the business topic, where it has always
+    // behaved this way, and a whole-phrase rule here would silently stop
+    // matching the hyphenated forms the rest of the catalogue depends on.
     keywords: [
       "funding round",
       "series a",
       "series b",
       "series c",
-      "acquisition",
-      "valuation",
-      "ipo",
-      "revenue",
-      "layoffs",
+      "series d",
+      "seed round",
+      "pre-seed",
+      "raises",
+      "raised",
+      "venture capital",
+      "term sheet",
+      "oversubscribed",
+      "led the round",
+    ],
+  },
+  {
+    key: "founders",
+    name: "Founders",
+    group: "domain",
+    // "founder" is seven characters, so it matches as a substring — which
+    // already covers "co-founder", "cofounder" and "founders". Listing those
+    // separately would read as thoroughness and match nothing extra.
+    keywords: ["founder", "founding team", "stealth", "y combinator", "accelerator program"],
+  },
+  {
+    key: "launches",
+    name: "Launches",
+    group: "domain",
+    keywords: [
+      "launches",
+      "launched",
+      "product hunt",
+      "general availability",
+      "public beta",
+      "early access",
+      "waitlist",
     ],
   },
   {

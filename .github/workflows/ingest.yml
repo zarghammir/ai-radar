@@ -1,17 +1,23 @@
 name: Ingest
 
-# Declares */30, matching INGEST_INTERVAL_MINUTES in .env.example — but GITHUB
-# DOES NOT KEEP IT. Scheduled workflows are best-effort and de-prioritised under
-# load. Measured 2026-09-17 to 09-22: 39 runs, about 7 a day against 48 declared.
-# The cron is kept because best-effort costs nothing and a lower declared rate
-# would only lower the ceiling; it is not a promise, and nothing user-facing may
-# state an interval. Plus a
-# manual button for when someone wants a brief refreshed now. This is the
-# hosted alternative to leaving the worker container running: same entry, same
-# single-writer lock, one pass per invocation.
+# DECLARES WHAT IT ACTUALLY DELIVERS. This said */30 — 48 runs a day — and
+# GitHub never kept it: measured over the last 76 scheduled runs, 6.2 a day,
+# median gap 3.87h, worst 8.09h. A declared rate nobody honours is not a
+# harmless ceiling; it is the number the next person reads when they ask how
+# fresh the app is, and every one of them was wrong by a factor of eight.
+#
+# 3 HOURS IS ALSO THE RIGHT NUMBER ON ITS OWN, independently of what GitHub
+# will do with it. The catalogue produces about 30 new items a day — 1.3 an
+# hour — so a half-hourly pass fetched 0.6 new items and spent a runner minute
+# doing it. Every three hours is ~4 new items a pass: worth a run, and inside
+# the daily summariser cap.
+#
+# Plus a manual button for when someone wants a brief refreshed now. This is
+# the hosted alternative to leaving the worker container running: same entry,
+# same single-writer lock, one pass per invocation.
 on:
   schedule:
-    - cron: "*/30 * * * *"
+    - cron: "0 */3 * * *"
   workflow_dispatch:
 
 # Never two ingests at once, by two mechanisms that cover different failures.
@@ -31,7 +37,10 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  # Write because of the keepalive at the end of the job, which commits
+  # nothing but an empty marker and only after 45 quiet days. Read is not
+  # enough for the one thing that stops this workflow dying of old age.
+  contents: write
   # The alarm opens and closes ONE issue. Ingestion failed 25+ consecutive runs
   # over four days and nothing told anyone; a red run is only a notification if
   # somebody opens the Actions tab.
@@ -127,6 +136,49 @@ jobs:
       - name: Run one ingestion pass
         run: npm run worker:once
 
+      # ── The keepalive ─────────────────────────────────────────────────────
+      #
+      # GITHUB DISABLES SCHEDULED WORKFLOWS IN A PUBLIC REPOSITORY AFTER 60
+      # DAYS WITH NO REPOSITORY ACTIVITY, and it does so silently. Two quiet
+      # months — no commits, because the app is finished and working — and the
+      # collector stops. Nothing goes red, no issue opens, the alarm below
+      # cannot fire because the job never runs. The reader simply finds stale
+      # news, which is the failure this project is least able to detect.
+      #
+      # It lives INSIDE this job rather than in a workflow of its own for the
+      # obvious reason: a separate scheduled keepalive is itself a scheduled
+      # workflow and gets disabled by the same rule. Only something the
+      # surviving schedule runs can keep the schedule alive.
+      #
+      # An empty commit, not a file that churns: it moves the repository's
+      # activity clock without touching the tree, so no diff and no review.
+      # At 45 days there are still 15 in hand if a run fails.
+      #
+      # `if: success()` on purpose. A repository whose ingestion is broken
+      # should be allowed to go quiet and have its schedule disabled; keeping
+      # a failing collector alive forever is not a service to anyone.
+      - name: Keep the schedule from being disabled for inactivity
+        if: success() && github.event_name == 'schedule'
+        run: |
+          set -euo pipefail
+          LAST="$(git log -1 --format=%ct)"
+          DAYS=$(( ( $(date +%s) - LAST ) / 86400 ))
+          echo "days since the last commit: $DAYS"
+          if [ "$DAYS" -lt 45 ]; then
+            echo "  nothing to do"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit --allow-empty -m "chore: keep the ingestion schedule alive" \
+            -m "GitHub disables scheduled workflows in public repositories after 60 days without repository activity. This commit is that activity and nothing else; see the keepalive step in .github/workflows/ingest.yml."
+          # Explicit refspec, not a bare `git push`: what checkout leaves in
+          # HEAD and whether it has an upstream is checkout's business, not
+          # ours, and a keepalive that silently fails to push is worse than
+          # no keepalive. No force, so a race with a real commit loses and
+          # the next scheduled run tries again.
+          git push origin "HEAD:$GITHUB_REF_NAME"
+
       # ── The alarm ─────────────────────────────────────────────────────────
       # `always()` on purpose: the whole point is the failing case, and a step
       # that only runs on success cannot report a failure.
@@ -155,7 +207,7 @@ jobs:
           #
           # What that cost: on a swallowed error NUM is empty, OPEN=false, and
           # a failing run opens a DUPLICATE issue while one is already open —
-          # every 30 minutes, for as long as the outage lasts. The exact
+          # every scheduled pass, for as long as the outage lasts. The exact
           # "thirty issues train the reader to ignore it" failure this design
           # exists to prevent, arriving through the error path.
           #

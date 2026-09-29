@@ -3,7 +3,7 @@ import { describeError } from "@/pipeline/describe-error";
 import type { SecretEnv } from "./secret";
 
 /** Matches INGEST_INTERVAL_MINUTES in .env.example; report.test.ts pins the two together. */
-export const DEFAULT_INTERVAL_MINUTES = 30;
+export const DEFAULT_INTERVAL_MINUTES = 180;
 
 /**
  * The fastest schedule this worker will accept.

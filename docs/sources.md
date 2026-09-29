@@ -152,7 +152,36 @@ decides importance and age decides how long that importance lasts.
 
 ---
 
-## Two traps
+## Three traps
+
+### A source that is not about AI
+
+Most of the catalogue is AI-only, so everything it publishes belongs in the
+default view. The startup and funding feeds — Crunchbase News, TechCrunch
+Venture and Startups, Sifted, Tech.eu, the YC blog, Product Hunt — are not:
+they publish a fintech Series B next to an AI one, and admitting all of it
+would turn an AI reader into a general tech reader.
+
+They therefore carry `config: { keywordPolicy: "label" }`. The difference is
+what happens to an item with no AI vocabulary in it:
+
+| policy             | a non-AI item is …                                                     |
+| ------------------ | ---------------------------------------------------------------------- |
+| `"gate"` (default) | dropped at ingestion                                                   |
+| `"label"`          | stored, marked `matchedAiVocabulary: false`, and flagged adjacent tech |
+
+An adjacent-tech story is kept out of the default view and is still there when
+a reader widens it (`src/pipeline/run.ts`). So `label` costs storage and buys
+recall; `gate` costs recall and buys nothing back. **Use `label` when a source
+is worth reading but is not exclusively about AI, and `gate` when everything it
+publishes belongs in the reader's face.**
+
+One thing `label` does not do is soften the verification rules. Two feeds from
+the same newsroom are one witness — `deriveVerification` deduplicates on
+`sourceName`, not `sourceKey` — so the three TechCrunch rows cannot corroborate
+each other into `CORROBORATED`. Give a new feed from an existing publisher the
+publisher's existing `name`, not a distinguishing one, or you will manufacture
+corroboration out of one outlet.
 
 ### When there is no feed
 

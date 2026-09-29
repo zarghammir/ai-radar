@@ -34,6 +34,22 @@ describe("deriveVerification", () => {
   it("counts distinct sources, not duplicate items", () => {
     expect(deriveVerification([reuters, reuters]).level).toBe("EMERGING");
   });
+  it("two feeds from one newsroom are one witness", () => {
+    // The catalogue carries TechCrunch three times — AI, venture, startups —
+    // so a funding story landing in two of them must not read as two outlets
+    // agreeing. Distinct KEYS, one outlet.
+    const tcAi = {
+      sourceKey: "techcrunch-ai",
+      sourceName: "TechCrunch",
+      tier: "HIGH_QUALITY_REPORTING" as const,
+    };
+    const tcVenture = { ...tcAi, sourceKey: "techcrunch-venture" };
+    const result = deriveVerification([tcAi, tcVenture]);
+    expect(result.level).toBe("EMERGING");
+    expect(result.note).not.toContain("TechCrunch, TechCrunch");
+    // And the control: a genuinely different newsroom still corroborates.
+    expect(deriveVerification([tcAi, reuters]).level).toBe("CORROBORATED");
+  });
 });
 
 const wired = { sourceKey: "wired", sourceName: "Wired", tier: "HIGH_QUALITY_REPORTING" as const };

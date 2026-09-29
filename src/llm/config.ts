@@ -4,7 +4,7 @@
  * READING THIS NEVER THROWS, and that is the whole design. Summaries are an
  * enhancement: `LLM_PROVIDER=none`, a missing key, a typo in the provider name
  * — every one of them means "no summaries today" and none of them may stop a
- * worker that still has seventeen feeds to collect. The brief is useful
+ * worker that still has two dozen feeds to collect. The brief is useful
  * without summaries; it is useless if the pass dies before it runs.
  *
  * So the return type is `LlmConfig | null` and the REASON travels with the
@@ -18,7 +18,16 @@
 export const LLM_PROVIDERS = ["none", "ollama", "anthropic", "openai-compatible"] as const;
 export type LlmProvider = (typeof LLM_PROVIDERS)[number];
 
-/** Model used when the operator names a provider but no model. */
+/**
+ * Model used when the operator names a provider but no model.
+ *
+ * `openai-compatible` is a PROTOCOL, not a vendor: DeepSeek, Gemini, Groq,
+ * OpenRouter and LM Studio all answer on it and none of them share a model
+ * name. So this fallback is a guess that is only right for Groq, and any
+ * other endpoint needs `LLM_MODEL` set — .env.example gives the pair for
+ * each. Getting it wrong is a 400 from the provider on the first summary,
+ * which the run records and survives; it is not a silent wrong answer.
+ */
 export const DEFAULT_MODELS: Record<Exclude<LlmProvider, "none">, string> = {
   anthropic: "claude-haiku-4-5",
   "openai-compatible": "llama-3.3-70b-versatile",

@@ -228,6 +228,29 @@ describe("source catalogue", () => {
     }
   });
 
+  it("labels rather than admits every startup feed, so a non-AI round stays out of the front door", () => {
+    // The RSS adapter does not gate — it stores whatever the feed says. So a
+    // startup feed without keywordPolicy "label" puts "logistics startup
+    // raises Series A" into the DEFAULT view, which is the one thing this
+    // lane must not do. run.ts reads the same key for every kind of source,
+    // and adjacentTech needs EVERY item on the story to come from a label
+    // source, so one row missing it re-admits the whole story.
+    const startupFeeds = [
+      "crunchbase-news",
+      "techcrunch-venture",
+      "techcrunch-startups",
+      "sifted",
+      "tech-eu",
+      "ycombinator-blog",
+      "producthunt",
+    ];
+    for (const key of startupFeeds) {
+      const source = SOURCE_SEEDS.find((s) => s.key === key);
+      expect(source, `${key} is missing from the catalogue`).toBeDefined();
+      expect(source!.config?.keywordPolicy, `${key} must label, not admit`).toBe("label");
+    }
+  });
+
   it("asks arXiv for the AI categories the brief names", () => {
     const arxiv = SOURCE_SEEDS.find((s) => s.kind === "arxiv");
     expect(arxiv).toBeDefined();
