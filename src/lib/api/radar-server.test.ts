@@ -73,6 +73,16 @@ describe("against the database", () => {
   });
 
   /**
+   * Adjacent tech is stored and shown nowhere else, so this screen is the
+   * only way back to it. A default that ignored the control would make the
+   * widening a link that changes the URL and not the feed.
+   */
+  it("widens to adjacent tech when the reader asks for that scope", async () => {
+    await loadRadar(query({ view: "everything" }));
+    expect(radarPage.mock.calls[0][1].includeAdjacent).toBe(true);
+  });
+
+  /**
    * A key that names nothing would otherwise narrow the feed to zero rows and
    * look exactly like a quiet week — the one failure this screen must never
    * show, because the reader cannot tell it from a broken collector.

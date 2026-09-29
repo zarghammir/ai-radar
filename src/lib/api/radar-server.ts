@@ -49,9 +49,9 @@ export async function loadRadar(query: RadarQuery, now = new Date()): Promise<Ra
       verification: query.verification,
       since: parseSince(query.range, query.range, now),
       sinceRaw: query.range,
-      // The front door is AI. Adjacent tech is a deliberate keep, not a
-      // default view, and there is no control for it on this screen.
-      includeAdjacent: false,
+      // The front door is AI; the Scope control on this screen is how a
+      // reader leaves it, and this is the only place that widening happens.
+      includeAdjacent: query.view === "everything",
     },
     query.sort,
     DEFAULT_LIMIT,
