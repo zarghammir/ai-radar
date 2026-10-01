@@ -17,19 +17,27 @@ import { typesForView, type BriefView } from "@/lib/api/views";
  * ── IT REPORTS TWO DENOMINATORS, AND THE FIRST DRAFT REPORTED THE WRONG ONE ──
  *
  * The page the owner opens is view-filtered. `src/app/page.tsx` resolves
- * `parseView(cookie) ?? DEFAULT_VIEW`, DEFAULT_VIEW is "built", and that view
- * shows five of the ten content types — MODEL, TOOL, RELEASE, PAPER, RESEARCH.
- * NEWS, DISCUSSION, TREND, BUSINESS and REGULATION are not on his default
- * screen at all.
+ * `parseView(cookie) ?? DEFAULT_VIEW`, and the two slices exist because that
+ * view may admit less than the summariser selects over.
  *
- * So a figure over everything the brief admits answers "how much is
- * summarised" when the defect is "how much of the brief HE OPENS is". The
- * instrument was pointed at the superset — the same mistake as the bug it was
- * built to measure, one level up.
+ * WHEN THIS WAS WRITTEN DEFAULT_VIEW WAS "built", five of the ten content
+ * types, and the gap was the whole point: a figure over everything the brief
+ * admits answered "how much is summarised" when the defect was "how much of the
+ * brief HE OPENS is". Measured on production 2026-09-30 that gap was 12.5
+ * points — 14.5% across everything against 2.0% on "built" — with ZERO of the
+ * top twenty on his screen carrying a summary. #167 has the figures.
  *
- * Both are reported because THE GAP BETWEEN THEM IS THE INTERESTING QUANTITY:
- * it is what says whether the selector needs the same treatment, and it cannot
- * be recovered from either figure alone.
+ * DEFAULT_VIEW IS NOW "all", so today the two slices coincide and the gap reads
+ * 0. THAT IS A RESULT, NOT A REASON TO DELETE EITHER OF THEM. The gap went to
+ * zero because the default moved to the superset, not because anything about the
+ * selector changed; a future default that filters again reopens it instantly,
+ * and the instrument that would notice is this one. A measurement removed while
+ * it reads zero is a measurement removed exactly when it stops being able to
+ * warn anybody.
+ *
+ * Both are still reported because THE GAP BETWEEN THEM IS THE INTERESTING
+ * QUANTITY: it says whether the selector needs the same treatment, and it
+ * cannot be recovered from either figure alone.
  *
  * ── AND THE RULE THAT MAKES ONE SETTING SAFE TO IGNORE AND THE OTHER NOT ──
  *
