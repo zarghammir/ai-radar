@@ -114,7 +114,7 @@ try {
 
     // Finishing must stop it asking again. A gate that fires every visit is
     // the same defect as one that never fires, from the other side.
-    await page.getByRole("button", { name: /Skip, use the defaults/i }).click();
+    await page.getByRole("button", { name: /^Skip$/i }).click();
     await page.waitForURL((url) => new URL(url).pathname === "/", { timeout: 5000 });
     await page.goto(base + "/saved", { waitUntil: "networkidle" });
     const after = new URL(page.url()).pathname;
@@ -129,22 +129,37 @@ try {
   {
     const context = await browser.newContext({ viewport: { width: 390, height: 780 } });
     const page = await context.newPage();
+    // WHAT ONBOARDING ASKS FOR CHANGED, so what this asserts changed with it.
+    // It used to walk three steps and check Settings showed the 06:15 it typed.
+    // Onboarding no longer collects a brief time — delivery went in #189 and the
+    // step was configuring nothing — so that assertion could only be kept by
+    // testing a screen that no longer exists.
+    //
+    // The PROMISE is the same and is still worth guarding: finishing onboarding
+    // writes the answer it collected, and Settings shows it afterwards. Only the
+    // answer is different. A topic is picked here and looked for there.
     await page.goto(base + "/welcome", { waitUntil: "networkidle" });
-    await page.getByRole("button", { name: /Set it up/i }).click();
-    await page.locator("input[type='time']").fill("06:15");
-    await page.getByRole("button", { name: /^Next$/ }).click();
-    await page.getByRole("button", { name: /Start reading/i }).click();
-    await page.waitForURL((url) => new URL(url).pathname === "/", { timeout: 5000 });
+    const firstTopic = page.locator("[data-topic-key]").first();
+    const pickedKey = await firstTopic.getAttribute("data-topic-key").catch(() => null);
+    if (!pickedKey) {
+      floor.push("onboarding offered no topics to pick, so nothing could be written");
+    } else {
+      await firstTopic.click();
+      await page.getByRole("button", { name: /Start reading/i }).click();
+      await page.waitForURL((url) => new URL(url).pathname === "/", { timeout: 5000 });
 
-    await page.goto(base + "/settings", { waitUntil: "networkidle" });
-    await page.waitForSelector("[data-settings-state='ready']", { timeout: 5000 }).catch(() => {});
-    const stored = await page
-      .locator("input[type='time']")
-      .inputValue()
-      .catch(() => null);
-    out.onboardingWrites = { briefTime: stored };
-    if (stored !== "06:15") {
-      floor.push(`onboarding asked for 06:15 and Settings shows ${stored}`);
+      await page.goto(base + "/settings", { waitUntil: "networkidle" });
+      await page
+        .waitForSelector("[data-settings-state='ready']", { timeout: 5000 })
+        .catch(() => {});
+      const chosenInSettings = await page
+        .locator(`[data-topic-key="${pickedKey}"][aria-pressed="true"]`)
+        .count()
+        .catch(() => 0);
+      out.onboardingWrites = { pickedKey, shownInSettings: chosenInSettings > 0 };
+      if (chosenInSettings < 1) {
+        floor.push(`onboarding picked "${pickedKey}" and Settings does not show it chosen`);
+      }
     }
     await context.close();
   }

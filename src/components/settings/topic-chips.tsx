@@ -34,6 +34,13 @@ export function TopicChips({
                 <button
                   key={topic.key}
                   type="button"
+                  // ADDRESSABLE BY KEY, for the browser checks. A chip was
+                  // previously identifiable only by its visible NAME, so a
+                  // script asserting "the topic picked at onboarding is shown
+                  // chosen in Settings" had to match on display copy — the
+                  // copy most likely to be reworded, after which the
+                  // assertion would pass by finding nothing.
+                  data-topic-key={topic.key}
                   aria-pressed={on}
                   onClick={() => onToggle(topic.key)}
                   className={cn(
