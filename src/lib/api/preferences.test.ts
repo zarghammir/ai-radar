@@ -1,14 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { BRIEF_LENGTHS, NOTIFICATION_CHANNELS } from "@/db/schema";
+import { BRIEF_LENGTHS } from "@/db/schema";
 import {
   BRIEF_LENGTH_LABELS,
   BRIEF_LENGTH_OPTIONS,
-  NOTIFICATION_LABELS,
-  NOTIFICATION_OPTIONS,
   OTHER_TOPIC_GROUP,
   TOPIC_GROUPS,
   asBriefLength,
-  asNotificationChannel,
   formatBriefTime,
   groupTopics,
 } from "@/lib/api/preferences";
@@ -26,48 +23,35 @@ describe("preference labels", () => {
       expect(BRIEF_LENGTH_LABELS[value]?.hint.trim(), `no hint for ${value}`).toBeTruthy();
     }
   });
+});
 
-  it("labels every notification channel the database can store", () => {
-    expect(NOTIFICATION_CHANNELS.length).toBe(3);
-    for (const value of NOTIFICATION_CHANNELS) {
-      expect(NOTIFICATION_LABELS[value]?.label.trim(), `no label for ${value}`).toBeTruthy();
-      expect(NOTIFICATION_LABELS[value]?.hint.trim(), `no hint for ${value}`).toBeTruthy();
-    }
-  });
+/**
+ * SURVIVES #189 ON PURPOSE. This assertion shared a test with the notification
+ * options, and deleting that test took this with it — a brief-length
+ * guarantee removed as collateral of a notifications change, which nothing
+ * would have reported: the file still passed, one promise lighter.
+ */
+it("offers exactly the stored brief lengths as options, in the database's order", () => {
+  expect(BRIEF_LENGTH_OPTIONS.map((o) => o.value)).toEqual([...BRIEF_LENGTHS]);
+});
 
-  it("offers exactly the stored values as options, in the database's order", () => {
-    expect(BRIEF_LENGTH_OPTIONS.map((o) => o.value)).toEqual([...BRIEF_LENGTHS]);
-    expect(NOTIFICATION_OPTIONS.map((o) => o.value)).toEqual([...NOTIFICATION_CHANNELS]);
-  });
-
-  it("asks for no address at all, and the route REFUSES one", async () => {
-    // #94 removed the email field: it stored an address for a feature that
-    // does not exist (#72), and on a shared instance that is one person's
-    // personal data served to the next person who opens Settings.
-    //
-    // Asserting the label no longer mentions an address would only prove the
-    // UI stopped asking. This drives the REAL schema, which is .strict(), so a
-    // client that still sends one is rejected rather than silently ignored —
-    // the difference between the field being gone and being hidden.
-    for (const option of NOTIFICATION_OPTIONS) {
-      expect(option, `${option.value} still declares an address flag`).not.toHaveProperty(
-        "needsEmail",
-      );
-    }
-    const { preferencesPatchSchema } = await import("@/api/reader");
-    expect(preferencesPatchSchema.safeParse({ email: "reader@example.com" }).success).toBe(false);
-    // The positive beside the negative: the schema still accepts what it should.
-    expect(preferencesPatchSchema.safeParse({ briefTime: "07:30" }).success).toBe(true);
-  });
+/**
+ * ALSO SURVIVES, for a different reason. It was written about an email
+ * address — the route must refuse one, because a field that is silently
+ * dropped is a preference the reader believes they set. Email is gone, the
+ * STRICTNESS is not: any unknown key must still be refused rather than
+ * ignored, and this is now the only test that says so.
+ */
+it("refuses an unknown key rather than ignoring it", async () => {
+  const { preferencesPatchSchema } = await import("@/api/reader");
+  expect(preferencesPatchSchema.safeParse({ email: "reader@example.com" }).success).toBe(false);
+  expect(preferencesPatchSchema.safeParse({ briefTime: "07:30" }).success).toBe(true);
 });
 
 describe("narrowing a stored value", () => {
   it("accepts what the database can hold and says it recognised it", () => {
     for (const value of BRIEF_LENGTHS) {
       expect(asBriefLength(value)).toEqual({ length: value, recognised: true });
-    }
-    for (const value of NOTIFICATION_CHANNELS) {
-      expect(asNotificationChannel(value)).toEqual({ channel: value, recognised: true });
     }
   });
 
@@ -78,7 +62,6 @@ describe("narrowing a stored value", () => {
     // minutes" while the database says something else.
     expect(asBriefLength("30")).toEqual({ length: "10", recognised: false });
     expect(asBriefLength("")).toEqual({ length: "10", recognised: false });
-    expect(asNotificationChannel("sms")).toEqual({ channel: "none", recognised: false });
   });
 });
 

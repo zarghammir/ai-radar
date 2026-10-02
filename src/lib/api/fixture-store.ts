@@ -149,7 +149,6 @@ export const FIXTURE_PREFERENCE_DEFAULTS: Preferences = {
   briefTime: "07:30",
   timezone: "UTC",
   briefLength: "10",
-  notificationChannel: "none",
   theme: "system",
   onboardedAt: null,
   updatedAt: "1970-01-01T00:00:00.000Z",

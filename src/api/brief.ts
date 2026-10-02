@@ -258,8 +258,10 @@ function arrivedSince(from: Date): SQL {
  * counted without noticing that the question itself was wrong. A screen can be
  * honest about what it checked and still be checking the wrong thing.
  *
- * `briefTime` keeps its real job — src/notify/run-brief.ts uses briefWindow to
- * decide when to SEND. It no longer decides what exists.
+ * `briefTime` ONCE HAD A SECOND JOB and no longer has either. It decided when
+ * the brief was SENT, and #189 removed sending entirely; it never decided what
+ * exists, which was the point of the change above. What remains is a label on
+ * the settings screen.
  *
  * RANKED, NOT CHRONOLOGICAL — the owner ruled it: "the 5 most important,
  * recent ones." He was offered strictly-newest and declined the consequence,
@@ -379,12 +381,14 @@ export function rankedSince(now: Date = new Date()): Date {
 }
 
 /**
- * The period the empty state talks about, plus the reader's delivery settings.
+ * The period the empty state talks about, plus the reader's brief settings.
  *
  * THIS IS NOT AN ADMISSION WINDOW. It replaces one, and the distinction is the
  * whole change: `from`/`to` describe what the app is REPORTING on, and
- * `briefTime`/`timezone` ride along because the reader's delivery setting is
- * worth showing next to it. Nothing here decides which stories exist.
+ * `briefTime`/`timezone` ride along because they are worth showing next to it.
+ * Nothing here decides which stories exist. They no longer schedule anything
+ * either — #189 removed delivery — so they are now labels rather than settings
+ * that act.
  *
  * `from` IS THE QUERY'S OWN CUTOFF, not a second number chosen to match it.
  * A report whose bounds do not bound the thing being measured is worse than a

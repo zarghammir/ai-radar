@@ -12,34 +12,6 @@ const OFF = {
   failed: 0,
 };
 const ON = { skipped: null, budgetAtStart: 20, attempted: 6, succeeded: 6, failed: 0 };
-const WAITING = {
-  outcome: "not-due" as const,
-  detail: "not yet 07:30 where the reader is",
-  localDay: "2026-09-26",
-  storyCount: 0,
-  attempted: 0,
-  delivered: 0,
-  failed: 0,
-};
-const NO_KEY = {
-  outcome: "not-due" as const,
-  detail: "NEXT_PUBLIC_VAPID_PUBLIC_KEY is not set",
-  localDay: "",
-  storyCount: 0,
-  attempted: 0,
-  delivered: 0,
-  failed: 0,
-};
-const SENT = {
-  outcome: "sent" as const,
-  detail: null,
-  localDay: "2026-09-26",
-  storyCount: 6,
-  attempted: 1,
-  delivered: 1,
-  failed: 0,
-};
-
 describe("withoutQuotedValues", () => {
   /**
    * The reason strings are written to name VARIABLES, not values — and exactly
@@ -69,15 +41,22 @@ describe("withoutQuotedValues", () => {
   });
 });
 
+/**
+ * ONE FEATURE, ONE LINE. These used to assert a second line for brief delivery
+ * beside each summaries line. #189 removed that feature, and the assertions went
+ * with it rather than being weakened to tolerate its absence — a test that
+ * stopped checking a second line while still passing two arguments would have
+ * kept passing through the whole removal.
+ */
 describe("summaryLines", () => {
   it("says OFF and names the variable to set", () => {
-    const [summaries] = summaryLines(OFF, WAITING);
+    const [summaries] = summaryLines(OFF);
     expect(summaries).toContain("summaries: OFF");
     expect(summaries).toContain("LLM_PROVIDER");
   });
 
   it("says ON with the counts when it ran", () => {
-    const [summaries] = summaryLines(ON, SENT);
+    const [summaries] = summaryLines(ON);
     expect(summaries).toContain("summaries: ON");
     expect(summaries).toContain("6 written");
   });
@@ -88,26 +67,13 @@ describe("summaryLines", () => {
    * that cries wolf is a line the reader stops reading — which is the failure
    * this whole report exists to avoid.
    */
-  it("distinguishes waiting for the brief time from being switched off", () => {
-    expect(summaryLines(OFF, WAITING)[1]).toContain("delivery: ON");
-    expect(summaryLines(OFF, NO_KEY)[1]).toContain("delivery: OFF");
-    expect(summaryLines(OFF, NO_KEY)[1]).toContain("VAPID");
-  });
-
   it("reports a thrown feature as ERROR rather than as off", () => {
-    const [summaries, delivery] = summaryLines(
-      { error: "database is unavailable" },
-      { error: "boom" },
-    );
+    const [summaries] = summaryLines({ error: "database is unavailable" });
     expect(summaries).toContain("summaries: ERROR");
-    expect(delivery).toContain("delivery: ERROR");
   });
 
   it("redacts a quoted value on its way into the report", () => {
-    const [summaries] = summaryLines(
-      { ...OFF, skipped: 'LLM_PROVIDER is "sk-secret-looking"' },
-      WAITING,
-    );
+    const [summaries] = summaryLines({ ...OFF, skipped: 'LLM_PROVIDER is "sk-secret-looking"' });
     expect(summaries).not.toContain("sk-secret-looking");
     expect(summaries).toContain("<value>");
   });
