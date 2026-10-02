@@ -65,8 +65,35 @@ export async function defaultBriefLength(): Promise<BriefLengthParam> {
   }
 }
 
-/** What the app opens on when the reader has never chosen. */
-export const DEFAULT_VIEW: BriefView = "built";
+/**
+ * What the app opens on when the reader has never chosen.
+ *
+ * "all" SINCE THE CATALOGUE CHANGED, and the change is in the catalogue rather
+ * than in anyone's taste. "built" admits MODEL, TOOL, RELEASE, PAPER and
+ * RESEARCH; it excludes NEWS, BUSINESS, DISCUSSION, TREND and REGULATION. That
+ * was a fair default when the sources were labs and release feeds.
+ *
+ * #181 added seven startup and venture feeds — Crunchbase, TechCrunch Venture,
+ * TechCrunch Startups, Sifted, Tech.eu, Y Combinator's blog and Product Hunt —
+ * and they produce almost nothing BUT news and business. Measured on production
+ * 2026-09-30: of the 23 stories that had arrived in the previous 24 hours, 20
+ * were NEWS, 2 BUSINESS and 1 RELEASE. On "built" a reader could see one of
+ * them. Seven sources were merged, seeded, fetched and ranked, and the default
+ * screen could not show their output by construction.
+ *
+ * So this is not "news is more interesting now". It is that the default was
+ * filtering out most of what the collector now collects, and a default that
+ * hides five sixths of a day's arrivals is reporting a quiet day that did not
+ * happen.
+ *
+ * THIS DOES NOT MAKE THE BRIEF FRESH, and it was not expected to. Ordering is
+ * by score, so the front of "all" is still led by whatever is most important
+ * rather than most recent — measured the same day, the top ten of "all" held
+ * nothing under 24 hours old. That is a separate question, it is about the
+ * structure gap rather than this filter, and #186 holds the measurements.
+ * Changing this constant without knowing that would buy a disappointment.
+ */
+export const DEFAULT_VIEW: BriefView = "all";
 
 /**
  * Which view Today opens on, read the way a SERVER component must.
