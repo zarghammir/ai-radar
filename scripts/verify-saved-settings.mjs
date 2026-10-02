@@ -139,10 +139,15 @@ try {
     // writes the answer it collected, and Settings shows it afterwards. Only the
     // answer is different. A topic is picked here and looked for there.
     await page.goto(base + "/welcome", { waitUntil: "networkidle" });
-    const firstTopic = page.locator("[data-topic-key]").first();
+    // A CHIP THAT IS NOT ALREADY ON. The chips are toggles and the seeded
+    // preferences arrive with topics already chosen, so clicking the first one
+    // TURNS IT OFF — and asserting it then shows as chosen fails for the right
+    // reason while telling you nothing about whether onboarding writes.
+    // Picking an unchosen one makes the click and the assertion agree.
+    const firstTopic = page.locator('[data-topic-key][aria-pressed="false"]').first();
     const pickedKey = await firstTopic.getAttribute("data-topic-key").catch(() => null);
     if (!pickedKey) {
-      floor.push("onboarding offered no topics to pick, so nothing could be written");
+      floor.push("onboarding offered no UNCHOSEN topic to pick, so nothing could be written");
     } else {
       await firstTopic.click();
       await page.getByRole("button", { name: /Start reading/i }).click();
