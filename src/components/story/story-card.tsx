@@ -86,7 +86,7 @@ export function StoryCardView({
             null everywhere, so every card is title-only, which is Option A and
             is a complete card on its own. As the summariser starts writing the
             field the lines appear underneath, story by story, with no further
-            change here. #191 is that work. */}
+            change here. #192 is that work. */}
         {story.oneLine ? (
           <p className="text-soft mt-1.5 text-[14px] leading-[1.45]">{story.oneLine}</p>
         ) : null}
