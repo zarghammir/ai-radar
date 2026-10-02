@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
-import { ContentTypeBadge, VerificationChip } from "@/components/story/badges";
 import { StoryActions } from "@/components/story/story-actions";
-import { alsoReportedBy, storyBody } from "@/lib/api/labels";
+import { CONTENT_TYPE_LABELS } from "@/lib/api/labels";
+import { alsoReportedBy } from "@/lib/api/labels";
 import type { StoryCard as Story } from "@/lib/api/types";
 import Link from "next/link";
 
@@ -33,7 +33,6 @@ export function StoryCardView({
   /** Sits below the actions. Used for the reader's note and tags. */
   footer?: ReactNode;
 }) {
-  const body = storyBody(story);
   const others = alsoReportedBy(story);
 
   return (
@@ -59,11 +58,6 @@ export function StoryCardView({
       </div>
 
       <div className="bg-paper text-ink mr-4 mb-3 flex-1 p-4 lg:mr-0">
-        <div className="mb-2 flex items-center gap-3">
-          <ContentTypeBadge type={story.contentType} />
-          <VerificationChip level={story.verification} />
-        </div>
-
         <h2
           className={
             lead
@@ -81,24 +75,31 @@ export function StoryCardView({
           </a>
         </h2>
 
-        {/* summary is null for every story until the Phase 2 summariser lands,
-            so this is the excerpt in practice. Rendering summary alone would
-            show an empty card for the whole brief. */}
-        {body ? <p className="text-soft mt-2 text-[15px] leading-[1.5]">{body}</p> : null}
+        {/* ONE LINE, OR NOTHING. The owner asked for "title and one line
+            summary" and the honest version of that is a line WRITTEN to be one,
+            not a paragraph cut to length — the first sentence of an arXiv
+            abstract reads "As robotic hardware and learning methods advance,
+            humanoids need tools to perform tasks beyond their inhere…", which
+            is worse than silence.
 
-        {/* Null until the summariser lands. The block is absent rather than
-            empty — a labelled heading over nothing is worse than no heading. */}
-        {story.whyItMatters ? (
-          <div className="border-faint mt-3 border-t pt-3">
-            <b className="font-label text-soft block text-[10.5px] font-bold tracking-[0.18em] uppercase">
-              Why it matters
-            </b>
-            <p className="mt-1 text-[14.5px] leading-[1.48]">{story.whyItMatters}</p>
-          </div>
+            So this renders story.oneLine and NOTHING ELSE. Today that field is
+            null everywhere, so every card is title-only, which is Option A and
+            is a complete card on its own. As the summariser starts writing the
+            field the lines appear underneath, story by story, with no further
+            change here. #191 is that work. */}
+        {story.oneLine ? (
+          <p className="text-soft mt-1.5 text-[14px] leading-[1.45]">{story.oneLine}</p>
         ) : null}
 
         <div className="text-meta mt-3 flex flex-wrap items-center gap-1.5 font-mono text-[10.5px] tabular-nums">
           <b className="text-ink font-bold">{story.primarySource.name}</b>
+          {/* THE TYPE SURVIVED THE BADGE. Both badges came off the card, but
+              only one of them was the owner's objection: "Primary source" is
+              gone for good. The content type still answers "is this a paper or
+              a funding round", which is the difference between two titles that
+              look alike, so it moved here as a word rather than a chip. */}
+          <span>·</span>
+          <span>{CONTENT_TYPE_LABELS[story.contentType]}</span>
           {/* NOTHING when one outlet is the only source, including when it filed
               twice. "+0 others" is a sentence about nothing. */}
           {others ? (
@@ -109,8 +110,6 @@ export function StoryCardView({
           ) : null}
           <span>·</span>
           <span>{detectedAt(story.firstSeenAt)}</span>
-          <span>·</span>
-          <span>{story.readingMinutes} min</span>
           {/* THE SECOND LINK, AND IT IS ABSENT RATHER THAN DISABLED (#84).
               The standing rule that a gated control stays visible and says why
               is for a control the reader could EARN — a thing they cannot do

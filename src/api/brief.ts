@@ -340,7 +340,40 @@ export async function recentStories(db: Db, options: BriefOptions = {}): Promise
     // BY SCORE, which is what "most important" means here, and which is
     // unchanged from before the window came out. Only the admission rule
     // changed; the ordering is the one the ranker already produces.
-    .orderBy(desc(stories.score), desc(stories.id))
+    /**
+     * NEWEST FIRST, THEN THE MOST IMPORTANT — the owner's words, 2026-10-02,
+     * ruling on what a single merged feed should do.
+     *
+     * Two keys, not one. The first bucket is whether a story arrived in the
+     * last 24 hours; the second is score. So today's arrivals lead the feed in
+     * their own importance order, and everything older follows in its own.
+     *
+     * WHY NOT PURE RECENCY. He was offered that in an earlier round and
+     * declined it: "the 5 most important, recent ones." A strict time sort
+     * pushes a major launch off the screen within the hour on the strength of
+     * newer trivia.
+     *
+     * WHY NOT PURE SCORE, WHICH IS WHAT THIS WAS. Measured 2026-09-30: zero of
+     * the top twenty carried anything from the previous day, because a
+     * corroborated launch scores around 66 and a single-source news item around
+     * 12–18, and the age decay cannot close that without inverting the ordering
+     * (#186 has the arithmetic). He opened the app on two consecutive days and
+     * saw the same stories. That is the defect this ruling answers.
+     *
+     * The bucket is 24 hours of ARRIVAL, matching the admission filter above,
+     * rather than publication — a paper published last week and fetched this
+     * morning is new to this reader, which is #148's sentence and the same
+     * clock this query already uses.
+     */
+    .orderBy(
+      desc(sql`exists (
+        select 1 from raw_items ri
+        where ri.story_id = ${stories.id}
+          and ri.fetched_at >= now() - interval '24 hours'
+      )`),
+      desc(stories.score),
+      desc(stories.id),
+    )
     .limit(BRIEF_CANDIDATE_LIMIT);
   return buildCards(db, rows);
 }
