@@ -37,7 +37,7 @@ async function saveNth(context, index) {
   if (landed !== "/") return { landed, savedId: null };
   const card = page.locator("article[data-story-id]").nth(index);
   const savedId = Number(await card.getAttribute("data-story-id"));
-  await card.getByRole("button", { name: /^Save$/ }).click();
+  await card.getByRole("button", { name: /^Save / }).click();
   await page.waitForTimeout(250);
   return { landed, savedId };
 }

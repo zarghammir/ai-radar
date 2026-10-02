@@ -75,7 +75,11 @@ export function StoryActions({ story }: { story: StoryCard }) {
         type="button"
         onClick={() => toggle("saved", !story.saved)}
         aria-pressed={story.saved}
-        aria-label={story.saved ? `Unsave ${story.title}` : `Save ${story.title}`}
+        // THE NAME DOES NOT CHANGE WITH THE STATE, aria-pressed does. That is
+        // the toggle-button pattern, and it is also what makes the button
+        // findable: a name that flips between "Save" and "Unsave" means every
+        // script and every reader has to know both to refer to one control.
+        aria-label={`Save ${story.title}`}
         title={story.saved ? "Saved" : "Save"}
         className={cn(
           "focus-visible:ring-org flex size-11 items-center justify-center rounded-xs focus-visible:ring-2 focus-visible:outline-none",

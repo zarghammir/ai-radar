@@ -59,7 +59,7 @@ export function RadarRow({ story }: { story: StoryCard }) {
         </a>
       </h2>
 
-      <div className="text-meta mt-1.5 flex flex-wrap items-center gap-1.5 font-mono text-[10.5px] tabular-nums">
+      <div className="text-meta mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[10.5px] tabular-nums">
         <b className="text-ink font-bold">{story.primarySource.name}</b>
         {others ? (
           <>
@@ -79,7 +79,7 @@ export function RadarRow({ story }: { story: StoryCard }) {
         <Link
           href={`/story/${story.slug}`}
           aria-label={`Sources for ${story.title}`}
-          className="focus-visible:ring-org rounded-xs underline underline-offset-2 hover:no-underline focus-visible:ring-2 focus-visible:outline-none"
+          className="focus-visible:ring-org inline-flex min-h-6 items-center rounded-xs px-1 underline underline-offset-2 hover:no-underline focus-visible:ring-2 focus-visible:outline-none"
         >
           Sources
         </Link>
@@ -91,7 +91,7 @@ export function RadarRow({ story }: { story: StoryCard }) {
               target="_blank"
               rel="noopener noreferrer"
               aria-label={`Discussion of ${story.title}`}
-              className="focus-visible:ring-org rounded-xs underline underline-offset-2 hover:no-underline focus-visible:ring-2 focus-visible:outline-none"
+              className="focus-visible:ring-org inline-flex min-h-6 items-center rounded-xs px-1 underline underline-offset-2 hover:no-underline focus-visible:ring-2 focus-visible:outline-none"
             >
               Discussion
             </a>
