@@ -1,10 +1,5 @@
-import { BRIEF_LENGTHS, NOTIFICATION_CHANNELS } from "@/db/schema";
-import type {
-  BriefLength,
-  BriefLengthParam,
-  NotificationChannel,
-  TopicSummary,
-} from "@/lib/api/types";
+import { BRIEF_LENGTHS } from "@/db/schema";
+import type { BriefLength, BriefLengthParam, TopicSummary } from "@/lib/api/types";
 
 /**
  * Total Records, like CONTENT_TYPE_LABELS: adding a value to the database
@@ -22,31 +17,10 @@ export const BRIEF_LENGTH_LABELS: Record<BriefLength, { label: string; hint: str
   all: { label: "Full brief", hint: "No time limit. Every story that passed the bar." },
 };
 
-export const NOTIFICATION_LABELS: Record<NotificationChannel, { label: string; hint: string }> = {
-  none: { label: "Nothing", hint: "Open the app when you want it. Nothing is sent to you." },
-  push: {
-    label: "A push notification",
-    hint: "On this device, once the brief is ready. You install the app first.",
-  },
-  email: {
-    // No "to the address below" any more: #94 removed the address field,
-    // because storing one for a feature that does not exist (#72) collects
-    // personal data for nothing. The address is asked for when there is
-    // something to send, by whatever identity model that feature needs.
-    label: "An email",
-    hint: "One message when the brief is ready. You will be asked where to send it when sending exists.",
-  },
-};
-
 /** Ordered options, derived from the Record so the two cannot disagree. */
 export const BRIEF_LENGTH_OPTIONS = BRIEF_LENGTHS.map((value) => ({
   value,
   ...BRIEF_LENGTH_LABELS[value],
-}));
-
-export const NOTIFICATION_OPTIONS = NOTIFICATION_CHANNELS.map((value) => ({
-  value,
-  ...NOTIFICATION_LABELS[value],
 }));
 
 /**
@@ -60,14 +34,6 @@ export const NOTIFICATION_OPTIONS = NOTIFICATION_CHANNELS.map((value) => ({
 export function asBriefLength(value: string): { length: BriefLengthParam; recognised: boolean } {
   const known = (BRIEF_LENGTHS as readonly string[]).includes(value);
   return { length: known ? (value as BriefLengthParam) : "10", recognised: known };
-}
-
-export function asNotificationChannel(value: string): {
-  channel: NotificationChannel;
-  recognised: boolean;
-} {
-  const known = (NOTIFICATION_CHANNELS as readonly string[]).includes(value);
-  return { channel: known ? (value as NotificationChannel) : "none", recognised: known };
 }
 
 /**

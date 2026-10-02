@@ -3,7 +3,6 @@
 import { useSyncExternalStore } from "react";
 import { BriefSection } from "@/components/settings/brief-section";
 import { InterestsSection } from "@/components/settings/interests-section";
-import { NotificationsSection } from "@/components/settings/notifications-section";
 import {
   getPreferencesSnapshot,
   getServerPreferencesSnapshot,
@@ -64,7 +63,6 @@ export function PreferenceSections({ topics }: { topics: TopicSummary[] | null }
     <div className="flex flex-col gap-4" data-settings-state="ready">
       <BriefSection preferences={state.preferences} />
       <InterestsSection preferences={state.preferences} topics={topics} />
-      <NotificationsSection preferences={state.preferences} />
     </div>
   );
 }

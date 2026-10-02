@@ -182,7 +182,8 @@ export function coverageLines(coverage: CoverageReport): string[] {
   // and that was correct for exactly one commit. The worker's call site catches
   // a throw and, before this arm, left `coverage` as null: so a database blip,
   // or reportingWindow raising on a stored timezone Intl cannot parse (a real
-  // path, guarded in src/notify/window.ts for the same reason), printed "seed
+  // path, which src/notify/window.ts guarded for the same reason before #189
+  // removed it), printed "seed
   // the database" at an instance that is seeded, while the actual reason went to
   // console.error — the log this file's own header says nobody opens.
   if (coverage !== null && "error" in coverage) {

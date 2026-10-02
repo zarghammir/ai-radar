@@ -148,7 +148,7 @@ export interface ApiError {
 /**
  * The reader's preferences, as /api/preferences returns them.
  *
- * `briefLength`, `notificationChannel` and `theme` are `string` and not their
+ * `briefLength` and `theme` are `string` and not their
  * unions ON PURPOSE. The write path validates them, but the columns are plain
  * text, so a value this build has never heard of can come back from a database
  * an older or newer build wrote. Typing them as the union here would be a
@@ -163,7 +163,6 @@ export interface Preferences {
   /** An IANA zone name, e.g. "America/Toronto". */
   timezone: string;
   briefLength: string;
-  notificationChannel: string;
   theme: string;
   /** Null until first-run onboarding finishes. The gate, and nothing else. */
   onboardedAt: string | null;
