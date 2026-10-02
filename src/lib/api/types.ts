@@ -41,6 +41,15 @@ export interface StoryCard {
   title: string;
   /** Null until the Phase 2 summariser lands. ALWAYS fall back to `excerpt`. */
   summary: string | null;
+  /**
+   * One sentence written to be one, for the line under the title.
+   *
+   * Null until the summariser writes it, and that is a COMPLETE state — the
+   * card renders title-only and is finished. Never substitute a truncated
+   * `summary`: that is where "As robotic hardware and learning methods advance,
+   * humanoids need tools to perform tasks beyond their inhere…" comes from.
+   */
+  oneLine: string | null;
   excerpt: string | null;
   /**
    * Null until the Phase 2 summariser lands. Added to StoryCard for issue #13:
