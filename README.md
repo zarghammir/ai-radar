@@ -12,6 +12,45 @@ each claim originally came from.
 
 Status: under construction, Phase 1. See `docs/` as it fills in.
 
+## Try it — no install, no account
+
+**[ai-radar-blue-delta.vercel.app](https://ai-radar-blue-delta.vercel.app)**
+
+Open it in any browser. There is nothing to sign up for and nothing to configure.
+
+It is a web app, so you can also keep it on your phone's home screen, where it
+opens fullscreen with no browser bar and still shows pages you have already
+opened when you have no signal.
+
+### Put it on an iPhone
+
+**It has to be Safari** — Chrome and Firefox on iOS cannot install web apps.
+
+1. Open the link above in **Safari**
+2. Tap the **Share** button — the square with an arrow, at the bottom
+3. Scroll down the list and tap **Add to Home Screen**
+4. Tap **Add**, top right
+
+### Put it on an Android phone
+
+1. Open the link above in **Chrome**
+2. Tap the **⋮** menu, top right
+3. Tap **Install app** — or **Add to Home screen** on older versions
+4. Tap **Install**
+
+Chrome often offers this by itself after a few seconds, as a bar along the
+bottom. Either way works.
+
+### What that demo is
+
+One shared instance that anyone can open. **What you save and what you hide stay
+in your own browser** and are not visible to anyone else, including whoever runs
+the instance. The settings — which topics are tracked, when the brief is cut —
+are shared by everyone looking at it, because this version has no accounts by
+design.
+
+Run your own copy and it is entirely yours. That is the rest of this page.
+
 ## Quick start (self-host)
 
 Needs **Docker**, and nothing else. The Node toolchain below is only for working
