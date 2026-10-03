@@ -10,19 +10,27 @@ import { brand } from "@/config/brand";
 import { cn } from "@/lib/utils";
 
 /**
- * NO NAVIGATION ON THE WELCOME SCREEN.
+ * THE TWO ROUTES THAT DRAW NO APP NAVIGATION, at either size.
  *
  * The owner, on first run: "remove the left sidebar today, radar, saved". He is
  * right, and not only on taste. First run is the one screen with a single thing
  * to do, and it was offering four ways to leave before the reader had any idea
  * what the four were — a nav bar is a map of a place you have not been shown.
  *
+ * /about is chromeless too, and for the opposite reason: it is the page a link
+ * in a post points at, read by someone who has never opened the app. A ⋯ menu
+ * offering a stranger their own saved pile, before they have anything in it, is
+ * chrome for a reader who does not exist yet. That page draws its own header —
+ * Source code, and Open the app — which are the two things a visitor wants.
+ *
  * HIDDEN HERE RATHER THAN IN THE LAYOUT, because the layout is a server
  * component and the route is only knowable on the client. The chrome already
  * reads the pathname to mark the current item, so this costs nothing new.
  */
+const CHROMELESS_PATHS = new Set<string>([WELCOME_PATH, "/about"]);
+
 function useChromeHidden() {
-  return usePathname() === WELCOME_PATH;
+  return CHROMELESS_PATHS.has(usePathname());
 }
 
 /**

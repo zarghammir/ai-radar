@@ -25,7 +25,7 @@ const AXE = readFileSync(require.resolve("axe-core/axe.min.js"), "utf8");
 // view control now, not destinations. Sweeping a deleted route would 404 and
 // the landing-path floor would report it as landing somewhere else, which is
 // true but unhelpful.
-const ROUTES = ["/", "/radar", "/saved", "/settings", "/welcome"];
+const ROUTES = ["/", "/about", "/radar", "/saved", "/settings", "/welcome"];
 
 /**
  * The reader this audit drives: someone who has finished onboarding and has
@@ -398,7 +398,7 @@ const laptopStatesWithBar = Object.entries(report.bottomBar).filter(
  * sweep walks, so adding a route moves both numbers together. A hardcoded 8 here
  * would go quietly wrong the next time ROUTES changes.
  */
-const CHROMELESS_ROUTES = ["/welcome"];
+const CHROMELESS_ROUTES = ["/welcome", "/about"];
 /** Every phone state the sweep VISITS. */
 const expectedPhoneStates = ROUTES.length * THEMES.length;
 /** Of those, the ones that should be DRAWING a bottom bar. */
