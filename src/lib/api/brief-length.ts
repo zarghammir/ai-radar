@@ -66,7 +66,27 @@ export async function defaultBriefLength(): Promise<BriefLengthParam> {
 }
 
 /**
- * What the app opens on when the reader has never chosen.
+ * WHAT THE WORKER MEASURES THE READER'S COVERAGE AGAINST — and no longer what
+ * the page opens on, which is the part of this comment that went stale.
+ *
+ * WHEN IT CHANGED HANDS. This was written to fix the DEFAULT the Today page
+ * read. #191 then landed first and removed the view control entirely on the
+ * owner's ruling — "remove launches + news tab… just want one feed" — so
+ * src/app/page.tsx now takes `parseView(params.view) ?? "all"` and never reads
+ * this constant at all.
+ *
+ * THAT DID NOT MAKE THIS CHANGE UNNECESSARY, which is what I assumed when I
+ * recommended closing this PR, and I was wrong. The constant has exactly one
+ * live consumer left: src/worker/brief-coverage.ts, which reports summary
+ * coverage "on the view he opens". With this still at "built" the worker
+ * reports against five of ten content types while the app serves all ten — a
+ * figure about a screen nobody can reach any more, printed every pass, next to
+ * a correct one and indistinguishable from it.
+ *
+ * So the fix is the same fix and the reason is now a different one: it keeps
+ * the worker's report describing the page that actually exists.
+ *
+ * ── WHY "all" WAS RIGHT IN THE FIRST PLACE ─────────────────────────────────
  *
  * "all" SINCE THE CATALOGUE CHANGED, and the change is in the catalogue rather
  * than in anyone's taste. "built" admits MODEL, TOOL, RELEASE, PAPER and
@@ -86,12 +106,17 @@ export async function defaultBriefLength(): Promise<BriefLengthParam> {
  * hides five sixths of a day's arrivals is reporting a quiet day that did not
  * happen.
  *
- * THIS DOES NOT MAKE THE BRIEF FRESH, and it was not expected to. Ordering is
- * by score, so the front of "all" is still led by whatever is most important
- * rather than most recent — measured the same day, the top ten of "all" held
- * nothing under 24 hours old. That is a separate question, it is about the
- * structure gap rather than this filter, and #186 holds the measurements.
- * Changing this constant without knowing that would buy a disappointment.
+ * THIS DOES NOT MAKE THE BRIEF FRESH, and it was not expected to. When this was
+ * written, ordering was by score alone, so the front of "all" was still led by
+ * whatever was most important rather than most recent — measured the same day,
+ * the top ten of "all" held nothing under 24 hours old. #186 holds those
+ * measurements and the reason the age half-life cannot fix it.
+ *
+ * THAT HALF IS NOW SOLVED ELSEWHERE, and the fact is dated rather than deleted
+ * because both halves are worth keeping: #191 added a fresh-first ordering, and
+ * on 2026-10-03 the live top five were 3.1h to 13.7h old, all under a day. So
+ * the sentence above describes why this constant alone was never going to be
+ * enough — not a property the app still has.
  */
 export const DEFAULT_VIEW: BriefView = "all";
 
