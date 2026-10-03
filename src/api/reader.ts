@@ -1,14 +1,7 @@
 import { desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Db } from "@/db/client";
-import {
-  NOTIFICATION_CHANNELS,
-  readState,
-  savedItems,
-  stories,
-  topics,
-  userPreferences,
-} from "@/db/schema";
+import { readState, savedItems, stories, topics, userPreferences } from "@/db/schema";
 import { ApiError } from "./http";
 import { buildCards, type StoryCard } from "./stories";
 
@@ -168,7 +161,6 @@ export interface Preferences {
   topicKeys: string[];
   briefTime: string;
   timezone: string;
-  notificationChannel: string;
   updatedAt: string;
 }
 
@@ -177,7 +169,6 @@ export const preferencesPatchSchema = z
     topicKeys: z.array(z.string().min(1)).max(100),
     briefTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "briefTime must be HH:MM"),
     timezone: z.string().min(1),
-    notificationChannel: z.enum(NOTIFICATION_CHANNELS),
   })
   .partial()
   .strict();
@@ -189,7 +180,6 @@ const DEFAULTS = {
   // `as const` because these columns are typed to their own value sets; a
   // widened string does not satisfy them.
   briefLength: "10" as const,
-  notificationChannel: "none" as const,
   theme: "system",
   onboardedAt: null,
 };
@@ -199,7 +189,6 @@ function serialise(row: typeof userPreferences.$inferSelect): Preferences {
     topicKeys: row.topicKeys,
     briefTime: row.briefTime,
     timezone: row.timezone,
-    notificationChannel: row.notificationChannel,
     updatedAt: row.updatedAt.toISOString(),
   };
 }

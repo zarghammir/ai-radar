@@ -1,6 +1,5 @@
 import { appendFileSync } from "node:fs";
 import type { SummaryRunResult } from "@/llm/run-summaries";
-import type { BriefRunResult } from "@/notify/run-brief";
 
 /**
  * One line per optional feature, where the owner will actually see it.
@@ -32,10 +31,7 @@ export function withoutQuotedValues(text: string): string {
 }
 
 /** `summaries: OFF — LLM_PROVIDER is none` and the like. */
-export function summaryLines(
-  summaries: SummaryRunResult | { error: string },
-  brief: BriefRunResult | { error: string },
-): string[] {
+export function summaryLines(summaries: SummaryRunResult | { error: string }): string[] {
   const lines: string[] = [];
 
   if ("error" in summaries) {
@@ -44,27 +40,15 @@ export function summaryLines(
     lines.push(`- **summaries: OFF** — ${withoutQuotedValues(summaries.skipped)}`);
   } else {
     lines.push(
-      `- **summaries: ON** — ${summaries.succeeded} written, ${summaries.failed} failed, ${summaries.budgetAtStart} of today's budget available at the start`,
+      `- **summaries: ON** — ${summaries.succeeded} written, ${summaries.failed} failed, ${summaries.passBudget} allowed this pass of ${summaries.budgetAtStart} left today`,
     );
   }
 
-  if ("error" in brief) {
-    lines.push(`- **delivery: ERROR** — ${withoutQuotedValues(brief.error)}`);
-  } else if (brief.outcome === "not-due") {
-    // "not yet 07:30" is the normal state on most passes and is not an OFF.
-    // Reporting it as off would train the reader to ignore the line.
-    const detail = brief.detail ?? "no reason recorded";
-    const waiting = detail.startsWith("not yet");
-    lines.push(
-      waiting
-        ? `- **delivery: ON** — waiting for the brief time (${withoutQuotedValues(detail)})`
-        : `- **delivery: OFF** — ${withoutQuotedValues(detail)}`,
-    );
-  } else {
-    lines.push(
-      `- **delivery: ${brief.outcome.toUpperCase()}** — ${brief.delivered} delivered, ${brief.failed} failed, ${brief.storyCount} stories`,
-    );
-  }
+  // NO DELIVERY LINE SINCE #189. This function used to report a second
+  // optional feature beside summaries, and dropping its parameter rather than
+  // passing a permanent "off" is the point: an OFF line is a claim that the
+  // feature exists and is switched off, which would be false and would keep
+  // inviting someone to go looking for the switch.
 
   return lines;
 }

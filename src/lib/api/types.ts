@@ -41,6 +41,15 @@ export interface StoryCard {
   title: string;
   /** Null until the Phase 2 summariser lands. ALWAYS fall back to `excerpt`. */
   summary: string | null;
+  /**
+   * One sentence written to be one, for the line under the title.
+   *
+   * Null until the summariser writes it, and that is a COMPLETE state — the
+   * card renders title-only and is finished. Never substitute a truncated
+   * `summary`: that is where "As robotic hardware and learning methods advance,
+   * humanoids need tools to perform tasks beyond their inhere…" comes from.
+   */
+  oneLine: string | null;
   excerpt: string | null;
   /**
    * Null until the Phase 2 summariser lands. Added to StoryCard for issue #13:
@@ -148,7 +157,7 @@ export interface ApiError {
 /**
  * The reader's preferences, as /api/preferences returns them.
  *
- * `briefLength`, `notificationChannel` and `theme` are `string` and not their
+ * `briefLength` and `theme` are `string` and not their
  * unions ON PURPOSE. The write path validates them, but the columns are plain
  * text, so a value this build has never heard of can come back from a database
  * an older or newer build wrote. Typing them as the union here would be a
@@ -163,7 +172,6 @@ export interface Preferences {
   /** An IANA zone name, e.g. "America/Toronto". */
   timezone: string;
   briefLength: string;
-  notificationChannel: string;
   theme: string;
   /** Null until first-run onboarding finishes. The gate, and nothing else. */
   onboardedAt: string | null;

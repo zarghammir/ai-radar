@@ -258,8 +258,10 @@ function arrivedSince(from: Date): SQL {
  * counted without noticing that the question itself was wrong. A screen can be
  * honest about what it checked and still be checking the wrong thing.
  *
- * `briefTime` keeps its real job — src/notify/run-brief.ts uses briefWindow to
- * decide when to SEND. It no longer decides what exists.
+ * `briefTime` ONCE HAD A SECOND JOB and no longer has either. It decided when
+ * the brief was SENT, and #189 removed sending entirely; it never decided what
+ * exists, which was the point of the change above. What remains is a label on
+ * the settings screen.
  *
  * RANKED, NOT CHRONOLOGICAL — the owner ruled it: "the 5 most important,
  * recent ones." He was offered strictly-newest and declined the consequence,
@@ -338,7 +340,40 @@ export async function recentStories(db: Db, options: BriefOptions = {}): Promise
     // BY SCORE, which is what "most important" means here, and which is
     // unchanged from before the window came out. Only the admission rule
     // changed; the ordering is the one the ranker already produces.
-    .orderBy(desc(stories.score), desc(stories.id))
+    /**
+     * NEWEST FIRST, THEN THE MOST IMPORTANT — the owner's words, 2026-10-02,
+     * ruling on what a single merged feed should do.
+     *
+     * Two keys, not one. The first bucket is whether a story arrived in the
+     * last 24 hours; the second is score. So today's arrivals lead the feed in
+     * their own importance order, and everything older follows in its own.
+     *
+     * WHY NOT PURE RECENCY. He was offered that in an earlier round and
+     * declined it: "the 5 most important, recent ones." A strict time sort
+     * pushes a major launch off the screen within the hour on the strength of
+     * newer trivia.
+     *
+     * WHY NOT PURE SCORE, WHICH IS WHAT THIS WAS. Measured 2026-09-30: zero of
+     * the top twenty carried anything from the previous day, because a
+     * corroborated launch scores around 66 and a single-source news item around
+     * 12–18, and the age decay cannot close that without inverting the ordering
+     * (#186 has the arithmetic). He opened the app on two consecutive days and
+     * saw the same stories. That is the defect this ruling answers.
+     *
+     * The bucket is 24 hours of ARRIVAL, matching the admission filter above,
+     * rather than publication — a paper published last week and fetched this
+     * morning is new to this reader, which is #148's sentence and the same
+     * clock this query already uses.
+     */
+    .orderBy(
+      desc(sql`exists (
+        select 1 from raw_items ri
+        where ri.story_id = ${stories.id}
+          and ri.fetched_at >= now() - interval '24 hours'
+      )`),
+      desc(stories.score),
+      desc(stories.id),
+    )
     .limit(BRIEF_CANDIDATE_LIMIT);
   return buildCards(db, rows);
 }
@@ -379,12 +414,14 @@ export function rankedSince(now: Date = new Date()): Date {
 }
 
 /**
- * The period the empty state talks about, plus the reader's delivery settings.
+ * The period the empty state talks about, plus the reader's brief settings.
  *
  * THIS IS NOT AN ADMISSION WINDOW. It replaces one, and the distinction is the
  * whole change: `from`/`to` describe what the app is REPORTING on, and
- * `briefTime`/`timezone` ride along because the reader's delivery setting is
- * worth showing next to it. Nothing here decides which stories exist.
+ * `briefTime`/`timezone` ride along because they are worth showing next to it.
+ * Nothing here decides which stories exist. They no longer schedule anything
+ * either — #189 removed delivery — so they are now labels rather than settings
+ * that act.
  *
  * `from` IS THE QUERY'S OWN CUTOFF, not a second number chosen to match it.
  * A report whose bounds do not bound the thing being measured is worse than a

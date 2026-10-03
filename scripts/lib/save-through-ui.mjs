@@ -33,7 +33,7 @@ export async function saveThroughUi(context, base, marks) {
     const card = page.locator("article[data-story-id]").nth(index);
     if ((await card.count()) === 0) break;
     const id = Number(await card.getAttribute("data-story-id"));
-    const button = card.getByRole("button", { name: /^Save$/ });
+    const button = card.getByRole("button", { name: /^Save / });
     if ((await button.count()) === 0) continue;
     await button.click();
     await page.waitForTimeout(120);

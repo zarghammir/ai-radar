@@ -31,6 +31,7 @@ export interface StoryCard {
   slug: string;
   title: string;
   summary: string | null;
+  oneLine: string | null;
   /**
    * On the card as well as the detail: Today shows it in a list, and a client
    * cannot fetch one story's detail per row to get it. Null on every story
@@ -256,6 +257,7 @@ export async function buildCards(db: Db, storyRows: StoryRow[]): Promise<StoryCa
       slug: s.slug,
       title: s.title,
       summary: s.summary,
+      oneLine: s.oneLine,
       whyItMatters: s.whyItMatters,
       excerpt,
       url: primary?.url ?? null,

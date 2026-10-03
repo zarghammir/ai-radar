@@ -93,13 +93,19 @@ const huggingface: SourceRef = {
   homepage: "https://huggingface.co/papers",
 };
 
-type Seed = Omit<StoryCard, "summary" | "whyItMatters" | "saved" | "read"> &
+type Seed = Omit<StoryCard, "summary" | "oneLine" | "whyItMatters" | "saved" | "read"> &
   Partial<Pick<StoryCard, "summary" | "whyItMatters" | "saved" | "read">>;
 
 /** Phase 1 reality applied once, so no fixture can quietly pretend otherwise. */
 function story(seed: Seed): StoryCard {
   return {
     summary: null,
+    // ALWAYS null, and deliberately NOT overridable the way summary is — it is
+    // absent from Seed entirely. A fixture that invented a one-line summary
+    // would be the only place in the app where one exists, so every screenshot
+    // taken from fixtures would show a card the real database cannot produce
+    // yet, and the gap would be discovered in production rather than here.
+    oneLine: null,
     whyItMatters: null,
     saved: false,
     read: false,

@@ -3,6 +3,7 @@ import {
   buildPrompt,
   extractJson,
   MAX_ITEMS_IN_PROMPT,
+  MAX_ONE_LINE_CHARS,
   parseSummary,
   UnusableSummaryError,
 } from "./summarize";
@@ -103,5 +104,77 @@ describe("buildPrompt", () => {
       items: [{ title: "a", excerpt: null, sourceName: "S" }],
     });
     expect(prompt).toContain("(no excerpt)");
+  });
+});
+
+/**
+ * The one-line summary — #192. The card has rendered a slot for it since #191
+ * and nothing wrote it, so every story on the owner's screen is title-only.
+ */
+describe("the one-line summary", () => {
+  const withLine = JSON.stringify({
+    summary: "OpenAI released GPT-6.1 Sol. It is cheaper than Astra and scores close to it.",
+    whyItMatters: "A cheaper model at nearly the same quality changes what teams can afford.",
+    keyPoints: ["Cheaper", "Close to Astra"],
+    oneLine: "OpenAI shipped a cheaper model that nearly matches its best one.",
+  });
+
+  it("is kept when the model writes one", () => {
+    expect(parseSummary(withLine).oneLine).toBe(
+      "OpenAI shipped a cheaper model that nearly matches its best one.",
+    );
+  });
+
+  /**
+   * THE DEGRADATION GUARANTEE, and the reason the field is optional.
+   *
+   * 23% of the production feed carries a summary today. If a model that ignores
+   * one newly added instruction produced an invalid response, this change would
+   * take that 23% to zero — trading a missing line for missing summaries. A
+   * reply without the field has to stay a usable reply.
+   */
+  it("is absent, not fatal, when the model ignores the instruction", () => {
+    const parsed = parseSummary(good);
+    expect(parsed.oneLine).toBeUndefined();
+    expect(parsed.summary).toBe("A model was released.");
+    expect(parsed.keyPoints).toHaveLength(2);
+  });
+
+  it("is refused when it is long enough to defeat the point", () => {
+    const tooLong = JSON.stringify({
+      summary: "A model was released.",
+      whyItMatters: "It is cheaper.",
+      keyPoints: ["Cheaper"],
+      oneLine: "x".repeat(MAX_ONE_LINE_CHARS + 1),
+    });
+    expect(() => parseSummary(tooLong)).toThrow(UnusableSummaryError);
+  });
+
+  it("is refused when it is present but empty", () => {
+    const blank = JSON.stringify({
+      summary: "A model was released.",
+      whyItMatters: "It is cheaper.",
+      keyPoints: ["Cheaper"],
+      oneLine: "   ",
+    });
+    expect(() => parseSummary(blank)).toThrow(UnusableSummaryError);
+  });
+
+  /**
+   * The prompt has to ask for a WRITTEN sentence. Asking for "the first
+   * sentence of the summary" is what produces the defect the column exists to
+   * avoid — "As robotic hardware and learning methods advance, humanoids need
+   * tools to perform tasks beyond their inhere…" — so the instruction against
+   * reuse is asserted rather than assumed to have survived an edit.
+   */
+  it("is asked for as its own sentence, not a slice of the summary", () => {
+    const prompt = buildPrompt({
+      id: 1,
+      title: "A model was released",
+      items: [{ title: "Release notes", excerpt: "It is cheaper.", sourceName: "OpenAI" }],
+    });
+    expect(prompt).toContain("oneLine");
+    expect(prompt).toMatch(/NOT be the first sentence of your summary/);
+    expect(prompt).toContain('"oneLine": "one sentence"');
   });
 });
