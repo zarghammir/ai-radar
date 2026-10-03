@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { MoreHorizontal } from "lucide-react";
-import { HOME_HREF, menuItems } from "@/config/nav";
+import { HOME_HREF, bottomNavItems, menuItems } from "@/config/nav";
 import { WELCOME_PATH } from "@/components/onboarding/first-run-gate";
 import { brand } from "@/config/brand";
 import { cn } from "@/lib/utils";
@@ -26,16 +26,19 @@ function useChromeHidden() {
 }
 
 /**
- * THE WHOLE NAVIGATION, AT EVERY WIDTH: the brand mark, and a ⋯ button holding
- * the two surfaces that are not the feed.
+ * THE LAPTOP NAVIGATION: the brand mark, and a ⋯ button holding the two
+ * surfaces that are not the feed. It replaces the 248px sidebar.
  *
- * WHAT THIS REPLACED. A 248px sidebar on desktop and a four-tab bar fixed to
- * the bottom on phones — two components, two lists, two sets of states to keep
- * in step, for an app the owner has now reduced to one feed. His words:
- * "remove left sidebar don't ned it maybe a mini dropdown that has saved and
- * settings in it". The phone bar goes with it, deliberately: it cost about 64px
- * of every screen to offer four tabs, two of which were the page you were
- * already on and a feed ordered the same way as this one.
+ * LAPTOP ONLY, BY A REAL CSS MEDIA QUERY — `hidden lg:block`, not a class
+ * toggled in JavaScript. The phone keeps the bottom bar below it, unchanged,
+ * which is the owner's ruling of 2026-10-03: "For the phone, you need to keep
+ * the sidebar, but for the tab for the laptop view, you can remove it… Keep it
+ * as it is." An earlier build of this change removed the phone bar too, on my
+ * own reasoning that it cost 64px of every screen; he looked at it and said no,
+ * and he is the one holding the phone.
+ *
+ * So a phone sees exactly what it saw before — no top bar, the same four tabs
+ * — and a laptop loses a rail and gains a button.
  *
  * IT IS A <details>, NOT A JAVASCRIPT MENU, and that is the point. The feed
  * renders on the server and reads without JavaScript; a dropdown built from
@@ -104,7 +107,7 @@ export function AppChrome() {
   return (
     <header
       data-app-chrome="true"
-      className="bg-sidebar border-edge sticky top-0 z-40 border-b pt-[env(safe-area-inset-top)]"
+      className="bg-sidebar border-edge sticky top-0 z-40 hidden border-b pt-[env(safe-area-inset-top)] lg:block"
     >
       {/* The horizontal padding matches PageShell's, so the brand sits on the
           same line as the page title under it rather than near it. */}
@@ -165,5 +168,59 @@ export function AppChrome() {
         </details>
       </nav>
     </header>
+  );
+}
+
+/**
+ * THE PHONE NAVIGATION. Shown only below lg, by media query. It carries EVERY
+ * surface in `navItems`, whatever that list currently holds — it IS that list,
+ * not a filtered copy of it, which is what keeps this true as the list changes.
+ *
+ * UNCHANGED BY #195, deliberately. The chrome above replaces the sidebar, which
+ * was already `display:none` here, so nothing about this component moves. The
+ * one thing to know is that the two bars are no longer mirrors of each other:
+ * this one carries Radar and the ⋯ menu does not. See the comment on
+ * `menuItems` for why that gap is being left open rather than closed.
+ */
+export function BottomNav() {
+  const pathname = usePathname();
+  const isCurrent = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
+  const hidden = useChromeHidden();
+  if (hidden) return null;
+  return (
+    <nav
+      aria-label="Main"
+      className="bg-sidebar border-edge fixed inset-x-0 bottom-0 z-40 flex border-t pb-[env(safe-area-inset-bottom)] lg:hidden"
+    >
+      {bottomNavItems.map((item) => {
+        const current = isCurrent(item.href);
+        const Icon = item.icon;
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            aria-current={current ? "page" : undefined}
+            className={cn(
+              "focus-visible:ring-org relative flex min-w-0 flex-1 flex-col items-center gap-1 px-0.5 py-2.5 focus-visible:ring-2 focus-visible:outline-none",
+              current ? "text-ash-hi" : "text-ash",
+            )}
+          >
+            <span
+              aria-hidden
+              className={cn("absolute top-0 h-[3px] w-7", current ? "bg-org" : "bg-transparent")}
+            />
+            <Icon aria-hidden className="size-5 shrink-0" />
+            <span
+              className={cn(
+                "font-label w-full truncate text-center text-[10.5px] tracking-[0.04em]",
+                current ? "font-bold" : "font-semibold",
+              )}
+            >
+              {item.label}
+            </span>
+          </Link>
+        );
+      })}
+    </nav>
   );
 }
