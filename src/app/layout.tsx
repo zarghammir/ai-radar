@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { brand } from "@/config/brand";
 import { ThemeScript } from "@/components/theme-script";
-import { BottomNav, Sidebar } from "@/components/app-nav";
+import { AppChrome } from "@/components/app-chrome";
 import { ServiceWorkerRegistrar } from "@/components/service-worker";
 import { FirstRunGate } from "@/components/onboarding/first-run-gate";
 import "./globals.css";
@@ -305,20 +305,14 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         >
           Skip to content
         </a>
-        <div className="flex min-h-full flex-1">
-          <Sidebar />
-          {/* The bottom bar is fixed and adds env(safe-area-inset-bottom) to its
-              own height, so flat padding leaves content under it on a
-              home-indicator phone. Headless Chromium reports the inset as 0,
-              so no test here can see the difference. UNVERIFIED ON HARDWARE. */}
-          <main
-            id="main"
-            className="min-w-0 flex-1 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-0"
-          >
-            {children}
-          </main>
-        </div>
-        <BottomNav />
+        <AppChrome />
+        {/* The bottom bar that used to sit here is gone with the sidebar, so the
+            only inset left to clear is the home indicator itself. Headless
+            Chromium reports every inset as 0, so no test here can see the
+            difference. UNVERIFIED ON HARDWARE. */}
+        <main id="main" className="min-w-0 flex-1 pb-[env(safe-area-inset-bottom)]">
+          {children}
+        </main>
         <ServiceWorkerRegistrar />
         {/* Renders nothing. Sends a reader who has never been here to the
             welcome screen — from any page, and never on a failed read. */}
