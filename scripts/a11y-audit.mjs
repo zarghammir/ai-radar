@@ -104,6 +104,20 @@ const SIZES = [
 // under test, so a count read from the same config the bar renders from would
 // agree with it however wrong both were.
 const EXPECTED_TABS = 4;
+/**
+ * Two, since #195 put a ⋯ menu where the sidebar was: Saved and Settings.
+ * Asserted rather than derived, for the same reason EXPECTED_TABS is — the
+ * menu's geometry is the thing under test, and a count read from the config the
+ * menu renders from would agree with it however wrong both were.
+ */
+const EXPECTED_MENU_ITEMS = 2;
+/**
+ * The product's tap target, not the standard's. axe's target-size rule passes
+ * at 24px; the ⋯ button is built at 44px because on a laptop it is the only
+ * navigation there is. Asserting the product's figure means a change that
+ * quietly shrinks it to 28px fails here instead of passing axe.
+ */
+const MIN_TAP_TARGET = 44;
 const THEMES = ["light", "dark"];
 
 import { launchBrowser, requireServer } from "./lib/browser.mjs";
@@ -123,6 +137,7 @@ const report = {
   overflow: [],
   nav: {},
   bottomBar: {},
+  chrome: {},
   seeded: {},
   filledBins: {},
 };
@@ -218,6 +233,78 @@ try {
         report.bottomBar[`${size.name}/${theme}${route}`] = bar ?? { present: false };
 
         /**
+         * THE LAPTOP CHROME: the brand mark, and the ⋯ button holding Saved and
+         * Settings. It is `hidden lg:block`, so it belongs in exactly the laptop
+         * states — the mirror of the bar above, and asserted the same way.
+         *
+         * IT IS MEASURED OPEN, AND LEFT OPEN FOR axe. A dropdown that renders is
+         * not a dropdown that works. The panel is absolutely positioned and
+         * anchored to the right edge, which is exactly the arrangement that puts
+         * items off the side of a screen while every selector still finds them.
+         * Leaving it open afterwards is what gets its links, contrast and
+         * labelling into the axe scan at all: a closed <details> is display:none,
+         * and a scan of a closed menu reports zero violations for a surface it
+         * never looked at. That is not hypothetical — the first build of this
+         * component failed contrast in 8 of 8 dark states, on text nobody could
+         * have seen with the menu shut.
+         *
+         * Overflow is re-read WHILE OPEN, because an absolutely positioned panel
+         * can push the document sideways in a state the earlier closed read
+         * cannot see.
+         */
+        const chrome = await page.evaluate(async () => {
+          const header = document.querySelector("header[data-app-chrome='true']");
+          if (!header) return null;
+          if (getComputedStyle(header).display === "none") return null;
+
+          const viewport = document.documentElement.clientWidth;
+          const box = (el) => {
+            const r = el.getBoundingClientRect();
+            return {
+              width: Math.round(r.width * 10) / 10,
+              height: Math.round(r.height * 10) / 10,
+            };
+          };
+
+          const brand = header.querySelector("a span:last-child");
+          const button = header.querySelector("[data-chrome-menu-button='true']");
+          const details = button ? button.closest("details") : null;
+          if (!button || !details) return { present: true, openable: false, viewport };
+
+          details.open = true;
+          // One frame, so the panel is laid out before it is measured.
+          await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+
+          const menu = header.querySelector("[data-chrome-menu='true']");
+          const items = (menu ? [...menu.querySelectorAll("a")] : []).map((a) => {
+            const r = a.getBoundingClientRect();
+            return {
+              text: (a.textContent || "").trim(),
+              ...box(a),
+              clipped: a.scrollWidth - a.clientWidth,
+              offLeft: Math.round(Math.min(0, r.left) * 10) / 10,
+              offRight: Math.round(Math.max(0, r.right - viewport) * 10) / 10,
+            };
+          });
+
+          return {
+            present: true,
+            openable: true,
+            viewport,
+            chromeOverflow: header.scrollWidth - header.clientWidth,
+            brandClipped: brand ? brand.scrollWidth - brand.clientWidth : null,
+            button: box(button),
+            buttonName: button.getAttribute("aria-label"),
+            itemCount: items.length,
+            items,
+            menuOverflow: menu ? menu.scrollWidth - menu.clientWidth : null,
+            docOverflowWhileOpen:
+              document.documentElement.scrollWidth - document.documentElement.clientWidth,
+          };
+        });
+        report.chrome[`${size.name}/${theme}${route}`] = chrome ?? { present: false };
+
+        /**
          * The audit's OWN floor, route by route: a page that landed somewhere
          * else, or a Saved screen that came up empty, scans clean while
          * proving nothing. Recorded for every route so the absence is visible
@@ -241,8 +328,10 @@ try {
           };
           const navs = [...document.querySelectorAll("nav[aria-label='Main']")];
           return {
-            sidebar: navs.some((n) => visible(n) && n.className.includes("lg:flex")),
             bottom: navs.some((n) => visible(n) && n.className.includes("lg:hidden")),
+            chrome: [...document.querySelectorAll("header[data-app-chrome='true']")].filter(visible)
+              .length,
+            menuOpen: !!document.querySelector("header[data-app-chrome='true'] details[open]"),
             current: document.querySelectorAll("[aria-current='page']").length,
             main: document.querySelectorAll("main#main").length,
             skipLink: !!document.querySelector("a[href='#main']"),
@@ -314,6 +403,17 @@ const CHROMELESS_ROUTES = ["/welcome"];
 const expectedPhoneStates = ROUTES.length * THEMES.length;
 /** Of those, the ones that should be DRAWING a bottom bar. */
 const expectedBarStates = (ROUTES.length - CHROMELESS_ROUTES.length) * THEMES.length;
+/**
+ * And the laptop's mirror of it. The chrome is `hidden lg:block`, so it belongs
+ * in exactly the laptop states, minus the same chromeless routes — THE SAME
+ * SUBTRACTION, because the rule is about the route and not about the width: a
+ * screen that should offer no navigation offers none at either size.
+ */
+const expectedChromeStates = (ROUTES.length - CHROMELESS_ROUTES.length) * THEMES.length;
+const measuredChrome = Object.values(report.chrome).filter((c) => c.present !== false);
+const phoneStatesWithChrome = Object.entries(report.chrome).filter(
+  ([k, c]) => k.startsWith("phone/") && c.present !== false,
+);
 
 const floorFailures = [];
 
@@ -395,6 +495,44 @@ for (const bar of measuredBars) {
   }
 }
 
+// The same three questions asked of the chrome: did it appear where it should,
+// did it stay away where it should not, and was there anything in it.
+if (measuredChrome.length !== expectedChromeStates) {
+  floorFailures.push(
+    `chrome found in ${measuredChrome.length} of ${expectedChromeStates} laptop states — that is the selector or the render, not the layout`,
+  );
+}
+if (phoneStatesWithChrome.length > 0) {
+  floorFailures.push(
+    `chrome visible in ${phoneStatesWithChrome.length} phone states, where it must be hidden below lg — the phone keeps its bottom bar and must not grow a second navigation`,
+  );
+}
+for (const chrome of measuredChrome) {
+  // The ⋯ button IS the laptop navigation. If it is missing, every assertion
+  // below it measures an empty set and the sweep passes on a chrome with no
+  // way out of the feed.
+  if (!chrome.openable) {
+    floorFailures.push(`the ⋯ button was not found in the chrome at ${chrome.viewport}px`);
+    break;
+  }
+  if (chrome.itemCount !== EXPECTED_MENU_ITEMS) {
+    floorFailures.push(
+      `the open menu held ${chrome.itemCount} links, expected ${EXPECTED_MENU_ITEMS}`,
+    );
+    break;
+  }
+  if (!chrome.buttonName) {
+    floorFailures.push("the ⋯ button has no accessible name");
+    break;
+  }
+  if (chrome.button.width < MIN_TAP_TARGET || chrome.button.height < MIN_TAP_TARGET) {
+    floorFailures.push(
+      `the ⋯ button measures ${chrome.button.width}×${chrome.button.height}px, below the ${MIN_TAP_TARGET}px target`,
+    );
+    break;
+  }
+}
+
 console.log(
   JSON.stringify(
     {
@@ -427,6 +565,25 @@ console.log(
           ? Math.min(...measuredBars.map((b) => b.shortestTapTarget))
           : null,
         sample: report.bottomBar["phone/dark/"] ?? null,
+      },
+      chrome: {
+        expectedChromeStates,
+        chromeMeasured: measuredChrome.length,
+        itemsPerMenu: [...new Set(measuredChrome.map((c) => c.itemCount))],
+        menuLabels: [...new Set(measuredChrome.flatMap((c) => (c.items || []).map((i) => i.text)))],
+        anyChromeOverflow: measuredChrome.filter((c) => c.chromeOverflow > 0).length,
+        anyBrandClipped: measuredChrome.filter((c) => c.brandClipped > 0).length,
+        anyItemClipped: measuredChrome.filter((c) => (c.items || []).some((i) => i.clipped > 0))
+          .length,
+        anyItemOffScreen: measuredChrome.filter((c) =>
+          (c.items || []).some((i) => i.offLeft < 0 || i.offRight > 0),
+        ).length,
+        anyMenuOverflow: measuredChrome.filter((c) => c.menuOverflow > 0).length,
+        anyDocOverflowWhileOpen: measuredChrome.filter((c) => c.docOverflowWhileOpen > 0).length,
+        smallestButtonPx: measuredChrome.length
+          ? Math.min(...measuredChrome.map((c) => Math.min(c.button.width, c.button.height)))
+          : null,
+        sample: report.chrome["laptop/dark/"] ?? null,
       },
       // Evidence that the sweep audited the screens it claims to have. Printed
       // on SUCCESS as well as failure, so a future reader can see the
@@ -478,10 +635,25 @@ console.log(
 const barBroken = measuredBars.filter(
   (b) => b.navOverflow > 0 || b.labelsClipped.length > 0,
 ).length;
+/**
+ * The chrome is broken when the row cannot hold itself, the brand clips, or a
+ * menu item lands outside the viewport. The last is the reason the sweep opens
+ * the panel at all: an off-screen item is in the DOM, focusable, and
+ * unreachable with a pointer.
+ */
+const chromeBroken = measuredChrome.filter(
+  (c) =>
+    c.chromeOverflow > 0 ||
+    c.brandClipped > 0 ||
+    c.menuOverflow > 0 ||
+    c.docOverflowWhileOpen > 0 ||
+    (c.items || []).some((i) => i.clipped > 0 || i.offLeft < 0 || i.offRight > 0),
+).length;
 if (
   report.serious.length > 0 ||
   report.overflow.length > 0 ||
   barBroken > 0 ||
+  chromeBroken > 0 ||
   floorFailures.length > 0
 ) {
   process.exit(1);
