@@ -1,30 +1,31 @@
-import { Bookmark, Radar, Settings, Sun } from "lucide-react";
+import { Bookmark, Settings } from "lucide-react";
 
 /**
- * The surfaces, in reading order: the brief first, then everything arriving,
- * then your own pile, then configuration. Deliberately not counted here — the
- * count is the thing that rotted when #102 removed two of them, and a number
- * in a comment is a claim that has to be re-checked on every edit.
+ * ONE FEED, AND A SMALL MENU FOR EVERYTHING ELSE.
  *
- * NO Research and NO Releases, since #102. The owner ruled one feed and one
- * filter rather than sections — "I don't want to have another page… it's just
- * a filter" — so those two are positions on Today's view control now, not
- * destinations. Adding them back here would restore exactly the sections the
- * ruling removed.
+ * The owner, on the sidebar: "remove left sidebar don't ned it maybe a mini
+ * dropdown that has saved and settings in it". So there is no list of
+ * destinations any more. The brand mark in the chrome returns you to the feed,
+ * and these two — the only surfaces that are not the feed — live behind the
+ * ⋯ button.
+ *
+ * WHAT WENT, AND WHY IT IS NOT COMING BACK BY ACCIDENT:
+ *
+ *  - Today. It is the app. A link to the page you are on, in a bar that is
+ *    always on that page, is a tab for the room you are standing in.
+ *  - Radar. #191 made Today newest-first on the owner's ruling ("Newest comes
+ *    first, then the most important"), which is what Radar was for. Two feeds
+ *    ordered the same way is one feed and a duplicate. The route still answers
+ *    — nothing 404s and no bookmark breaks — but it is no longer offered, and
+ *    retiring it properly is #194.
+ *  - Research and Releases, gone since #102, for the same reason: the owner
+ *    ruled one feed and one filter rather than sections.
+ *
+ * Adding anything here puts it in the dropdown, which is the only navigation
+ * the app has at any width. There is no second list to keep in step — that
+ * was the bug this shape removes.
  */
-export const navItems = [
-  {
-    href: "/",
-    label: "Today",
-    icon: Sun,
-    description: "Today's brief",
-  },
-  {
-    href: "/radar",
-    label: "Radar",
-    icon: Radar,
-    description: "Everything arriving",
-  },
+export const menuItems = [
   {
     href: "/saved",
     label: "Saved",
@@ -39,13 +40,7 @@ export const navItems = [
   },
 ] as const;
 
-export type NavItem = (typeof navItems)[number];
+export type MenuItem = (typeof menuItems)[number];
 
-/**
- * Every surface is reachable at every width. An earlier version filtered this
- * list down to four tabs and left Research and Releases in the sidebar, which
- * is `display:none` below lg — so on a phone they were URL-only, unclickable
- * and outside the tab order. There is no "More" menu; do not reintroduce one
- * without building it.
- */
-export const bottomNavItems = navItems;
+/** Where the brand mark goes. The feed is home. */
+export const HOME_HREF = "/";

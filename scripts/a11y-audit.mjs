@@ -59,36 +59,42 @@ const MARKS_TEMPLATE = [
   },
 ];
 /**
- * AUDIT_CONTROL=narrow squeezes the phone viewport until the bar MUST clip. It exists so the bar gate can be seen going red: a gate that has only
- * ever passed is not yet known to be able to fail. A control run labels itself
- * in the output so it can never be mistaken for a real one.
+ * AUDIT_CONTROL=narrow squeezes the phone viewport until the chrome MUST
+ * overflow. It exists so the chrome gate can be seen going red: a gate that has
+ * only ever passed is not yet known to be able to fail. A control run labels
+ * itself in the output so it can never be mistaken for a real one.
  */
 const CONTROL = process.env.AUDIT_CONTROL || null;
 
 /**
- * The control's width, and it had to MOVE when #102 removed two tabs.
+ * The control's width, and it had to CHANGE SUBJECT when #194 removed the
+ * bottom bar.
  *
- * This was 200px when the bar carried six tabs — about 33px each, which forced
- * every label to clip. Four tabs at 200px get about 50px each, which is roughly
- * the width of the word "Settings" at this size. So the old number sits right
- * on the boundary: the control might still redden, and it might quietly stop,
- * and those look identical in a green run.
+ * It used to squeeze four tabs until their labels clipped. There are no tabs
+ * now. What is squeezable in the chrome is the row itself: the brand mark is
+ * unbreakable uppercase, the ⋯ button is a fixed 44px, the row carries 40px of
+ * left padding to line the brand up with the page title, and the dropdown it
+ * opens is 176px wide on its own. None of that reflows.
  *
  * A CONTROL THAT SILENTLY STOPS GOING RED IS WORSE THAN NO CONTROL, because the
  * gate it guards keeps reporting a pass that nobody can any longer distinguish
- * from an untested one. So the width drops to keep the same pressure per tab.
+ * from an untested one.
  *
- * OBSERVED FAILING AT FOUR TABS on 2026-09-17, at this head: 160px produced a
- * narrowest tab of 40px — the figure the arithmetic above predicts — and
- * "Settings" clipped in 10 of 10 bars, with the floor still passing, so the red
- * was the layout rather than an empty instrument. At the real 390px the same
- * sweep reports 0 clipped and a narrowest tab of 97.5px.
+ * OBSERVED FAILING on 2026-10-03, at this head, exit 1 on three independent
+ * measurements: at 160px the header overflowed by 6px in 8 of 8 chrome states,
+ * both menu items hung off the right edge in 8 of 8, and the document itself
+ * went 8-wide-of-the-viewport while the menu was open — with floorPassed true
+ * throughout, so the red was the layout rather than an empty instrument. At the
+ * real 390px the same sweep reports 0 for every one of those and 0 violations.
  *
- * Written as a dated observation rather than "verified", because the number it
- * justifies depends on the tab COUNT and on the longest label. Add a fifth tab,
- * or a word longer than "Settings", and this figure is a prediction again — at
- * which point this paragraph is evidence about a tree that no longer exists and
- * should be re-earned rather than trusted.
+ * THE MENU IS WHAT MAKES THIS FIGURE SAFE, which the bar version never had: the
+ * panel's own 176px min-width is wider than the control viewport, so the
+ * off-screen assertion fires on a margin of 16px rather than on a few pixels of
+ * text metrics. A rename of the product cannot quietly take the pressure off.
+ *
+ * Still written as a dated observation rather than "verified", because the
+ * numbers depend on that min-width and on the row's padding. Change either and
+ * this paragraph is evidence about a tree that no longer exists.
  */
 const CONTROL_WIDTH = 160;
 const PHONE_WIDTH = CONTROL === "narrow" ? CONTROL_WIDTH : 390;
@@ -98,12 +104,21 @@ const SIZES = [
   { name: "laptop", width: 1440, height: 900 },
 ];
 
-/** The bar is lg:hidden, so it belongs in exactly the phone states. */
-// Four since #102 removed Research and Releases from the navigation. This is
-// asserted rather than derived on purpose: the bar's geometry is the thing
-// under test, so a count read from the same config the bar renders from would
-// agree with it however wrong both were.
-const EXPECTED_TABS = 4;
+/**
+ * Two since #194: Saved and Settings, the only surfaces that are not the feed.
+ * Asserted rather than derived on purpose — the menu's geometry is the thing
+ * under test, and a count read from the same config the menu renders from
+ * would agree with it however wrong both were.
+ */
+const EXPECTED_MENU_ITEMS = 2;
+/**
+ * The product's tap target, not the standard's. axe's target-size rule passes
+ * at 24px; the ⋯ button is built at 44px because it is the only navigation the
+ * app has at any width, and a thumb on a phone is the common case rather than
+ * the edge one. Asserting the product's figure means a change that quietly
+ * shrinks it to 28px fails here instead of passing axe.
+ */
+const MIN_TAP_TARGET = 44;
 const THEMES = ["light", "dark"];
 
 import { launchBrowser, requireServer } from "./lib/browser.mjs";
@@ -122,7 +137,7 @@ const report = {
   allViolations: [],
   overflow: [],
   nav: {},
-  bottomBar: {},
+  chrome: {},
   seeded: {},
   filledBins: {},
 };
@@ -175,47 +190,84 @@ try {
         }
 
         /**
-         * The bottom bar carries every surface below lg. It has to be
-         * measured rather than eyeballed — four tabs at 390px have more room
-         * each than six did, which makes the narrow control weaker, not
-         * stronger. See CONTROL_WIDTH.
+         * THE CHROME: the brand mark, and the ⋯ button holding Saved and
+         * Settings. One bar at both widths since #194 — the sidebar and the
+         * four-tab phone bar are both gone, so this is now the only navigation
+         * in the app and the only thing standing between a reader and Settings.
          *
-         * Measured on the box that actually clips — the <nav> itself and each
-         * label — not a wrapper, and against documentElement.clientWidth,
-         * which excludes the scrollbar (innerWidth does not). Margins are
-         * reported in px so a 1px pass cannot be mistaken for proof.
+         * IT IS MEASURED OPEN, AND LEFT OPEN FOR axe. A dropdown that renders
+         * is not a dropdown that works. The panel is absolutely positioned and
+         * anchored to the right edge, which is exactly the arrangement that
+         * puts items off the side of a narrow screen while every selector still
+         * finds them — so the sweep opens it and measures where the items
+         * actually landed against the viewport. Leaving it open afterwards is
+         * what gets its links, contrast and labelling into the axe scan at all:
+         * a closed <details> is display:none, and a scan of a closed menu
+         * reports zero violations for a surface it never looked at.
+         *
+         * Measured on the boxes that actually clip — the <header>, the brand
+         * label, each item — and against documentElement.clientWidth, which
+         * excludes the scrollbar (innerWidth does not). Overflow is re-read
+         * WHILE OPEN, because an absolutely positioned panel can push the
+         * document sideways in a state the earlier closed-chrome read cannot
+         * see.
          */
-        const bar = await page.evaluate(() => {
-          const nav = document.querySelector("nav[aria-label='Main'].fixed");
-          if (!nav) return null;
-          const style = getComputedStyle(nav);
-          if (style.display === "none") return null;
-          const rect = nav.getBoundingClientRect();
+        const chrome = await page.evaluate(async () => {
+          const header = document.querySelector("header[data-app-chrome='true']");
+          if (!header) return null;
+          if (getComputedStyle(header).display === "none") return null;
+
           const viewport = document.documentElement.clientWidth;
-          const labels = [...nav.querySelectorAll("a > span:last-child")].map((el) => ({
-            text: el.textContent,
-            clipped: el.scrollWidth - el.clientWidth,
-            width: Math.round(el.getBoundingClientRect().width * 10) / 10,
-          }));
-          const links = [...nav.querySelectorAll("a")].map((a) => {
+          const box = (el) => {
+            const r = el.getBoundingClientRect();
+            return {
+              width: Math.round(r.width * 10) / 10,
+              height: Math.round(r.height * 10) / 10,
+            };
+          };
+
+          const brand = header.querySelector("a span:last-child");
+          const button = header.querySelector("[data-chrome-menu-button='true']");
+          const details = button ? button.closest("details") : null;
+          if (!button || !details) {
+            return { present: true, openable: false, viewport };
+          }
+
+          details.open = true;
+          // One frame, so the panel is laid out before it is measured.
+          await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+
+          const menu = header.querySelector("[data-chrome-menu='true']");
+          const items = (menu ? [...menu.querySelectorAll("a")] : []).map((a) => {
             const r = a.getBoundingClientRect();
-            return { width: Math.round(r.width * 10) / 10, height: Math.round(r.height * 10) / 10 };
+            return {
+              text: (a.textContent || "").trim(),
+              ...box(a),
+              clipped: a.scrollWidth - a.clientWidth,
+              offLeft: Math.round(Math.min(0, r.left) * 10) / 10,
+              offRight: Math.round(Math.max(0, r.right - viewport) * 10) / 10,
+            };
           });
+
           return {
-            tabs: links.length,
+            present: true,
+            openable: true,
             viewport,
-            navOverflow: nav.scrollWidth - nav.clientWidth,
-            rightMargin: Math.round((viewport - rect.right) * 10) / 10,
-            leftMargin: Math.round(rect.left * 10) / 10,
-            narrowestTab: links.length ? Math.min(...links.map((l) => l.width)) : null,
-            shortestTapTarget: links.length ? Math.min(...links.map((l) => l.height)) : null,
-            labelsClipped: labels.filter((l) => l.clipped > 0),
-            labels,
+            chromeOverflow: header.scrollWidth - header.clientWidth,
+            brandText: brand ? (brand.textContent || "").trim() : null,
+            brandClipped: brand ? brand.scrollWidth - brand.clientWidth : null,
+            button: box(button),
+            buttonName: button.getAttribute("aria-label"),
+            itemCount: items.length,
+            items,
+            menuOverflow: menu ? menu.scrollWidth - menu.clientWidth : null,
+            docOverflowWhileOpen:
+              document.documentElement.scrollWidth - document.documentElement.clientWidth,
           };
         });
         // Record the ABSENCE too: a state that contributes nothing silently is
         // how a gate ends up measuring an empty set and passing.
-        report.bottomBar[`${size.name}/${theme}${route}`] = bar ?? { present: false };
+        report.chrome[`${size.name}/${theme}${route}`] = chrome ?? { present: false };
 
         /**
          * The audit's OWN floor, route by route: a page that landed somewhere
@@ -241,8 +293,8 @@ try {
           };
           const navs = [...document.querySelectorAll("nav[aria-label='Main']")];
           return {
-            sidebar: navs.some((n) => visible(n) && n.className.includes("lg:flex")),
-            bottom: navs.some((n) => visible(n) && n.className.includes("lg:hidden")),
+            navs: navs.filter(visible).length,
+            menuOpen: !!document.querySelector("header[data-app-chrome='true'] details[open]"),
             current: document.querySelectorAll("[aria-current='page']").length,
             main: document.querySelectorAll("main#main").length,
             skipLink: !!document.querySelector("a[href='#main']"),
@@ -291,29 +343,36 @@ try {
  * Assert the instrument had something to measure, and print the counts on
  * success so a future reader can see that it did.
  */
-const measuredBars = Object.values(report.bottomBar).filter((b) => b.present !== false);
-const phoneStates = Object.keys(report.bottomBar).filter((k) => k.startsWith("phone/"));
-const laptopStatesWithBar = Object.entries(report.bottomBar).filter(
-  ([k, b]) => k.startsWith("laptop/") && b.present !== false,
+const measuredChrome = Object.values(report.chrome).filter((c) => c.present !== false);
+const welcomeWithChrome = Object.entries(report.chrome).filter(
+  ([state, c]) => state.endsWith("/welcome") && c.present !== false,
 );
 /**
- * THE BAR IS ABSENT ON /welcome BY DESIGN, so the floor counts the routes that
- * should have one rather than every route.
+ * THE CHROME IS ABSENT ON /welcome BY DESIGN, so the floor counts the routes
+ * that should have one rather than every route.
  *
- * First run hides both navigations: it is the one screen with a single thing to
- * do, and a nav bar there offers four ways to leave a place the reader has not
- * been shown yet. Counting it would make this floor demand a bar the product
+ * First run hides the navigation: it is the one screen with a single thing to
+ * do, and a nav bar there offers ways to leave a place the reader has not been
+ * shown yet. Counting it would make this floor demand a bar the product
  * deliberately does not draw — a check asserting the opposite of the decision.
  *
  * DERIVED, NOT TYPED. The subtraction is computed from the same ROUTES list the
- * sweep walks, so adding a route moves both numbers together. A hardcoded 8 here
- * would go quietly wrong the next time ROUTES changes.
+ * sweep walks, so adding a route moves both numbers together. A hardcoded 16
+ * here would go quietly wrong the next time ROUTES changes.
+ *
+ * BOTH SIZES NOW, which is the change #194 made to this arithmetic. The bottom
+ * bar was lg:hidden, so it belonged in exactly the phone states and the laptop
+ * states had to be asserted EMPTY. There is one chrome at every width now, so
+ * the question is no longer "which size draws it" but "does every size draw
+ * it", and a chrome that vanished at 1440px would now be a failure rather than
+ * the expected case.
  */
 const CHROMELESS_ROUTES = ["/welcome"];
-/** Every phone state the sweep VISITS. */
-const expectedPhoneStates = ROUTES.length * THEMES.length;
-/** Of those, the ones that should be DRAWING a bottom bar. */
-const expectedBarStates = (ROUTES.length - CHROMELESS_ROUTES.length) * THEMES.length;
+/** Every state the sweep VISITS, at both sizes. */
+const expectedVisitedStates = ROUTES.length * THEMES.length * SIZES.length;
+/** Of those, the ones that should be DRAWING the chrome. */
+const expectedChromeStates =
+  (ROUTES.length - CHROMELESS_ROUTES.length) * THEMES.length * SIZES.length;
 
 const floorFailures = [];
 
@@ -368,29 +427,45 @@ for (const [state, seen] of Object.entries(report.seeded)) {
 }
 
 // TWO DIFFERENT QUANTITIES, equal until /welcome stopped drawing a bar. This
-// one is "did the sweep go everywhere"; the one below is "did a bar appear
+// one is "did the sweep go everywhere"; the one below is "did the chrome appear
 // where one should". Collapsing them again would let a route silently drop out
-// of the sweep as long as the bar count happened to match.
-if (phoneStates.length !== expectedPhoneStates) {
-  floorFailures.push(`visited ${phoneStates.length} phone states, expected ${expectedPhoneStates}`);
-}
-if (measuredBars.length !== expectedBarStates) {
+// of the sweep as long as the chrome count happened to match.
+if (Object.keys(report.chrome).length !== expectedVisitedStates) {
   floorFailures.push(
-    `bar found in ${measuredBars.length} of ${expectedBarStates} phone states — that is the selector or the render, not the layout`,
+    `visited ${Object.keys(report.chrome).length} states, expected ${expectedVisitedStates}`,
   );
 }
-if (laptopStatesWithBar.length > 0) {
+if (measuredChrome.length !== expectedChromeStates) {
   floorFailures.push(
-    `bar visible in ${laptopStatesWithBar.length} laptop states, where it must be lg:hidden`,
+    `chrome found in ${measuredChrome.length} of ${expectedChromeStates} states — that is the selector or the render, not the layout`,
   );
 }
-for (const bar of measuredBars) {
-  if (bar.tabs !== EXPECTED_TABS) {
-    floorFailures.push(`measured ${bar.tabs} tabs, expected ${EXPECTED_TABS}`);
+if (welcomeWithChrome.length > 0) {
+  floorFailures.push(
+    `chrome drawn on /welcome in ${welcomeWithChrome.length} states, where first run must have none`,
+  );
+}
+for (const chrome of measuredChrome) {
+  // The ⋯ button IS the navigation. If it is missing, every assertion below
+  // it measures an empty set and the sweep passes on a chrome with no way out.
+  if (!chrome.openable) {
+    floorFailures.push(`the ⋯ button was not found in the chrome at ${chrome.viewport}px`);
     break;
   }
-  if (bar.labels.length !== bar.tabs) {
-    floorFailures.push(`measured ${bar.labels.length} labels for ${bar.tabs} tabs`);
+  if (chrome.itemCount !== EXPECTED_MENU_ITEMS) {
+    floorFailures.push(
+      `the open menu held ${chrome.itemCount} links, expected ${EXPECTED_MENU_ITEMS}`,
+    );
+    break;
+  }
+  if (!chrome.buttonName) {
+    floorFailures.push("the ⋯ button has no accessible name");
+    break;
+  }
+  if (chrome.button.width < MIN_TAP_TARGET || chrome.button.height < MIN_TAP_TARGET) {
+    floorFailures.push(
+      `the ⋯ button measures ${chrome.button.width}×${chrome.button.height}px, below the ${MIN_TAP_TARGET}px target`,
+    );
     break;
   }
 }
@@ -404,29 +479,32 @@ console.log(
       horizontalOverflow: report.overflow.length,
       serious: report.serious,
       violations: report.allViolations,
-      bottomBar: {
+      chrome: {
         control: CONTROL,
         phoneViewport: PHONE_WIDTH,
-        controlWidthUnverifiedAtFourTabs: CONTROL === "narrow" ? CONTROL_WIDTH : null,
+        controlWidth: CONTROL === "narrow" ? CONTROL_WIDTH : null,
         floorPassed: floorFailures.length === 0,
         floorFailures,
-        expectedBarStates,
-        barsMeasured: measuredBars.length,
-        tabsPerBar: [...new Set(measuredBars.map((b) => b.tabs))],
-        labelsPerBar: [...new Set(measuredBars.map((b) => b.labels.length))],
-        anyNavOverflow: measuredBars.filter((b) => b.navOverflow > 0).length,
-        anyLabelClipped: measuredBars.filter((b) => b.labelsClipped.length > 0).length,
-        clippedLabelSamples: measuredBars.flatMap((b) => b.labelsClipped).slice(0, 6),
-        worstRightMargin: measuredBars.length
-          ? Math.min(...measuredBars.map((b) => b.rightMargin))
+        expectedChromeStates,
+        chromeMeasured: measuredChrome.length,
+        itemsPerMenu: [...new Set(measuredChrome.map((c) => c.itemCount))],
+        menuLabels: [...new Set(measuredChrome.flatMap((c) => (c.items || []).map((i) => i.text)))],
+        anyChromeOverflow: measuredChrome.filter((c) => c.chromeOverflow > 0).length,
+        anyBrandClipped: measuredChrome.filter((c) => c.brandClipped > 0).length,
+        anyItemClipped: measuredChrome.filter((c) => (c.items || []).some((i) => i.clipped > 0))
+          .length,
+        anyItemOffScreen: measuredChrome.filter((c) =>
+          (c.items || []).some((i) => i.offLeft < 0 || i.offRight > 0),
+        ).length,
+        anyMenuOverflow: measuredChrome.filter((c) => c.menuOverflow > 0).length,
+        anyDocOverflowWhileOpen: measuredChrome.filter((c) => c.docOverflowWhileOpen > 0).length,
+        worstChromeOverflowPx: measuredChrome.length
+          ? Math.max(...measuredChrome.map((c) => c.chromeOverflow))
           : null,
-        narrowestTabPx: measuredBars.length
-          ? Math.min(...measuredBars.map((b) => b.narrowestTab))
+        smallestButtonPx: measuredChrome.length
+          ? Math.min(...measuredChrome.map((c) => Math.min(c.button.width, c.button.height)))
           : null,
-        shortestTapTargetPx: measuredBars.length
-          ? Math.min(...measuredBars.map((b) => b.shortestTapTarget))
-          : null,
-        sample: report.bottomBar["phone/dark/"] ?? null,
+        sample: report.chrome["phone/dark/"] ?? null,
       },
       // Evidence that the sweep audited the screens it claims to have. Printed
       // on SUCCESS as well as failure, so a future reader can see the
@@ -475,13 +553,24 @@ console.log(
   ),
 );
 
-const barBroken = measuredBars.filter(
-  (b) => b.navOverflow > 0 || b.labelsClipped.length > 0,
+/**
+ * The chrome is broken when the row cannot hold itself, the brand clips, or a
+ * menu item lands outside the viewport. The last one is the reason the sweep
+ * opens the panel at all: an off-screen item is present in the DOM, focusable,
+ * and unreachable with a thumb.
+ */
+const chromeBroken = measuredChrome.filter(
+  (c) =>
+    c.chromeOverflow > 0 ||
+    c.brandClipped > 0 ||
+    c.menuOverflow > 0 ||
+    c.docOverflowWhileOpen > 0 ||
+    (c.items || []).some((i) => i.clipped > 0 || i.offLeft < 0 || i.offRight > 0),
 ).length;
 if (
   report.serious.length > 0 ||
   report.overflow.length > 0 ||
-  barBroken > 0 ||
+  chromeBroken > 0 ||
   floorFailures.length > 0
 ) {
   process.exit(1);
