@@ -112,9 +112,6 @@ jobs:
       # The brief that arrives on its own (#146). THE SAME GAP HIT THESE and
       # nobody had noticed: push delivery could not be switched on in
       # production either, for the same reason and since it merged.
-      NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${{ secrets.NEXT_PUBLIC_VAPID_PUBLIC_KEY }}
-      VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
-      VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
 
     steps:
       - name: Check out the branch

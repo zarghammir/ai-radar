@@ -175,6 +175,20 @@ export const stories = pgTable(
     title: text("title").notNull(),
     /** AI summary when available; otherwise null and the UI shows the excerpt. */
     summary: text("summary"),
+    /**
+     * ONE SENTENCE, WRITTEN TO BE ONE. Not `summary` truncated.
+     *
+     * The card renders this and nothing else beneath the title, so it has to
+     * stand alone: "OpenAI shipped a cheaper model that nearly matches its best
+     * one." Cutting `summary` to length does not produce that — it produces the
+     * opening clause of an abstract, which is why this is its own column rather
+     * than a computed prefix.
+     *
+     * Null until the summariser writes it, and null is a complete state: the
+     * card is title-only and correct. Nothing should ever fall back to a
+     * truncated paragraph to fill it.
+     */
+    oneLine: text("one_line"),
     whyItMatters: text("why_it_matters"),
     keyPoints: jsonb("key_points").$type<string[]>().notNull().default([]),
     contentType: contentTypeEnum("content_type").notNull(),

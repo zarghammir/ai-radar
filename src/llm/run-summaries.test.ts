@@ -395,3 +395,110 @@ describe("orderCandidates", () => {
     expect(orderCandidates([13, 11, 12], [], 3)).toEqual([13, 11, 12]);
   });
 });
+
+describe("runSummaries — pacing the day's budget", () => {
+  const twenty = Array.from({ length: 20 }, (_, i) => ({ id: i + 1, title: `story ${i + 1}` }));
+
+  /**
+   * THE DEFECT, AT THE LEVEL THE MONEY IS ACTUALLY SPENT — #192.
+   *
+   * Selection has been the brief's own order since the earlier fix, so each
+   * pass summarised the best stories IT COULD SEE. A pass at 00:30 can only see
+   * what had arrived by 00:30, and it spent the whole cap on them: of 22 stories
+   * under 24 hours old on production, THREE carried a summary.
+   *
+   * The assertion is on the number of PROVIDER CALLS, because that is the thing
+   * the budget buys. A test on `passBudget` alone would pass for a version that
+   * computed the right number and then ignored it.
+   */
+  it("leaves budget for the passes that have not happened yet", async () => {
+    const { db } = fakeDb({ storyRows: twenty });
+    const client = fakeClient();
+
+    const result = await runSummaries(db, {
+      env: { ...ENV, LLM_MAX_STORIES_PER_DAY: "20" },
+      now: new Date("2026-09-21T00:30:00Z"),
+      intervalMinutes: 180,
+      client,
+      log: silent,
+    });
+
+    expect(result.budgetAtStart).toBe(20);
+    expect(result.passBudget).toBe(3);
+    expect(client.complete).toHaveBeenCalledTimes(3);
+  });
+
+  /**
+   * And the other half: pacing must not strand the cap. The last pass of the
+   * day takes everything still unspent, so the twenty are spent by midnight
+   * rather than rationed into next week.
+   */
+  it("lets the day's last pass spend what is left", async () => {
+    const { db } = fakeDb({ usedToday: 14, storyRows: twenty });
+    const client = fakeClient();
+
+    const result = await runSummaries(db, {
+      env: { ...ENV, LLM_MAX_STORIES_PER_DAY: "20" },
+      now: new Date("2026-09-21T23:30:00Z"),
+      intervalMinutes: 180,
+      client,
+      log: silent,
+    });
+
+    expect(result.budgetAtStart).toBe(6);
+    expect(result.passBudget).toBe(6);
+  });
+});
+
+describe("runSummaries — the one-line summary", () => {
+  it("writes the line the model sent", async () => {
+    const { db, state } = fakeDb({ storyRows: [{ id: 1, title: "t" }] });
+    const client = fakeClient(
+      JSON.stringify({
+        summary: "s",
+        whyItMatters: "w",
+        keyPoints: ["k"],
+        oneLine: "OpenAI shipped a cheaper model that nearly matches its best one.",
+      }),
+    );
+
+    await runSummaries(db, { env: ENV, now: NOW, client, log: silent });
+
+    expect(state.updates[0]?.set.oneLine).toBe(
+      "OpenAI shipped a cheaper model that nearly matches its best one.",
+    );
+  });
+
+  /**
+   * NULL, NEVER A SLICE OF THE SUMMARY. `stories.one_line` null is a complete
+   * state — the card renders the title alone and is finished — and the column
+   * exists precisely because truncating `summary` produces "As robotic hardware
+   * and learning methods advance, humanoids need tools to perform tasks beyond
+   * their inhere…". A future edit that "helpfully" fills the gap fails here.
+   */
+  it("writes null when the model sent no line, and never a piece of the summary", async () => {
+    const { db, state } = fakeDb({ storyRows: [{ id: 1, title: "t" }] });
+    const client = fakeClient(
+      '{"summary":"As robotic hardware advances, humanoids need tools.","whyItMatters":"w","keyPoints":["k"]}',
+    );
+
+    await runSummaries(db, { env: ENV, now: NOW, client, log: silent });
+
+    expect(state.updates[0]?.set.summary).toBe(
+      "As robotic hardware advances, humanoids need tools.",
+    );
+    expect(state.updates[0]?.set.oneLine).toBeNull();
+  });
+
+  // The degradation guarantee, end to end: a provider that ignores the new
+  // instruction still produces a summarised story rather than a failed one.
+  it("still counts as a success when the model omits the line", async () => {
+    const { db } = fakeDb({ storyRows: [{ id: 1, title: "t" }] });
+    const client = fakeClient();
+
+    const result = await runSummaries(db, { env: ENV, now: NOW, client, log: silent });
+
+    expect(result.succeeded).toBe(1);
+    expect(result.failed).toBe(0);
+  });
+});

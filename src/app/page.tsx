@@ -1,11 +1,10 @@
 import { BriefList } from "@/components/today/brief-list";
 import { ReadingMode } from "@/components/today/reading-mode";
-import { ViewFilter } from "@/components/today/view-filter";
 import { EmptyState, PageShell } from "@/components/page-shell";
 import { LocalDate } from "@/components/local-date";
 import { briefSummary, emptyBriefReason } from "@/lib/api/brief-summary";
 import { loadBrief } from "@/lib/api/brief-server";
-import { defaultBriefLength, defaultView } from "@/lib/api/brief-length";
+import { defaultBriefLength } from "@/lib/api/brief-length";
 import { parseView } from "@/lib/api/views";
 import type { BriefLengthParam } from "@/lib/api/types";
 
@@ -33,7 +32,23 @@ export default async function TodayPage({ searchParams }: PageProps<"/">) {
   // three-step shape as the length above, and the same reason the durable half
   // is a cookie: this page is rendered on the server and filters in the query,
   // so the view has to arrive before the device runs any JavaScript.
-  const view = parseView(params.view) ?? (await defaultView());
+  /**
+   * ONE FEED (#191). The owner: "remove launches + news tab… just want one
+   * feed". So there is no view control and no stored view — the page shows
+   * everything the collector admits.
+   *
+   * `?view=` is still READ, because the type filter itself still exists and a
+   * link to a filtered feed should keep working; what is gone is the control
+   * that made a reader choose, and the stored default that silently hid things.
+   * Absent means "all", where it used to mean "built".
+   *
+   * WHY THAT DEFAULT MATTERED MORE THAN IT LOOKS. "built" admitted five of the
+   * ten content types. The seven startup and venture feeds added in #181
+   * produce almost nothing but NEWS and BUSINESS, so on 2026-09-30, of the 23
+   * stories that had arrived in the previous day, a reader on the default saw
+   * ONE. Seven sources were collected, ranked, and could not be displayed.
+   */
+  const view = parseView(params.view) ?? "all";
 
   /**
    * THREE STATES, and two of them must never look alike.
@@ -104,12 +119,7 @@ export default async function TodayPage({ searchParams }: PageProps<"/">) {
           </span>
         )
       }
-      controls={
-        <>
-          <ViewFilter current={view} />
-          <ReadingMode current={length} />
-        </>
-      }
+      controls={<ReadingMode current={length} />}
       state={brief.count === 0 ? "quiet" : "brief"}
     >
       {brief.count === 0 ? (

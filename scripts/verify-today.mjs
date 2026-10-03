@@ -203,7 +203,7 @@ try {
     const page = await ctx.newPage();
     await page.goto(`${base}/?length=all&view=all`, { waitUntil: "networkidle" });
 
-    const saveButtons = page.getByRole("button", { name: /^Save$/ });
+    const saveButtons = page.getByRole("button", { name: /^Save / });
     const before = await saveButtons.count();
     if (before < 1) floor.push("no Save button on the page; nothing to toggle");
     // Before the click. With zero buttons the click throws a timeout and the
@@ -213,11 +213,15 @@ try {
 
     await saveButtons.first().click();
     await page.waitForTimeout(250);
-    const savedNow = await page.getByRole("button", { name: /^Saved$/ }).count();
+    // THE STATE IS aria-pressed, NOT THE NAME. The button read "Saved" when it
+    // was on; it is an icon now and its accessible name stays "Save <title>"
+    // in both states, which is the toggle-button pattern. So the saved state
+    // is counted where it actually lives.
+    const savedNow = await page.locator('button[aria-pressed="true"]').count();
 
     await page.reload({ waitUntil: "networkidle" });
     await page.waitForTimeout(250);
-    const savedAfterReload = await page.getByRole("button", { name: /^Saved$/ }).count();
+    const savedAfterReload = await page.locator('button[aria-pressed="true"]').count();
 
     out.save = {
       saveButtonsBefore: before,
@@ -248,7 +252,7 @@ try {
     const firstTitle = before > 0 ? await cards(page).first().innerText() : null;
 
     await page
-      .getByRole("button", { name: /^Hide$/ })
+      .getByRole("button", { name: /^Hide / })
       .first()
       .click();
     await page.waitForTimeout(250);

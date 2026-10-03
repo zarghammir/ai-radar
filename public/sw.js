@@ -161,17 +161,3 @@ self.addEventListener("push", (event) => {
   );
 });
 
-self.addEventListener("notificationclick", (event) => {
-  event.notification.close();
-  event.waitUntil(
-    (async () => {
-      const url = (event.notification.data && event.notification.data.url) || "/";
-      const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-      // Focus an open copy rather than opening a second one.
-      for (const client of clients) {
-        if ("focus" in client) return client.focus();
-      }
-      return self.clients.openWindow(url);
-    })()
-  );
-});

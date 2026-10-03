@@ -1641,6 +1641,32 @@ withDb("API routes", () => {
       return slug;
     }
 
+    /**
+     * NEWEST FIRST, THEN THE MOST IMPORTANT (#191). The owner's ruling for the
+     * single merged feed, and the defect it answers: ordering by score alone put
+     * zero stories from the previous day in the top twenty, because a
+     * corroborated launch outscores a single-source item by four to one.
+     *
+     * THE THIRD STORY IS THE CONTROL. With only a fresh weak story and an old
+     * strong one this passes under pure recency too; it takes a fresh STRONG
+     * story to show importance still orders WITHIN the bucket rather than
+     * having been discarded for a plain time sort.
+     */
+    it("leads with the last 24 hours, ordered by score inside that bucket", async () => {
+      const now = Date.now();
+      const hrs = (h: number) => new Date(now - h * 3600_000);
+
+      await fileStory("ord-old-huge", hrs(40), hrs(40));
+      await fileStory("ord-fresh-weak", hrs(6), hrs(6));
+      await fileStory("ord-fresh-big", hrs(3), hrs(3));
+      await sql.unsafe(`update stories set score = 90 where slug = 'ord-old-huge'`);
+      await sql.unsafe(`update stories set score = 11 where slug = 'ord-fresh-weak'`);
+      await sql.unsafe(`update stories set score = 45 where slug = 'ord-fresh-big'`);
+
+      const order = (await briefSlugs()).filter((s: string) => s.startsWith("ord-"));
+
+      expect(order).toEqual(["ord-fresh-big", "ord-fresh-weak", "ord-old-huge"]);
+    });
     async function briefSlugs() {
       const { GET } = await import("@/app/api/brief/route");
       const res = await GET(req("/api/brief?view=all&length=all"));

@@ -12,7 +12,6 @@ import {
 import { readInternalSecret } from "./secret";
 import { runSummaries } from "@/llm/run-summaries";
 import { describeError } from "@/pipeline/describe-error";
-import { runBriefDelivery } from "@/notify/run-brief";
 import { summaryLines, writeStepSummary } from "./step-summary";
 import { briefCoverage, coverageLines, type CoverageReport } from "./brief-coverage";
 
@@ -107,23 +106,10 @@ async function runPass(): Promise<number> {
     console.error(`[worker] summaries failed: ${describeError(error)}`);
   }
 
-  // The brief that arrives on its own (#72). Guarded for the same reason the
-  // summariser is, and it matters more here: a push service having a bad
-  // morning is not a collector outage, and #137 files a GitHub issue on a red
-  // run. Its result does not touch the exit code.
-  let briefState: Parameters<typeof summaryLines>[1];
-  try {
-    const brief = await runBriefDelivery(getDb());
-    briefState = brief;
-    // "not due" is the common case — most passes are not at the brief time —
-    // so it is logged only when it carries a reason an operator would act on.
-    if (brief.outcome === "not-due" && brief.detail && !brief.detail.startsWith("not yet")) {
-      console.log(`[brief] not sent: ${brief.detail}.`);
-    }
-  } catch (error) {
-    briefState = { error: describeError(error) };
-    console.error(`[brief] delivery failed: ${describeError(error)}`);
-  }
+  // NOTHING IS DELIVERED ANY MORE (#189). The pass used to end by sending the
+  // brief to push subscribers; that whole feature is gone, so a pass now
+  // collects, ranks and summarises, and stops. The step summary no longer has a
+  // delivery line because there is no delivery to report on.
 
   // Where the owner will see it. The console lines above go into a log nobody
   // opens, and "summaries are off" is a SUCCESSFUL run, so the failure alarm
@@ -152,10 +138,7 @@ async function runPass(): Promise<number> {
     console.error(`[brief] coverage unavailable: ${describeError(error)}`);
   }
 
-  writeStepSummary(
-    [...summaryLines(summaryState, briefState), ...coverageLines(coverage)],
-    process.env,
-  );
+  writeStepSummary([...summaryLines(summaryState), ...coverageLines(coverage)], process.env);
 
   return exitCodeFor(ingest);
 }
