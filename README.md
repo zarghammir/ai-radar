@@ -18,6 +18,11 @@ Status: under construction, Phase 1. See `docs/` as it fills in.
 
 Open it in any browser. There is nothing to sign up for and nothing to configure.
 
+If you would rather see what it is before opening it, there is a page for that:
+**[/about](https://ai-radar-blue-delta.vercel.app/about)** — what it does, what is on
+it right now, how to put it on a phone, and what this shared demo does and does not
+keep private. That is the link to share.
+
 It is a web app, so you can also keep it on your phone's home screen, where it
 opens fullscreen with no browser bar and still shows pages you have already
 opened when you have no signal.
