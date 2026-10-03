@@ -7,11 +7,24 @@ import { summaryLines, withoutQuotedValues, writeStepSummary } from "./step-summ
 const OFF = {
   skipped: "LLM_PROVIDER is none",
   budgetAtStart: 0,
+  passBudget: 0,
   attempted: 0,
   succeeded: 0,
   failed: 0,
 };
-const ON = { skipped: null, budgetAtStart: 20, attempted: 6, succeeded: 6, failed: 0 };
+// The two budget figures are the shape since #192: the day has twenty left and
+// THIS pass was allowed six of them. They are reported separately because
+// "the day is spent" and "this pass has had its share" look identical with
+// only one number, and an operator reading the step summary has to tell them
+// apart.
+const ON = {
+  skipped: null,
+  budgetAtStart: 20,
+  passBudget: 6,
+  attempted: 6,
+  succeeded: 6,
+  failed: 0,
+};
 describe("withoutQuotedValues", () => {
   /**
    * The reason strings are written to name VARIABLES, not values — and exactly
@@ -59,6 +72,10 @@ describe("summaryLines", () => {
     const [summaries] = summaryLines(ON);
     expect(summaries).toContain("summaries: ON");
     expect(summaries).toContain("6 written");
+    // Both budget figures, because one of them alone cannot say whether a pass
+    // that wrote six of a remaining twenty stopped early or stopped on purpose.
+    expect(summaries).toContain("6 allowed this pass");
+    expect(summaries).toContain("20 left today");
   });
 
   /**

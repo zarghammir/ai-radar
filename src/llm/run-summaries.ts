@@ -2,7 +2,9 @@ import { and, desc, eq, gte, inArray, isNull, lt, notInArray, or } from "drizzle
 import type { Db } from "@/db/client";
 import { recentStories } from "@/api/brief";
 import { rawItems, sources, stories, userPreferences } from "@/db/schema";
-import { applyUsage, readDailyCap, remainingToday, usageDay } from "./budget";
+import { applyUsage, passAllowance, readDailyCap, remainingToday, usageDay } from "./budget";
+import { DEFAULT_INTERVAL_MINUTES, readIntervalMinutes } from "@/worker/report";
+import type { SecretEnv } from "@/worker/secret";
 import { createLlmClient, type FetchLike, type LlmClient } from "./client";
 import { isPaidProvider, readLlmSettings, type LlmEnv } from "./config";
 import {
@@ -39,6 +41,16 @@ export interface SummaryRunResult {
   skipped: string | null;
   /** Budget left when the run started, after reading today's ledger. */
   budgetAtStart: number;
+  /**
+   * What this pass was allowed to spend of it — `passAllowance` applied to
+   * `budgetAtStart`.
+   *
+   * Reported rather than kept internal because the two numbers together are
+   * the only way to tell "the day is spent" from "this pass has had its share",
+   * and those have completely different answers. A run that attempted 3 of a
+   * remaining 11 looks like a bug until you can see the 3 was deliberate.
+   */
+  passBudget: number;
   attempted: number;
   succeeded: number;
   failed: number;
@@ -47,6 +59,7 @@ export interface SummaryRunResult {
 const IDLE: SummaryRunResult = {
   skipped: null,
   budgetAtStart: 0,
+  passBudget: 0,
   attempted: 0,
   succeeded: 0,
   failed: 0,
@@ -279,6 +292,11 @@ async function recordOutcome(
       .update(stories)
       .set({
         summary: result?.summary ?? null,
+        // Null when the model did not write one, which is a complete state the
+        // card renders as a title alone. NEVER a slice of `summary`: that is
+        // the chopped-abstract defect the column exists to avoid, and the
+        // schema's docblock says so at the other end.
+        oneLine: result?.oneLine ?? null,
         whyItMatters: result?.whyItMatters ?? null,
         keyPoints: result?.keyPoints ?? [],
         summaryProvider: client.provider,
@@ -308,6 +326,8 @@ function describeFailure(error: unknown): string {
 export interface RunSummariesOptions {
   env?: LlmEnv;
   now?: Date;
+  /** The schedule to pace against, in minutes. Read from the environment when absent. */
+  intervalMinutes?: number;
   /** Injected in tests. Production passes nothing. */
   fetchImpl?: FetchLike;
   /** Injected in tests so the cap can be exercised without a network. */
@@ -348,6 +368,7 @@ export async function runSummaries(
   const day = usageDay(now);
 
   let budget = 0;
+  let pass = 0;
   let attempted = 0;
   let succeeded = 0;
   let failed = 0;
@@ -362,8 +383,32 @@ export async function runSummaries(
       return { ...IDLE, skipped: `daily cap reached (${cap} stories/day)` };
     }
 
+    /**
+     * THE DAY'S BUDGET, PACED ACROSS THE DAY'S PASSES — #192.
+     *
+     * The cap is still the cap and the hard refusal is still the ledger read
+     * inside the loop below; this only decides how much of the remainder THIS
+     * pass may take, so the passes after it still have something to spend on
+     * stories that have not arrived yet. See passAllowance for the measurement
+     * that motivated it.
+     *
+     * The interval is read defensively rather than trusted. The worker
+     * validates it before its first pass, so an invalid value cannot reach
+     * here through the normal path — but this function is also called directly
+     * by tests and by anything that runs a single pass, and a throw here would
+     * turn a bad environment variable into "summaries stopped working" rather
+     * than into the worker's own clear error.
+     */
+    let intervalMinutes = DEFAULT_INTERVAL_MINUTES;
+    try {
+      intervalMinutes = options.intervalMinutes ?? readIntervalMinutes(env as SecretEnv);
+    } catch {
+      log(`[summaries] could not read the schedule; pacing against ${intervalMinutes} minutes.`);
+    }
+    pass = passAllowance(budget, now, intervalMinutes);
+
     const client = options.client ?? createLlmClient(settings.config, options.fetchImpl);
-    const candidates = await selectStoriesToSummarize(db, now, budget);
+    const candidates = await selectStoriesToSummarize(db, now, pass);
 
     for (const story of candidates) {
       // Re-read from the ledger every iteration rather than trusting the slice
@@ -400,12 +445,12 @@ export async function runSummaries(
 
     const paid = isPaidProvider(settings.config.provider);
     log(
-      `[summaries] ${succeeded} written, ${failed} failed, ${budget - attempted} of ${cap} ${
-        paid ? "paid " : ""
-      }calls left today.`,
+      `[summaries] ${succeeded} written, ${failed} failed, ${pass} allowed this pass, ${
+        budget - attempted
+      } of ${cap} ${paid ? "paid " : ""}calls left today.`,
     );
 
-    return { skipped: null, budgetAtStart: budget, attempted, succeeded, failed };
+    return { skipped: null, budgetAtStart: budget, passBudget: pass, attempted, succeeded, failed };
   } catch (error) {
     // The outer guard. Counts collected so far are returned rather than
     // discarded, and `attempted` exceeding `succeeded + failed` is the signal
@@ -415,6 +460,7 @@ export async function runSummaries(
     return {
       skipped: `stopped after an error: ${why}`,
       budgetAtStart: budget,
+      passBudget: pass,
       attempted,
       succeeded,
       failed,

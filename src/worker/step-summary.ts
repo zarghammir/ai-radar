@@ -40,7 +40,7 @@ export function summaryLines(summaries: SummaryRunResult | { error: string }): s
     lines.push(`- **summaries: OFF** — ${withoutQuotedValues(summaries.skipped)}`);
   } else {
     lines.push(
-      `- **summaries: ON** — ${summaries.succeeded} written, ${summaries.failed} failed, ${summaries.budgetAtStart} of today's budget available at the start`,
+      `- **summaries: ON** — ${summaries.succeeded} written, ${summaries.failed} failed, ${summaries.passBudget} allowed this pass of ${summaries.budgetAtStart} left today`,
     );
   }
 

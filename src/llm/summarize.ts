@@ -23,6 +23,18 @@ export const MAX_ITEMS_IN_PROMPT = 5;
 export const MAX_EXCERPT_CHARS = 600;
 
 export const MAX_SUMMARY_CHARS = 700;
+/**
+ * The one-line summary's ceiling, and why it is 160 rather than the ~90 the
+ * prompt asks for.
+ *
+ * The card gives this line about two lines of text on a phone, so 90 is the
+ * length that LOOKS right and 160 is where it starts to defeat the point. The
+ * schema takes the looser figure deliberately: a model that overshoots the
+ * suggestion by twenty characters would otherwise void the whole response,
+ * losing a perfectly good summary and whyItMatters to a line nobody had to
+ * have. The prompt asks for the length; the schema only refuses the absurd.
+ */
+export const MAX_ONE_LINE_CHARS = 160;
 export const MAX_WHY_CHARS = 400;
 export const MAX_KEY_POINT_CHARS = 200;
 export const MAX_KEY_POINTS = 3;
@@ -37,6 +49,23 @@ export interface StorySummary {
   summary: string;
   whyItMatters: string;
   keyPoints: string[];
+  /**
+   * One sentence for the line under the title on the card — #192.
+   *
+   * OPTIONAL, AND THAT IS NOT A WEAKENING OF THE SCHEMA BELOW. The rule the
+   * other three fields enforce is that a model answering `{}` must not be
+   * recorded as a success, and they still enforce it: a response missing any
+   * of them fails whatever this field does. What optional buys is that a
+   * provider which ignores a newly added instruction degrades to exactly
+   * today's behaviour — a summary with no one-liner — instead of to NO
+   * SUMMARIES AT ALL. Making it required would have put the 23% of the feed
+   * that currently has a summary at the mercy of one new prompt line.
+   *
+   * `stories.one_line` being null is already a complete, rendered state: the
+   * card shows the title alone and is finished. That is why absence here is
+   * expressible, where an absent `summary` would not be.
+   */
+  oneLine?: string;
 }
 
 /**
@@ -50,6 +79,7 @@ const responseSchema = z.object({
   summary: z.string().trim().min(1).max(MAX_SUMMARY_CHARS),
   whyItMatters: z.string().trim().min(1).max(MAX_WHY_CHARS),
   keyPoints: z.array(z.string().trim().min(1).max(MAX_KEY_POINT_CHARS)).min(1).max(MAX_KEY_POINTS),
+  oneLine: z.string().trim().min(1).max(MAX_ONE_LINE_CHARS).optional(),
 });
 
 function clip(text: string, limit: number): string {
@@ -83,8 +113,19 @@ export function buildPrompt(story: StoryForSummary): string {
     "Do not speculate, do not add facts that are not present, and do not use marketing language.",
     "If the reports disagree, say so rather than picking one.",
     "",
+    // The one-line summary is WRITTEN, not extracted. Asking for "the first
+    // sentence of the summary" produces the thing #192 exists to avoid: "As
+    // robotic hardware and learning methods advance, humanoids need tools to
+    // perform tasks beyond their inhere…". The three constraints below — a
+    // sentence, plain words, about 90 characters — are what make it a line
+    // somebody can read under a headline rather than a cut-off paragraph.
+    "Also write oneLine: ONE plain sentence of about 90 characters saying what happened,",
+    "the way you would tell a colleague in passing. It goes under the headline on a card,",
+    "so it must stand alone and must NOT be the first sentence of your summary.",
+    'Good: "OpenAI shipped a cheaper model that nearly matches its best one."',
+    "",
     "Reply with JSON only, no code fence, in exactly this shape:",
-    '{"summary": "2-3 sentences", "whyItMatters": "1-2 sentences", "keyPoints": ["…", "…", "…"]}',
+    '{"summary": "2-3 sentences", "whyItMatters": "1-2 sentences", "keyPoints": ["…", "…", "…"], "oneLine": "one sentence"}',
   ].join("\n");
 }
 
@@ -148,6 +189,9 @@ export function parseSummary(text: string): StorySummary {
     summary: result.data.summary,
     whyItMatters: result.data.whyItMatters,
     keyPoints: result.data.keyPoints,
+    // Field by field rather than a spread, like the three above: what the
+    // model sent is validated data, not a shape to hand on wholesale.
+    oneLine: result.data.oneLine,
   };
 }
 
