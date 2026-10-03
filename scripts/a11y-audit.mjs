@@ -296,7 +296,24 @@ const phoneStates = Object.keys(report.bottomBar).filter((k) => k.startsWith("ph
 const laptopStatesWithBar = Object.entries(report.bottomBar).filter(
   ([k, b]) => k.startsWith("laptop/") && b.present !== false,
 );
-const expectedBarStates = ROUTES.length * THEMES.length;
+/**
+ * THE BAR IS ABSENT ON /welcome BY DESIGN, so the floor counts the routes that
+ * should have one rather than every route.
+ *
+ * First run hides both navigations: it is the one screen with a single thing to
+ * do, and a nav bar there offers four ways to leave a place the reader has not
+ * been shown yet. Counting it would make this floor demand a bar the product
+ * deliberately does not draw — a check asserting the opposite of the decision.
+ *
+ * DERIVED, NOT TYPED. The subtraction is computed from the same ROUTES list the
+ * sweep walks, so adding a route moves both numbers together. A hardcoded 8 here
+ * would go quietly wrong the next time ROUTES changes.
+ */
+const CHROMELESS_ROUTES = ["/welcome"];
+/** Every phone state the sweep VISITS. */
+const expectedPhoneStates = ROUTES.length * THEMES.length;
+/** Of those, the ones that should be DRAWING a bottom bar. */
+const expectedBarStates = (ROUTES.length - CHROMELESS_ROUTES.length) * THEMES.length;
 
 const floorFailures = [];
 
@@ -350,8 +367,12 @@ for (const [state, seen] of Object.entries(report.seeded)) {
   }
 }
 
-if (phoneStates.length !== expectedBarStates) {
-  floorFailures.push(`visited ${phoneStates.length} phone states, expected ${expectedBarStates}`);
+// TWO DIFFERENT QUANTITIES, equal until /welcome stopped drawing a bar. This
+// one is "did the sweep go everywhere"; the one below is "did a bar appear
+// where one should". Collapsing them again would let a route silently drop out
+// of the sweep as long as the bar count happened to match.
+if (phoneStates.length !== expectedPhoneStates) {
+  floorFailures.push(`visited ${phoneStates.length} phone states, expected ${expectedPhoneStates}`);
 }
 if (measuredBars.length !== expectedBarStates) {
   floorFailures.push(

@@ -3,12 +3,33 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { bottomNavItems, navItems } from "@/config/nav";
+import { WELCOME_PATH } from "@/components/onboarding/first-run-gate";
 import { brand } from "@/config/brand";
 import { cn } from "@/lib/utils";
 
 function useIsCurrent() {
   const pathname = usePathname();
   return (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
+}
+
+/**
+ * NO NAVIGATION ON THE WELCOME SCREEN.
+ *
+ * The owner, on first run: "remove the left sidebar today, radar, saved". He is
+ * right, and not only on taste. First run is the one screen with a single thing
+ * to do, and it was offering four ways to leave before the reader had any idea
+ * what the four were — a nav bar is a map of a place you have not been shown.
+ *
+ * HIDDEN HERE RATHER THAN IN THE LAYOUT, because the layout is a server
+ * component and the route is only knowable on the client. Both bars already
+ * read the pathname to mark the current item, so this costs nothing new.
+ *
+ * The gate itself still works: FirstRunGate sends a first-time reader here from
+ * ANY route, so there is nothing to navigate away from that they could not
+ * reach by finishing or skipping — which is now one tap either way.
+ */
+function useChromeHidden() {
+  return usePathname() === WELCOME_PATH;
 }
 
 /**
@@ -19,6 +40,8 @@ function useIsCurrent() {
  */
 export function Sidebar() {
   const isCurrent = useIsCurrent();
+  const hidden = useChromeHidden();
+  if (hidden) return null;
   return (
     <nav
       aria-label="Main"
@@ -78,6 +101,8 @@ export function Sidebar() {
  */
 export function BottomNav() {
   const isCurrent = useIsCurrent();
+  const hidden = useChromeHidden();
+  if (hidden) return null;
   return (
     <nav
       aria-label="Main"
