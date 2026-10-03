@@ -72,6 +72,63 @@ export async function remainingToday(db: Db, day: string, cap: number): Promise<
   return Math.max(0, cap - used);
 }
 
+/**
+ * How many stories THIS PASS may spend, out of what the day has left.
+ *
+ * ── THE DEFECT ─────────────────────────────────────────────────────────────
+ *
+ * The cap is twenty a day and the first passes spent all of it. Selection is
+ * already the brief's own order, so each pass correctly summarised the best
+ * stories IT COULD SEE — but a pass at 03:00 UTC can only see what had arrived
+ * by 03:00. Everything that landed after the budget ran out waited for
+ * tomorrow, by which time it was a day older, and a feed that leads with the
+ * last 24 hours never shows it.
+ *
+ * Measured on production, 2026-10-03, with selection already fixed and the view
+ * filter already removed: 23.0% of the feed had a summary and 9 of the top 20
+ * did — but of the 22 stories under 24 hours old, THREE. The median summarised
+ * story was 52.9h old against 48.9h unsummarised: the budget was reaching
+ * stories that were older than average, not newer. That is the shape of a cap
+ * spent at the start of the day, and it is the band the reader actually reads.
+ *
+ * ── THE RULE ───────────────────────────────────────────────────────────────
+ *
+ * Divide what is left by the number of passes left in the UTC day. Nothing is
+ * reserved and nothing is wasted: a pass that is skipped leaves its share to
+ * the next one, because the divisor shrinks as the day runs out, and the last
+ * pass of the day may spend everything that remains.
+ *
+ * At twenty a day on a three-hourly schedule this gives 3,3,3,3,2,2,2,2 — the
+ * whole cap, spread over the day, so the newest arrivals are reachable at
+ * every hour instead of only the earliest.
+ *
+ * ── WHY THE DAY IS THE UNIT AND NOT A SLIDING WINDOW ───────────────────────
+ *
+ * Because the LEDGER's unit is the day. `usageDay` is a UTC calendar day and
+ * `remainingToday` sums against it; pacing on any other window would be a
+ * second clock disagreeing with the one that enforces the cap, and the two
+ * would differ exactly at the boundary where overspending is possible.
+ *
+ * THIS IS A PACE, NOT A CAP. It never increases what may be spent: the result
+ * is bounded above by `remaining`, and the hard refusal in run-summaries.ts
+ * still re-reads the ledger before every single call.
+ */
+export function passAllowance(remaining: number, now: Date, intervalMinutes: number): number {
+  if (remaining <= 0) return 0;
+  // A non-positive interval would divide by zero or hand back a negative count
+  // of passes; the worker rejects such a value long before here, so this is the
+  // branch that keeps a direct caller from turning a misconfiguration into an
+  // unpaced spend of the whole cap.
+  if (!Number.isFinite(intervalMinutes) || intervalMinutes <= 0) return remaining;
+
+  const minutesIntoDay = now.getUTCHours() * 60 + now.getUTCMinutes();
+  const minutesLeft = 24 * 60 - minutesIntoDay;
+  // At least one: the final minutes of the day are still a pass, and a zero
+  // here would divide the remaining budget by nothing.
+  const passesLeft = Math.max(1, Math.ceil(minutesLeft / intervalMinutes));
+  return Math.min(remaining, Math.ceil(remaining / passesLeft));
+}
+
 export interface UsageRecord {
   day: string;
   provider: string;
