@@ -65,8 +65,60 @@ export async function defaultBriefLength(): Promise<BriefLengthParam> {
   }
 }
 
-/** What the app opens on when the reader has never chosen. */
-export const DEFAULT_VIEW: BriefView = "built";
+/**
+ * WHAT THE WORKER MEASURES THE READER'S COVERAGE AGAINST — and no longer what
+ * the page opens on, which is the part of this comment that went stale.
+ *
+ * WHEN IT CHANGED HANDS. This was written to fix the DEFAULT the Today page
+ * read. #191 then landed first and removed the view control entirely on the
+ * owner's ruling — "remove launches + news tab… just want one feed" — so
+ * src/app/page.tsx now takes `parseView(params.view) ?? "all"` and never reads
+ * this constant at all.
+ *
+ * THAT DID NOT MAKE THIS CHANGE UNNECESSARY, which is what I assumed when I
+ * recommended closing this PR, and I was wrong. The constant has exactly one
+ * live consumer left: src/worker/brief-coverage.ts, which reports summary
+ * coverage "on the view he opens". With this still at "built" the worker
+ * reports against five of ten content types while the app serves all ten — a
+ * figure about a screen nobody can reach any more, printed every pass, next to
+ * a correct one and indistinguishable from it.
+ *
+ * So the fix is the same fix and the reason is now a different one: it keeps
+ * the worker's report describing the page that actually exists.
+ *
+ * ── WHY "all" WAS RIGHT IN THE FIRST PLACE ─────────────────────────────────
+ *
+ * "all" SINCE THE CATALOGUE CHANGED, and the change is in the catalogue rather
+ * than in anyone's taste. "built" admits MODEL, TOOL, RELEASE, PAPER and
+ * RESEARCH; it excludes NEWS, BUSINESS, DISCUSSION, TREND and REGULATION. That
+ * was a fair default when the sources were labs and release feeds.
+ *
+ * #181 added seven startup and venture feeds — Crunchbase, TechCrunch Venture,
+ * TechCrunch Startups, Sifted, Tech.eu, Y Combinator's blog and Product Hunt —
+ * and they produce almost nothing BUT news and business. Measured on production
+ * 2026-09-30: of the 23 stories that had arrived in the previous 24 hours, 20
+ * were NEWS, 2 BUSINESS and 1 RELEASE. On "built" a reader could see one of
+ * them. Seven sources were merged, seeded, fetched and ranked, and the default
+ * screen could not show their output by construction.
+ *
+ * So this is not "news is more interesting now". It is that the default was
+ * filtering out most of what the collector now collects, and a default that
+ * hides five sixths of a day's arrivals is reporting a quiet day that did not
+ * happen.
+ *
+ * THIS DOES NOT MAKE THE BRIEF FRESH, and it was not expected to. When this was
+ * written, ordering was by score alone, so the front of "all" was still led by
+ * whatever was most important rather than most recent — measured the same day,
+ * the top ten of "all" held nothing under 24 hours old. #186 holds those
+ * measurements and the reason the age half-life cannot fix it.
+ *
+ * THAT HALF IS NOW SOLVED ELSEWHERE, and the fact is dated rather than deleted
+ * because both halves are worth keeping: #191 added a fresh-first ordering, and
+ * on 2026-10-03 the live top five were 3.1h to 13.7h old, all under a day. So
+ * the sentence above describes why this constant alone was never going to be
+ * enough — not a property the app still has.
+ */
+export const DEFAULT_VIEW: BriefView = "all";
 
 /**
  * Which view Today opens on, read the way a SERVER component must.

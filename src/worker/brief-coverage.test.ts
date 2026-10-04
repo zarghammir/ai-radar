@@ -19,9 +19,14 @@ const card = (contentType: ContentType, summary: string | null) => ({ contentTyp
 
 describe("coverageLines", () => {
   /**
-   * TWO DENOMINATORS, LABELLED. An earlier draft reported only the first. The
-   * page the owner opens is view-filtered — DEFAULT_VIEW is "built", five of ten
-   * content types — so a figure over everything answers a question nobody asked.
+   * TWO DENOMINATORS, LABELLED. An earlier draft reported only the first,
+   * because the page the owner opens is view-filtered and a figure over
+   * everything answers a question nobody asked.
+   *
+   * The fixtures below pass an explicit view and do NOT read DEFAULT_VIEW, which
+   * is why this test did not move when the default became "all". That
+   * independence is deliberate: a test that took the default from the code under
+   * it would go quiet on the day the default made the gap zero.
    */
   it("reports everything admitted AND the view he actually opens", () => {
     const [headline] = coverageLines(base());
