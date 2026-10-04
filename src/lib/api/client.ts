@@ -232,9 +232,10 @@ export async function setHidden(story: StoryCard, hidden: boolean): Promise<void
  */
 export async function getSaved(archived = false): Promise<SavedResponse> {
   // Built from THIS browser's state on both paths, per the #91 ruling. There is
-  // no request here: /api/saved still exists and still answers, and the screen
-  // no longer asks it anything, because its answer is one list shared by every
-  // reader of the same instance.
+  // no request here, and since #183 there is nothing left to send one to:
+  // /api/saved answered with one list shared by every reader of the same
+  // instance, which is exactly what the ruling says a screen must not ask for,
+  // so the route was removed rather than left answering nobody.
   if (archived) return { stories: [], nextCursor: null, hasMore: false, unresolved: 0 };
   const marks = localMarks();
   // `unresolved` is CARRIED, not discarded. An id with no card is this device

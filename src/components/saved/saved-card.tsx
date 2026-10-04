@@ -98,13 +98,20 @@ export function SavedCardView({
           </CardButton>
 
           {/*
-            Archiving has no endpoint behind it yet — issue #70 adds
-            POST /api/saved/[storyId]/archive. The control is VISIBLE and
-            DISABLED with the reason attached rather than absent, because a
-            missing control tells the reader nothing, and rather than wired to
-            browser storage, because a reader-local archive would disagree with
-            the server the moment they open this on a second device. A button
-            that lies quietly is worse than one that arrives a week late.
+            Archiving does nothing yet. The control is VISIBLE and DISABLED
+            with the reason attached rather than absent, because a missing
+            control tells the reader nothing, and a button that lies quietly is
+            worse than one that arrives a week late.
+
+            ITS REASON FOR BEING DISABLED HAS CHANGED, and #70 needs rewriting
+            before anyone builds it. The old reason was that a reader-local
+            archive would disagree with the server the moment the reader opened
+            this on a second device. #183 removed that server state, so there is
+            nothing left to disagree with — and by the #91 ruling there never
+            will be without accounts. Archiving is therefore reader-local or it
+            is nothing, which is a different feature from the one #70 describes.
+            Left disabled deliberately: the honest fix is to decide that, not to
+            wire the button up because the objection evaporated.
           */}
           {/* Described by the ONE sentence on the page, not a copy per card.
               An id can be referenced by any number of elements, and a reader

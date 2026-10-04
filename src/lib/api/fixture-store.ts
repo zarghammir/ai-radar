@@ -61,10 +61,10 @@ export interface SavedMarks {
    *
    * SINCE #91 the reader's saved ids live in this browser and the catalogue
    * lives in a shared database, so something has to turn one into the other.
-   * There is no endpoint that takes a set of ids and returns their cards —
-   * /api/saved returns the one shared list, which is exactly the thing the
-   * ruling says the screen must stop asking for, and /api/stories/[slug] is one
-   * request per save.
+   * There is no endpoint that takes a set of ids and returns their cards.
+   * /api/saved returned the one shared list — exactly the thing the ruling says
+   * the screen must stop asking for, which is why #183 removed it — and
+   * /api/stories/[slug] is one request per save.
    *
    * So the card is kept with the save. Three consequences worth stating rather
    * than discovering: Saved works with no network at all, which suits a PWA;
