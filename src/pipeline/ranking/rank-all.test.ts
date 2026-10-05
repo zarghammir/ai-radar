@@ -167,8 +167,21 @@ withDb("rankAllStories", () => {
 
   // ── The two named deletion controls ───────────────────────────────────────
 
-  it("ranks a followed-topic story above its unfollowed twin", async () => {
-    // NAMED CONTROL for removing the topic-match component.
+  /**
+   * THIS TEST USED TO ASSERT THE OPPOSITE, and the inversion is #203.
+   *
+   * It required the followed story to outscore its twin and to carry a
+   * `topicMatch` component, because the worker read the ONE shared row's
+   * topics and baked them into the ONE stored score — so every reader was
+   * ranked by whoever last touched the welcome screen. The row still exists
+   * and still holds "openai" here; the worker must now ignore it.
+   *
+   * The reader's own topics are applied at read time instead, by
+   * `readerTopicBonus` through `rerankForReader` in src/api/brief.ts, and
+   * that is where "a followed story rises" is asserted now. This is the
+   * control for the removal: put the `userPreferences` read back and it fails.
+   */
+  it("stores NO topic component, even when the shared row follows the topic", async () => {
     await db
       .insert(topics)
       .values({ key: "openai", name: "OpenAI", group: "company", keywords: ["openai"] });
@@ -185,8 +198,10 @@ withDb("rankAllStories", () => {
     await rankAllStories(db, NOW);
     const a = await reload(followed.id);
     const b = await reload(twin.id);
-    expect(a.score).toBeGreaterThan(b.score);
-    expect(a.scoreComponents.topicMatch).toBe(WEIGHTS.topicFirstMatch);
+    // Identical stories but for the topic, identical scores: the shared row
+    // no longer reaches the ranker.
+    expect(a.score).toBe(b.score);
+    expect(a.scoreComponents.topicMatch).toBeUndefined();
     expect(b.scoreComponents.topicMatch).toBeUndefined();
   });
 

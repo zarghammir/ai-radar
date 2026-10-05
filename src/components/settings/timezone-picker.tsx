@@ -18,11 +18,18 @@ export function TimezonePicker({
   id,
   value,
   onChange,
+  disabled = false,
 }: {
   id: string;
   value: string;
-  /** Called only with a zone this platform accepts. */
-  onChange: (zone: string) => void;
+  /** Called only with a zone this platform accepts. Absent when disabled. */
+  onChange?: (zone: string) => void;
+  /**
+   * Shown, not offered — #203. The zone is the instance's since the write
+   * moved behind the secret, and Settings renders it greyed with the reason
+   * beside it rather than removing a control the reader would then look for.
+   */
+  disabled?: boolean;
 }) {
   const [typed, setTyped] = useState(value);
   const [problem, setProblem] = useState<string | null>(null);
@@ -59,7 +66,7 @@ export function TimezonePicker({
       setProblem(`“${zone}” is not a time zone name. They look like Europe/Lisbon.`);
       return;
     }
-    onChange(zone);
+    onChange?.(zone);
   }
 
   return (
@@ -68,8 +75,9 @@ export function TimezonePicker({
         <select
           id={id}
           value={value}
+          disabled={disabled}
           onChange={(event) => commit(event.target.value)}
-          className="border-faint-2 bg-paper text-ink focus-visible:ring-org max-w-full border px-2 py-1.5 text-[14px] focus-visible:ring-2 focus-visible:outline-none"
+          className="border-faint-2 bg-paper text-ink focus-visible:ring-org max-w-full border px-2 py-1.5 text-[14px] focus-visible:ring-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-70"
         >
           {/* A stored zone this browser does not list still has to be visible,
               or the reader sees a picker claiming they chose something else.
@@ -95,9 +103,10 @@ export function TimezonePicker({
         <input
           id={id}
           value={typed}
+          disabled={disabled}
           onChange={(event) => setTyped(event.target.value)}
           onBlur={(event) => commit(event.target.value)}
-          className="border-faint-2 bg-paper text-ink focus-visible:ring-org border px-2 py-1.5 text-[14px] focus-visible:ring-2 focus-visible:outline-none"
+          className="border-faint-2 bg-paper text-ink focus-visible:ring-org border px-2 py-1.5 text-[14px] focus-visible:ring-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-70"
         />
       )}
       {problem ? (

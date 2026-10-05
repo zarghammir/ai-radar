@@ -1,19 +1,17 @@
 import { getDb } from "@/db/client";
-import { getPreferences, preferencesPatchSchema, updatePreferences } from "@/api/reader";
-import { ApiError, handle, json, readOptionalJson } from "@/api/http";
+import { getPreferences } from "@/api/reader";
+import { handle, json } from "@/api/http";
 
+/**
+ * READ-ONLY since #203. The write moved to /api/internal/preferences, behind
+ * the secret, because this row is the instance's configuration — when the one
+ * daily brief is cut — and for as long as it sat here anyone on the internet
+ * could change it for everyone. The owner's ruling, 2026-10-05: "only I can
+ * change them."
+ *
+ * The read stays public: Settings shows the reader the time their brief is
+ * cut, and must be able to say so without a secret.
+ */
 export async function GET(): Promise<Response> {
   return handle(async () => json(await getPreferences(getDb())));
-}
-
-export async function PUT(request: Request): Promise<Response> {
-  return handle(async () => {
-    const parsed = preferencesPatchSchema.safeParse(await readOptionalJson(request));
-    if (!parsed.success) {
-      // strict() above, so an unknown field is rejected rather than ignored:
-      // a silently dropped field is a preference the reader believes they set.
-      throw new ApiError("VALIDATION_ERROR", parsed.error.issues[0]?.message ?? "invalid body");
-    }
-    return json(await updatePreferences(getDb(), parsed.data));
-  });
 }

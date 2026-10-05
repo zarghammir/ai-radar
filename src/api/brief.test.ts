@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { briefWindow, parseBriefLength, takeBriefStories } from "./brief";
+import { briefWindow, parseBriefLength, rerankForReader, takeBriefStories } from "./brief";
 
 describe("briefWindow", () => {
   it("starts at today's brief time once it has passed", () => {
@@ -113,5 +113,61 @@ describe("takeBriefStories", () => {
     // newest. A rule that reordered would quietly change which five.
     const stories = [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }];
     expect(takeBriefStories(stories, "5").map((s) => s.id)).toEqual([1, 2, 3, 4]);
+  });
+});
+
+/**
+ * The per-reader re-sort — #203. Pure, so it is tested without a database on
+ * the two properties that matter: it keeps the newest-first bucket the query
+ * established, and within a bucket it lifts what the reader follows by the
+ * decayed bonus and nothing else.
+ */
+describe("rerankForReader", () => {
+  const now = new Date("2026-10-05T12:00:00Z");
+  const hoursAgo = (h: number) => new Date(now.getTime() - h * 3_600_000).toISOString();
+  const card = (id: number, score: number, topics: string[], ageHours: number) => ({
+    id,
+    score,
+    firstSeenAt: hoursAgo(ageHours),
+    topics: topics.map((key) => ({ key })),
+  });
+
+  it("returns the cards untouched when the reader follows nothing", () => {
+    const cards = [card(3, 50, ["agents"], 1), card(2, 40, [], 1), card(1, 30, ["agents"], 1)];
+    expect(rerankForReader(cards, [true, true, true], [], now)).toBe(cards);
+  });
+
+  it("lifts a followed story within its bucket", () => {
+    // Stored order: 50, 40, 30. The reader follows agents; the 30 carries it
+    // and gains 14 at age zero, to 44 — above the 40, below the 50.
+    const cards = [card(3, 50, [], 0), card(2, 40, [], 0), card(1, 30, ["agents"], 0)];
+    const out = rerankForReader(cards, [true, true, true], ["agents"], now);
+    expect(out.map((c) => c.id)).toEqual([3, 1, 2]);
+  });
+
+  /**
+   * THE LINE A TASTE SETTING MAY NOT CROSS. The owner's ruling is that today's
+   * arrivals lead; a followed story from last week may rise to the top of last
+   * week, never above an unfollowed story from this morning.
+   */
+  it("never lifts an older story over today's arrivals", () => {
+    const cards = [card(2, 10, [], 1), card(1, 60, ["agents"], 100)];
+    const out = rerankForReader(cards, [true, false], ["agents"], now);
+    expect(out.map((c) => c.id)).toEqual([2, 1]);
+  });
+
+  it("applies the bonus through the same age decay as the stored score", () => {
+    // At the 48h half-life the 14-point first match is worth 7. A 40 with it
+    // becomes 47 — enough to pass a 45, not a 48.
+    const cards = [card(3, 48, [], 48), card(2, 45, [], 48), card(1, 40, ["agents"], 48)];
+    const out = rerankForReader(cards, [false, false, false], ["agents"], now);
+    expect(out.map((c) => c.id)).toEqual([3, 1, 2]);
+  });
+
+  it("breaks a tie by id, newest story first, as the query does", () => {
+    const cards = [card(1, 40, [], 0), card(2, 26, ["agents"], 0)];
+    // 26 + 14 = 40: a tie on score, so the higher id leads.
+    const out = rerankForReader(cards, [true, true], ["agents"], now);
+    expect(out.map((c) => c.id)).toEqual([2, 1]);
   });
 });

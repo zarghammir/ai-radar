@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useMemo, useState } from "react";
+import { useId, useMemo } from "react";
 import { SaveStatusText, Section, useSaveStatus } from "@/components/settings/section";
 import { TimezonePicker } from "@/components/settings/timezone-picker";
 import { brand } from "@/config/brand";
@@ -15,6 +15,18 @@ import { cn } from "@/lib/utils";
  * These three live together because they are one sentence: "have about ten
  * minutes ready for me at half past seven, my time". Splitting them into three
  * panels would make the reader assemble that sentence themselves.
+ *
+ * TWO OF THE THREE ARE NOT THE READER'S TO CHANGE — #203. The time the brief
+ * is cut and its zone are the instance's: one collector, one window, the same
+ * for everyone who opens this copy. Until #203 any reader could change them
+ * for every other reader, from this screen, with no login. The controls stay
+ * on the page, disabled, with the reason beside them — a gated control that
+ * vanishes leaves the reader wondering whether the feature exists, and one
+ * that is greyed with a sentence tells them exactly who holds it. Whoever runs
+ * the copy changes them through /api/internal/preferences with the secret.
+ *
+ * The LENGTH is still the reader's: it lives on their device (#94) and nobody
+ * else sees it.
  */
 export function BriefSection({ preferences }: { preferences: Preferences }) {
   const { status, run } = useSaveStatus();
@@ -26,14 +38,12 @@ export function BriefSection({ preferences }: { preferences: Preferences }) {
       status={<SaveStatusText status={status} what="your brief settings" />}
     >
       <div className="flex flex-col gap-5">
-        <BriefTimeField
-          briefTime={preferences.briefTime}
-          onSave={(briefTime) => run(() => savePreferences({ briefTime }))}
-        />
-        <TimezoneField
-          timezone={preferences.timezone}
-          onSave={(timezone) => run(() => savePreferences({ timezone }))}
-        />
+        <BriefTimeField briefTime={preferences.briefTime} />
+        <TimezoneField timezone={preferences.timezone} />
+        <p className="text-meta -mt-2 text-[12.5px]" data-settings-locked="brief-window">
+          The time and zone are set by whoever runs this copy, and are the same for everyone who
+          opens it.
+        </p>
         <BriefLengthField
           briefLength={preferences.briefLength}
           onSave={(briefLength) => run(() => savePreferences({ briefLength }))}
@@ -55,23 +65,13 @@ function FieldLabel({ htmlFor, children }: { htmlFor: string; children: React.Re
 }
 
 /**
- * A native time input, so the reader gets their own platform's clock and its
- * own 12- or 24-hour habit. The Save button appears only once the draft
- * differs: a control that is always there gives no signal about whether there
- * is anything to save.
+ * A native time input, so the reader sees the brief time in their own
+ * platform's clock and its own 12- or 24-hour habit. DISABLED since #203: the
+ * value is shown, not offered. The draft/Save machinery this held is gone with
+ * the write it drove; the one sentence under the fields says who can change it.
  */
-function BriefTimeField({
-  briefTime,
-  onSave,
-}: {
-  briefTime: string;
-  onSave: (value: string) => void;
-}) {
+function BriefTimeField({ briefTime }: { briefTime: string }) {
   const id = useId();
-  const [draft, setDraft] = useState(briefTime);
-  const changed = draft !== briefTime;
-  const valid = /^([01]\d|2[0-3]):([0-5]\d)$/.test(draft);
-
   return (
     <div>
       <FieldLabel htmlFor={id}>Ready at</FieldLabel>
@@ -79,70 +79,41 @@ function BriefTimeField({
         <input
           id={id}
           type="time"
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          className="border-faint-2 bg-paper text-ink focus-visible:ring-org border px-2 py-1.5 text-[14px] tabular-nums focus-visible:ring-2 focus-visible:outline-none"
+          value={briefTime}
+          readOnly
+          disabled
+          aria-describedby={`${id}-locked`}
+          className="border-faint-2 bg-paper text-ink border px-2 py-1.5 text-[14px] tabular-nums disabled:cursor-not-allowed disabled:opacity-70"
         />
-        {/* Only while the two differ. Beside an untouched field it repeated
-            the value already in the box. */}
-        {changed ? (
-          <span className="text-meta text-[12.5px]">Saved: {formatBriefTime(briefTime)}</span>
-        ) : null}
-        {changed ? (
-          <button
-            type="button"
-            disabled={!valid}
-            onClick={() => onSave(draft)}
-            className="focus-visible:ring-org bg-ink text-paper border-ink rounded-xs border px-2.5 py-1.5 text-[13px] font-semibold focus-visible:ring-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            Save time
-          </button>
-        ) : null}
-        {/* An emptied time input reads as "" on every browser. Saying so beats
-            a Save button that is disabled for reasons the reader cannot see. */}
-        {changed && !valid ? (
-          <span className="text-destructive text-[12.5px] font-semibold">Pick a time first.</span>
-        ) : null}
+        <span id={`${id}-locked`} className="text-meta text-[12.5px]">
+          {formatBriefTime(briefTime)}, set by whoever runs this copy
+        </span>
       </div>
     </div>
   );
 }
 
 /**
- * The zone the brief's clock runs in.
- *
- * The browser's guess is OFFERED, never applied behind the reader's back: a
- * wrong guess stored silently is a brief arriving at the wrong hour with
- * nothing on screen to explain why.
+ * The zone the brief's clock runs in. DISABLED since #203, same as the time:
+ * shown, not offered. The "Use <detected zone>" button is gone with the write
+ * — but the reader's own zone is still worth a sentence when it differs,
+ * because a brief cut at 09:00 Vancouver arrives at a different hour in
+ * Lisbon, and a reader who cannot change the setting can at least be told
+ * what it means for them.
  */
-function TimezoneField({
-  timezone,
-  onSave,
-}: {
-  timezone: string;
-  onSave: (value: string) => void;
-}) {
+function TimezoneField({ timezone }: { timezone: string }) {
   const id = useId();
   const detected = useMemo(() => detectTimezone(), []);
 
   return (
     <div>
-      <FieldLabel htmlFor={id}>Your time zone</FieldLabel>
+      <FieldLabel htmlFor={id}>Brief time zone</FieldLabel>
       <div className="mt-1 flex flex-wrap items-start gap-2">
-        <TimezonePicker id={id} value={timezone} onChange={onSave} />
-        {detected && detected !== timezone ? (
-          <button
-            type="button"
-            onClick={() => onSave(detected)}
-            className="focus-visible:ring-org border-faint-2 text-soft hover:bg-faint rounded-xs border px-2.5 py-1.5 text-[13px] font-semibold focus-visible:ring-2 focus-visible:outline-none"
-          >
-            Use {detected}
-          </button>
-        ) : null}
+        <TimezonePicker id={id} value={timezone} disabled />
       </div>
-      {detected === null ? (
+      {detected && detected !== timezone ? (
         <p className="text-meta mt-2 text-[12.5px]">
-          This browser will not say which zone it is in, so nothing is guessed for you.
+          Your browser is in {detected}; the brief is cut on {timezone} time.
         </p>
       ) : null}
     </div>

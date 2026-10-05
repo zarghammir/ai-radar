@@ -1,5 +1,11 @@
 import { getDb } from "@/db/client";
-import { recentStories, reportingWindow, sweepSummary, takeBriefStories } from "@/api/brief";
+import {
+  recentStories,
+  reportingWindow,
+  rerankForReader,
+  sweepSummary,
+  takeBriefStories,
+} from "@/api/brief";
 import { getPreferences } from "@/api/reader";
 import { USING_FIXTURES } from "@/lib/api/client";
 import { fixtureBrief } from "@/lib/api/fixtures";
@@ -27,13 +33,31 @@ import type { BriefLengthParam, BriefResponse } from "@/lib/api/types";
 export async function loadBrief(
   length: BriefLengthParam,
   view: BriefView = "all",
+  /** The reader's own topics, from their cookie. See readerTopicKeys. */
+  readerTopics: readonly string[] = [],
 ): Promise<BriefResponse> {
-  if (USING_FIXTURES) return fixtureBrief(length, view);
+  const now = new Date();
+  if (USING_FIXTURES) {
+    // Fixtures have no database to rank in, but the reader's topics are as
+    // real on a fixture build as on a live one, and a Settings screen that
+    // promised "pushed up your brief" and did nothing would be the fake
+    // control this repo keeps removing. The fixture cards carry topics and
+    // first-seen dates, so the same pure re-sort applies.
+    const fixture = fixtureBrief(length, view);
+    const fresh = fixture.stories.map(
+      (s) => now.getTime() - new Date(s.firstSeenAt).getTime() < 24 * 3_600_000,
+    );
+    return { ...fixture, stories: rerankForReader(fixture.stories, fresh, readerTopics, now) };
+  }
 
   const db = getDb();
   const prefs = await getPreferences(db);
-  const reported = reportingWindow(new Date(), prefs.briefTime, prefs.timezone);
-  const ranked = await recentStories(db, { types: typesForView(view) });
+  const reported = reportingWindow(now, prefs.briefTime, prefs.timezone);
+  const ranked = await recentStories(db, {
+    types: typesForView(view),
+    readerTopicKeys: readerTopics,
+    now,
+  });
   const stories = takeBriefStories(ranked, length);
   // Read whether the brief is empty or not: a reader asking "why so few?" on a
   // short brief deserves the same facts as one asking "why none?".

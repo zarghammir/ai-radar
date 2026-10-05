@@ -165,6 +165,130 @@ try {
       if (chosenInSettings < 1) {
         floor.push(`onboarding picked "${pickedKey}" and Settings does not show it chosen`);
       }
+
+      /* ---- 2b. and it wrote it to THIS device only — #203 ------------------ */
+      //
+      // THE DEFECT THIS GUARDS, demonstrated to the owner on 2026-10-05: visitor
+      // A picked "Microsoft" on the welcome screen, and visitor B — a different
+      // browser that had never picked anything — opened Settings and found it
+      // already chosen. Topics were one shared row. They are the device's now,
+      // and this is the assertion that says so: a SECOND context, which shares
+      // no storage with the first, must NOT see the first's pick.
+      //
+      // A fresh context rather than the same one with storage cleared, because
+      // the thing under test is isolation between two readers, and clearing is
+      // a thing one reader can do.
+      {
+        const other = await browser.newContext({ viewport: { width: 390, height: 780 } });
+        const b = await other.newPage();
+        await b.goto(base + "/welcome", { waitUntil: "networkidle" });
+        await b.getByRole("button", { name: /^Skip$/i }).click();
+        await b.waitForURL((url) => new URL(url).pathname === "/", { timeout: 5000 });
+        await b.goto(base + "/settings", { waitUntil: "networkidle" });
+        await b.waitForSelector("[data-settings-state='ready']", { timeout: 5000 }).catch(() => {});
+        const leaked = await b
+          .locator(`[data-topic-key="${pickedKey}"][aria-pressed="true"]`)
+          .count()
+          .catch(() => 0);
+        out.onboardingWrites.visibleToAnotherReader = leaked > 0;
+        if (leaked > 0) {
+          floor.push(
+            `reader A picked "${pickedKey}" and reader B's Settings shows it chosen — topics are shared again`,
+          );
+        }
+        await other.close();
+      }
+
+      /* ---- 2c. the pick reaches the server as a cookie, and re-ranks ------ */
+      //
+      // The device's topics have to reach a page rendered on the server, and the
+      // only road is a cookie. Three facts, each of which can fail alone:
+      //   - the cookie is set, and carries the key;
+      //   - the brief rendered for THIS reader is the order the API gives for
+      //     that key — same function, cookie path and query path agreeing;
+      //   - that order DIFFERS from the stored one, which is what proves the
+      //     re-rank did something rather than echoing the input. It can only
+      //     differ if a candidate story carries the key, so the seeded database
+      //     must provide one; the floor says so by name if it did not.
+      {
+        const cookie = await page.evaluate(() => document.cookie);
+        const hasCookie = new RegExp(`(^|; )ai-radar-topics=[^;]*${pickedKey}`).test(cookie);
+        out.onboardingWrites.cookieCarriesKey = hasCookie;
+        if (!hasCookie)
+          floor.push(`the topics cookie does not carry "${pickedKey}" after onboarding`);
+
+        const slugs = async (requester, url) => {
+          const res = await requester.get(url);
+          const data = await res.json();
+          return (data.stories ?? []).map((s) => s.slug);
+        };
+        // THE STORED ORDER IS FETCHED FROM A CONTEXT WITH NO COOKIES. page.request
+        // carries this reader's cookie jar, and the topics cookie in it would
+        // make the "stored" order the reader's order — so "differs" would be
+        // comparing a thing to itself and passing for a re-rank that never ran.
+        // The first version of this check did exactly that.
+        const anonymous = await browser.newContext();
+        const stored = await slugs(anonymous.request, `${base}/api/brief?length=all`);
+        await anonymous.close();
+        const forReader = await slugs(
+          page.request,
+          `${base}/api/brief?length=all&topics=${encodeURIComponent(pickedKey)}`,
+        );
+        // The page, rendered with the cookie: the first N card links in order.
+        await page.goto(base + "/?length=all", { waitUntil: "networkidle" });
+        const rendered = await page
+          .locator("article a[href^='/story/']")
+          .evaluateAll((as) => as.map((a) => a.getAttribute("href").replace("/story/", "")));
+        const n = Math.min(10, rendered.length, forReader.length);
+        out.rerank = {
+          pickedKey,
+          candidatesCarryingKey: forReader.length,
+          pageMatchesApiForReader:
+            rendered.slice(0, n).join(",") === forReader.slice(0, n).join(","),
+          readerOrderDiffersFromStored: stored.join(",") !== forReader.join(","),
+        };
+        if (!out.rerank.pageMatchesApiForReader) {
+          floor.push(
+            "Today's rendered order is not the order /api/brief gives for this reader's topics",
+          );
+        }
+        if (!out.rerank.readerOrderDiffersFromStored) {
+          floor.push(
+            `following "${pickedKey}" changed nothing: either no candidate story carries it (seed more) or the re-rank is not applied`,
+          );
+        }
+      }
+    }
+    await context.close();
+  }
+
+  /* ---- 2d. nobody can write the shared row without the secret — #203 ---- */
+  {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    const put = (path, headers = {}) =>
+      page.request.put(base + path, {
+        headers: { "content-type": "application/json", ...headers },
+        data: JSON.stringify({ timezone: "Europe/Lisbon" }),
+      });
+    const publicWrite = (await put("/api/preferences")).status();
+    const internalNoSecret = (await put("/api/internal/preferences")).status();
+    const internalWrongSecret = (
+      await put("/api/internal/preferences", { "x-internal-secret": "f".repeat(64) })
+    ).status();
+    out.sharedRowGuard = { publicWrite, internalNoSecret, internalWrongSecret };
+    // 405 is Next's answer for a method the route file does not export. 401 is
+    // the guard; 503 is the guard saying the server has no secret configured,
+    // which is a refusal too — the browser job runs without one.
+    if (publicWrite !== 405)
+      floor.push(`PUT /api/preferences answered ${publicWrite}, expected 405`);
+    if (![401, 503].includes(internalNoSecret)) {
+      floor.push(`PUT /api/internal/preferences with no secret answered ${internalNoSecret}`);
+    }
+    if (![401, 503].includes(internalWrongSecret)) {
+      floor.push(
+        `PUT /api/internal/preferences with a wrong secret answered ${internalWrongSecret}`,
+      );
     }
     await context.close();
   }

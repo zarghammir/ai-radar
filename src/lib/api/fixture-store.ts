@@ -196,6 +196,16 @@ export const BRIEF_LENGTH_COOKIE = "ai-radar-fixture-brief-length";
  * or "all" — and nothing else.
  */
 export const VIEW_COOKIE = "ai-radar-view";
+
+/**
+ * The third cookie — #203 — and the comment above the first now covers three.
+ * The reader's topics live on their device, and Today ranks on the server, so
+ * the server has to be TOLD which topics this reader follows before any
+ * JavaScript runs. It carries a comma-separated list of topic keys — slugs
+ * like `agents,open-source` — and nothing else: a preference, never an
+ * identifier, and no third party sees it.
+ */
+export const TOPICS_COOKIE = "ai-radar-topics";
 const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
 
 /**
@@ -215,6 +225,16 @@ function writeBriefLengthCookie(length: string): void {
   document.cookie = briefLengthCookieString(length);
 }
 
+/** The exact string, as its own function, for the same reason as the length's. */
+export function topicsCookieString(topicKeys: readonly string[]): string {
+  return `${TOPICS_COOKIE}=${encodeURIComponent(topicKeys.join(","))}; path=/; max-age=${ONE_YEAR_SECONDS}; samesite=lax`;
+}
+
+function writeTopicsCookie(topicKeys: readonly string[]): void {
+  if (typeof document === "undefined") return;
+  document.cookie = topicsCookieString(topicKeys);
+}
+
 export function patchLocalPreferences(patch: Partial<Preferences>): Preferences {
   const next: Preferences = {
     ...localPreferences(),
@@ -225,6 +245,7 @@ export function patchLocalPreferences(patch: Partial<Preferences>): Preferences 
   // Only when it actually changed, so an unrelated save does not keep
   // rewriting a cookie nobody asked about.
   if (patch.briefLength !== undefined) writeBriefLengthCookie(next.briefLength);
+  if (patch.topicKeys !== undefined) writeTopicsCookie(next.topicKeys);
   return next;
 }
 

@@ -269,6 +269,13 @@ export const storyTopics = pgTable(
 
 export const userPreferences = pgTable("user_preferences", {
   id: serial("id").primaryKey(),
+  /**
+   * UNREAD AND UNWRITTEN since #203. Topics are the reader's and live on their
+   * device; the ranker no longer reads this column and no route writes it.
+   * Still here because dropping a column is a destructive migration, which
+   * waits for #190 with the notification tables. A reader of this schema
+   * should not infer from its presence that the row carries anyone's taste.
+   */
   topicKeys: jsonb("topic_keys").$type<string[]>().notNull().default([]),
   briefTime: text("brief_time").notNull().default("07:30"),
   /**

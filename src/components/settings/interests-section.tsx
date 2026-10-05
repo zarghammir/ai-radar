@@ -13,7 +13,15 @@ import type { Preferences, TopicSummary } from "@/lib/api/types";
  * for lacking one, which is why the words below say "pushes up" and not
  * "shows only" — a reader who picks three topics and then sees a fourth
  * subject in their brief should understand that as the product working, not
- * failing. See the topicMatch term in src/pipeline/ranking/score.ts.
+ * failing. See readerTopicBonus in src/pipeline/ranking/score.ts.
+ *
+ * THEIRS, SINCE #203. This list lives on the reader's device and reaches the
+ * server as a cookie with each request, so the brief is re-ranked for THIS
+ * reader and nobody else. Until #203 it was written into the one shared row
+ * and the ranker read that row for everyone — a visitor picking "Microsoft"
+ * here switched it on for every other visitor. The orphan handling below
+ * outlives that: the catalogue can still drop a topic the reader follows, and
+ * a chip they cannot see is a chip they cannot turn off.
  */
 export function InterestsSection({
   preferences,
@@ -35,9 +43,10 @@ export function InterestsSection({
    * the serious one:
    *
    *  - the reader follows something they cannot see and cannot unfollow;
-   *  - EVERY toggle then fails. Each write sends the whole list, the route
-   *    rejects an unknown key, and the reader gets "unknown topic: …" for a
-   *    subject they never chose in this session and cannot find on the page.
+   *  - and, when the server still validated keys, EVERY toggle then failed:
+   *    each write sent the whole list and the route rejected the unknown one.
+   *    The write is on the device now and refuses nothing, so that failure is
+   *    gone — but the first problem is reason enough on its own.
    *
    * So they are shown, and they can be taken off. Only computed against a
    * catalogue that was actually READ: when the read failed, every key would

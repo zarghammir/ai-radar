@@ -223,16 +223,8 @@ export function rankStory(input: RankInput, now: Date = new Date()): RankResult 
     );
   }
 
-  if (input.userTopicKeys.length) {
-    const followed = new Set(input.userTopicKeys);
-    const matches = input.topicKeys.filter((k) => followed.has(k)).length;
-    if (matches > 0) {
-      c.topicMatch = Math.min(
-        WEIGHTS.topicMax,
-        WEIGHTS.topicFirstMatch + (matches - 1) * WEIGHTS.topicExtraMatch,
-      );
-    }
-  }
+  const topicPoints = topicMatchPoints(input.topicKeys, input.userTopicKeys);
+  if (topicPoints > 0) c.topicMatch = topicPoints;
 
   const points = safeCount(input.engagementPoints);
   const comments = safeCount(input.engagementComments);
@@ -264,9 +256,7 @@ export function rankStory(input: RankInput, now: Date = new Date()): RankResult 
   // Treat an unusable date as "just now" rather than poisoning the score;
   // normalizeItem already stops invalid dates upstream, so this is the second
   // line of defence, not the first.
-  const ageHours = (now.getTime() - input.firstSeenAt.getTime()) / 3_600_000;
-  const hours = Number.isFinite(ageHours) ? Math.max(0, ageHours) : 0;
-  const decay = Math.pow(0.5, hours / WEIGHTS.ageHalfLifeHours);
+  const decay = ageDecayFactor(input.firstSeenAt, now);
   // `cost === 0 ? 0` rather than negating unconditionally: at age zero the cost
   // is 0, and `-0` is not `0` to Object.is — so a test asserting `toBe(0)` would
   // fail on a correct implementation, and a reader would see "-0" in the panel.
@@ -279,6 +269,74 @@ export function rankStory(input: RankInput, now: Date = new Date()): RankResult 
 
 function round(n: number): number {
   return Math.round(n * 10) / 10;
+}
+
+/**
+ * How many points a story earns for the topics a reader follows. Pure.
+ *
+ * ONE ARITHMETIC, TWO CALLERS. `rankStory` used to inline this and the worker
+ * called it with the shared row's topics, so the stored score carried ONE
+ * person's taste for every reader. Since #203 the worker passes no topics and
+ * the brief applies this at read time with the reader's own — see
+ * `readerTopicBonus` — which only stays honest if both paths add the same
+ * number for the same match. Exporting the term is what makes that a property
+ * of the code rather than a hope.
+ */
+export function topicMatchPoints(
+  storyTopicKeys: readonly string[],
+  readerTopicKeys: readonly string[],
+): number {
+  if (readerTopicKeys.length === 0) return 0;
+  const followed = new Set(readerTopicKeys);
+  const matches = storyTopicKeys.filter((k) => followed.has(k)).length;
+  if (matches === 0) return 0;
+  return Math.min(
+    WEIGHTS.topicMax,
+    WEIGHTS.topicFirstMatch + (matches - 1) * WEIGHTS.topicExtraMatch,
+  );
+}
+
+/**
+ * The multiplier age applies to the whole structural score: 1 at first sight,
+ * 0.5 at the half-life, and so on. Exported so a bonus added AFTER the stored
+ * score can be decayed by exactly the factor the stored score was.
+ *
+ * An unparseable date yields NaN, and one NaN would poison the score; it is
+ * treated as "just now". normalizeItem already stops invalid dates upstream,
+ * so this is the second line of defence, not the first.
+ */
+export function ageDecayFactor(firstSeenAt: Date, now: Date = new Date()): number {
+  const ageHours = (now.getTime() - firstSeenAt.getTime()) / 3_600_000;
+  const hours = Number.isFinite(ageHours) ? Math.max(0, ageHours) : 0;
+  return Math.pow(0.5, hours / WEIGHTS.ageHalfLifeHours);
+}
+
+/**
+ * What a reader's own topics add to a story's STORED score, at read time.
+ *
+ * WHY IT IS ARITHMETICALLY THE SAME NUMBER THE WORKER USED TO STORE. The stored
+ * score is `structure × decay`, where structure is the sum of the additive
+ * components and decay is the age multiplier. Topic points were one of those
+ * components, so the old score was `(S + T) × decay = S × decay + T × decay`.
+ * The worker now stores `S × decay`; this returns `T × decay`; the sum is what
+ * it always was. A reader with no topics gets exactly the stored order.
+ *
+ * WHY AT READ TIME AT ALL. There is one stored score per story and there are
+ * many readers. Baking one reader's topics into it meant every other reader's
+ * feed was ranked by someone else's taste — the shared-record defect the
+ * owner saw demonstrated on 2026-10-05, where one visitor's pick appeared in
+ * another's Settings. Per-reader ranking has to happen where the reader is
+ * known, which is the request.
+ */
+export function readerTopicBonus(
+  storyTopicKeys: readonly string[],
+  readerTopicKeys: readonly string[],
+  firstSeenAt: Date,
+  now: Date = new Date(),
+): number {
+  const points = topicMatchPoints(storyTopicKeys, readerTopicKeys);
+  if (points === 0) return 0;
+  return round(points * ageDecayFactor(firstSeenAt, now));
 }
 
 /**

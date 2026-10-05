@@ -1,7 +1,7 @@
 import { eq, gte } from "drizzle-orm";
 import type { Db } from "@/db/client";
 import type { ScoreComponents } from "@/db/schema";
-import { rawItems, stories, storyTopics, topics, userPreferences } from "@/db/schema";
+import { rawItems, stories, storyTopics, topics } from "@/db/schema";
 import { storySources } from "../run";
 import { rankStory } from "./score";
 
@@ -125,11 +125,23 @@ export async function rankOneInTransaction(
  * a consistent view of its own items rather than a moving one.
  */
 export async function rankAllStories(db: Db, now: Date = new Date()): Promise<RankAllResult> {
-  const [prefs] = await db
-    .select({ topicKeys: userPreferences.topicKeys })
-    .from(userPreferences)
-    .where(eq(userPreferences.id, 1));
-  const userTopicKeys = prefs?.topicKeys ?? [];
+  /**
+   * NO TOPICS ARE READ HERE ANY MORE — #203.
+   *
+   * This used to select `user_preferences.topic_keys` and hand it to every
+   * story's score, so the ONE stored score carried ONE person's taste and
+   * every reader of the public copy was ranked by it. On 2026-10-05 the owner
+   * watched visitor A pick a topic on the welcome screen and visitor B's
+   * Settings show it chosen. The row was never personal; it was a thermostat
+   * for the building.
+   *
+   * The stored score is now topic-free, and a reader's topics are applied
+   * when the brief is read, by `readerTopicBonus` in src/api/brief.ts, with
+   * the reader's own keys from their own device. The column still exists; it
+   * is written by nothing the app offers and read by nothing — dropping it is
+   * a destructive migration and waits with #190.
+   */
+  const userTopicKeys: string[] = [];
 
   const cutoff = new Date(now.getTime() - RANKING_WINDOW_HOURS * 3_600_000);
   const due = await db

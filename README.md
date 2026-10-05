@@ -48,11 +48,11 @@ bottom. Either way works.
 
 ### What that demo is
 
-One shared instance that anyone can open. **What you save and what you hide stay
-in your own browser** and are not visible to anyone else, including whoever runs
-the instance. The settings — which topics are tracked, when the brief is cut —
-are shared by everyone looking at it, because this version has no accounts by
-design.
+One shared instance that anyone can open. **What you follow, what you save and what
+you hide stay in your own browser** and are not visible to anyone else, including
+whoever runs the instance. The one setting everyone shares is when the daily brief
+is cut, and only whoever runs the copy can change it — this version has no accounts
+by design.
 
 Run your own copy and it is entirely yours. That is the rest of this page.
 
@@ -99,6 +99,23 @@ The worker refuses to start while `INTERNAL_API_SECRET` is still the placeholder
 `change-me`: that secret guards the ingest trigger, and a published placeholder
 guards nothing. The app itself will start either way, but nothing new arrives
 until the worker can run.
+
+### Setting when the brief is cut
+
+The one setting shared by everyone who opens a copy is the time of day the daily
+brief is cut, and its zone. Readers see it in Settings and cannot change it; the
+person running the copy sets it once, with the same secret the collector uses:
+
+```sh
+curl -X PUT "$APP_URL/api/internal/preferences" \
+  -H "x-internal-secret: $INTERNAL_API_SECRET" \
+  -H "content-type: application/json" \
+  -d '{"briefTime":"09:00","timezone":"America/Vancouver"}'
+```
+
+Everything else a reader can set — which topics they follow, how long the brief
+runs, the theme — is theirs, lives in their browser, and is never written to the
+server.
 
 Then open http://localhost:3000. The first start creates the database schema and
 loads the shipped catalogue of sources, so the app has something to show. Both

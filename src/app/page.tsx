@@ -4,7 +4,7 @@ import { EmptyState, PageShell } from "@/components/page-shell";
 import { LocalDate } from "@/components/local-date";
 import { briefSummary, emptyBriefReason } from "@/lib/api/brief-summary";
 import { loadBrief } from "@/lib/api/brief-server";
-import { defaultBriefLength } from "@/lib/api/brief-length";
+import { defaultBriefLength, readerTopicKeys } from "@/lib/api/brief-length";
 import { parseView } from "@/lib/api/views";
 import type { BriefLengthParam } from "@/lib/api/types";
 
@@ -69,7 +69,10 @@ export default async function TodayPage({ searchParams }: PageProps<"/">) {
   // read. A clean line-merge can leave code that compiles and means nothing.
   let brief: Awaited<ReturnType<typeof loadBrief>> | null = null;
   try {
-    brief = await loadBrief(length, view);
+    // The reader's topics come from their cookie, the same way their brief
+    // length does, and for the same reason: this page is rendered on the
+    // server before their device has run a line of JavaScript.
+    brief = await loadBrief(length, view, await readerTopicKeys());
   } catch (error) {
     // Logged, never rendered. The driver's message is the failed SQL including
     // column names: meaningless to the person looking at the screen, and not
