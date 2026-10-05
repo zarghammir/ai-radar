@@ -32,7 +32,8 @@ vi.mock("@/lib/api/client", () => ({
   getPreferences: () => clientGetPreferences(),
 }));
 
-const { FALLBACK_BRIEF_LENGTH, defaultBriefLength } = await import("@/lib/api/brief-length");
+const { FALLBACK_BRIEF_LENGTH, defaultBriefLength, parseTopicKeys, MAX_READER_TOPICS } =
+  await import("@/lib/api/brief-length");
 
 beforeEach(() => {
   cookieValue = undefined;
@@ -108,5 +109,36 @@ describe("the length Today starts from", () => {
     } finally {
       logged.mockRestore();
     }
+  });
+});
+
+/**
+ * The topics cookie's parser — #203. Pure, and it is the whole of the trust
+ * boundary: the cookie is reader-writable, so everything that can be in it has
+ * to come out as either a clean slug or nothing.
+ */
+describe("parseTopicKeys", () => {
+  it("reads a clean list", () => {
+    expect(parseTopicKeys("agents,open-source,hugging-face")).toEqual([
+      "agents",
+      "open-source",
+      "hugging-face",
+    ]);
+  });
+
+  it("is empty for nothing, and for anything that is not a slug", () => {
+    expect(parseTopicKeys(undefined)).toEqual([]);
+    expect(parseTopicKeys(null)).toEqual([]);
+    expect(parseTopicKeys("")).toEqual([]);
+    expect(parseTopicKeys("<script>,../etc,UPPER,-leading")).toEqual([]);
+  });
+
+  it("drops the bad entries and keeps the good ones, trimmed and deduplicated", () => {
+    expect(parseTopicKeys(" agents , agents,, robotics ,<x>")).toEqual(["agents", "robotics"]);
+  });
+
+  it("caps the list where the old server schema capped it", () => {
+    const many = Array.from({ length: MAX_READER_TOPICS + 20 }, (_, i) => `t${i}`).join(",");
+    expect(parseTopicKeys(many)).toHaveLength(MAX_READER_TOPICS);
   });
 });

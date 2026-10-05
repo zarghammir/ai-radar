@@ -294,10 +294,12 @@ export default async function AboutPage() {
           </h2>
           <p className="text-ash mt-3 max-w-[60ch] text-[15px] leading-[1.55]">
             One shared instance that anyone can open.{" "}
-            <b className="text-ash-hi">What you save and what you hide stay in your own browser</b>{" "}
-            and are not visible to anyone else, including whoever is running it. The settings —
-            which topics are tracked, when the brief is cut — are shared by everyone looking at it,
-            because this version has no accounts by design.
+            <b className="text-ash-hi">
+              What you follow, what you save and what you hide stay in your own browser
+            </b>{" "}
+            and are not visible to anyone else, including whoever is running it. The one shared
+            setting is when the daily brief is cut, and only whoever runs the copy can change that —
+            this version has no accounts by design.
           </p>
           <p className="text-ash mt-3 max-w-[60ch] text-[15px] leading-[1.55]">
             Run your own copy and it is entirely yours. It needs Docker and nothing else, and no

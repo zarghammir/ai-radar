@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  ageDecayFactor,
   COMPONENT_LABELS,
   LEGACY_COMPONENT_LABELS,
   labelFor,
   rankStory,
+  readerTopicBonus,
   scoreComponentList,
+  topicMatchPoints,
   WEIGHTS,
 } from "./score";
 import { deriveVerification } from "../clustering/verification";
@@ -425,5 +428,60 @@ describe("scoreComponentList", () => {
 
   it("returns an empty list for a story that has not been ranked", () => {
     expect(scoreComponentList({})).toEqual([]);
+  });
+});
+
+/**
+ * The topic term, applied at read time for each reader — #203.
+ *
+ * The claim in readerTopicBonus's docblock is arithmetic, so it is asserted
+ * as arithmetic: the score the worker USED to store with the reader's topics
+ * baked in equals the score it stores now plus the read-time bonus, for every
+ * age. Any drift between the two paths — a weight changed in one and not the
+ * other, decay applied to one and not the other — fails here.
+ */
+describe("the reader's topic bonus", () => {
+  it("is the same arithmetic rankStory used to bake in", () => {
+    const story = { ...base, topicKeys: ["openai", "agents"] };
+    for (const hours of [0, 1, 24, 48, 200]) {
+      const at = { ...story, firstSeenAt: new Date(now.getTime() - hours * 3_600_000) };
+      const bakedIn = rankStory({ ...at, userTopicKeys: ["openai", "agents"] }, now).score;
+      const stored = rankStory(at, now).score;
+      const bonus = readerTopicBonus(at.topicKeys, ["openai", "agents"], at.firstSeenAt, now);
+      // Both sides round to one decimal independently, so allow the rounding.
+      expect(Math.abs(bakedIn - (stored + bonus)), `at ${hours}h`).toBeLessThan(0.11);
+    }
+  });
+
+  it("counts matches the way the stored component did, with the same cap", () => {
+    expect(topicMatchPoints(["openai"], [])).toBe(0);
+    expect(topicMatchPoints(["openai"], ["agents"])).toBe(0);
+    expect(topicMatchPoints(["openai"], ["openai"])).toBe(WEIGHTS.topicFirstMatch);
+    expect(topicMatchPoints(["openai", "agents"], ["openai", "agents"])).toBe(
+      WEIGHTS.topicFirstMatch + WEIGHTS.topicExtraMatch,
+    );
+    // Four matches would be 14 + 3*4 = 26; the cap holds it at 22.
+    const four = ["a", "b", "c", "d"];
+    expect(topicMatchPoints(four, four)).toBe(WEIGHTS.topicMax);
+  });
+
+  it("decays with the story's age exactly as the stored score does", () => {
+    expect(ageDecayFactor(now, now)).toBe(1);
+    const halfLife = new Date(now.getTime() - WEIGHTS.ageHalfLifeHours * 3_600_000);
+    expect(ageDecayFactor(halfLife, now)).toBeCloseTo(0.5, 10);
+    expect(readerTopicBonus(["openai"], ["openai"], halfLife, now)).toBeCloseTo(
+      WEIGHTS.topicFirstMatch / 2,
+      1,
+    );
+  });
+
+  it("is zero, not NaN, for an unparseable first-seen date", () => {
+    const bad = new Date("not a date");
+    expect(ageDecayFactor(bad, now)).toBe(1);
+    expect(readerTopicBonus(["openai"], ["openai"], bad, now)).toBe(WEIGHTS.topicFirstMatch);
+  });
+
+  it("is zero for a reader who follows nothing", () => {
+    expect(readerTopicBonus(["openai"], [], now, now)).toBe(0);
   });
 });

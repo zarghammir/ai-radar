@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { BRIEF_LENGTH_COOKIE, briefLengthCookieString } from "@/lib/api/fixture-store";
+import {
+  BRIEF_LENGTH_COOKIE,
+  briefLengthCookieString,
+  TOPICS_COOKIE,
+  topicsCookieString,
+} from "@/lib/api/fixture-store";
 
 /**
  * The condition that came with the ruling on #75, asserted rather than
@@ -67,5 +72,35 @@ describe("the one cookie a fixture build sets", () => {
     expect(cookie).toContain("path=/");
     expect(cookie).toContain("samesite=lax");
     expect(cookie).toContain(`max-age=${60 * 60 * 24 * 365}`);
+  });
+});
+
+/**
+ * The third cookie — #203 — held to the same rule as the first: a preference,
+ * never an identifier. The decoded value is the comma-joined topic keys and
+ * nothing else, so any widening of what it carries has to come through here.
+ */
+describe("the topics cookie", () => {
+  it("carries the followed topic keys, and says so in its name", () => {
+    const cookie = topicsCookieString(["agents", "open-source"]);
+    expect(cookie.startsWith(`${TOPICS_COOKIE}=`)).toBe(true);
+    const value = decodeURIComponent(cookie.slice(cookie.indexOf("=") + 1, cookie.indexOf(";")));
+    expect(value).toBe("agents,open-source");
+  });
+
+  it("is an empty value, not an absent cookie, when the reader follows nothing", () => {
+    // An absent cookie and "follows nothing" must be distinguishable on the
+    // server only if the server cares; it does not — both rank on the stored
+    // order — but the cookie still has to be WRITTEN so that un-following the
+    // last topic clears what was there before.
+    const cookie = topicsCookieString([]);
+    expect(cookie.startsWith(`${TOPICS_COOKIE}=;`)).toBe(true);
+  });
+
+  it("is not Secure and is Lax, for the same reasons as the length cookie", () => {
+    const cookie = topicsCookieString(["agents"]);
+    expect(cookie).toContain("samesite=lax");
+    expect(cookie.toLowerCase()).not.toContain("secure");
+    expect(cookie.toLowerCase()).not.toContain("httponly");
   });
 });

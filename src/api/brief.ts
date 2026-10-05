@@ -1,4 +1,4 @@
-import { and, desc, gte, inArray, sql, type SQL } from "drizzle-orm";
+import { and, desc, getTableColumns, gte, inArray, sql, type SQL } from "drizzle-orm";
 import type { Db } from "@/db/client";
 import type { ContentType } from "@/db/schema";
 import { ingestRuns, stories } from "@/db/schema";
@@ -10,6 +10,7 @@ import { notAdjacentTech, notHidden } from "./radar";
 // same number or the brief sorts on scores the ranker has stopped maintaining.
 import { RANKING_WINDOW_HOURS, STORY_WINDOW_HOURS } from "@/pipeline/story-window";
 import { buildCards, type StoryCard } from "./stories";
+import { readerTopicBonus } from "@/pipeline/ranking/score";
 
 // One implementation, in a module with no database imports so the fixtures can
 // use the same rule rather than a copy that drifts. See reading-budget.ts.
@@ -197,6 +198,28 @@ export interface BriefOptions {
    * a reader would feel and never be able to describe.
    */
   types?: readonly ContentType[];
+
+  /**
+   * The topics THIS READER follows — #203. Their stories are pushed up the
+   * feed, within the newest-first bucket they already sit in, by the same
+   * points the worker used to bake into one shared score for everyone.
+   *
+   * Applied AFTER the query, not in it: the bonus needs each story's topics
+   * and its first-seen age, both of which the card already carries, and a
+   * per-reader term in SQL would defeat any plan cache for a window of 200
+   * rows that a JS sort handles in microseconds. The candidate window is
+   * therefore chosen on the STORED score; a story a reader follows that sits
+   * outside the top 200 by base score is not promoted into it. With the window
+   * at 200 and a seven-day horizon that is a theoretical edge, and it is the
+   * trade that keeps one query for every reader.
+   *
+   * Omitted or empty means the stored order, which is what a reader who
+   * follows nothing has always seen.
+   */
+  readerTopicKeys?: readonly string[];
+
+  /** The clock the age decay on that bonus is measured against. Tests pin it. */
+  now?: Date;
 }
 
 /**
@@ -319,9 +342,19 @@ function arrivedSince(from: Date): SQL {
  * is filed separately.
  */
 export async function recentStories(db: Db, options: BriefOptions = {}): Promise<StoryCard[]> {
-  const { includeAdjacent = false, types } = options;
+  const { includeAdjacent = false, types, readerTopicKeys = [], now = new Date() } = options;
+  // The first ordering key, selected as a column so the per-reader re-sort
+  // below can keep the newest-first bucket the query established. Computed
+  // once here and nowhere else: a second copy of this `exists` in JS would be
+  // the two-clocks defect, where the bucket a row sorted into and the bucket
+  // it is re-sorted within disagree by a few seconds of clock drift.
+  const arrivedToday = sql<boolean>`exists (
+    select 1 from raw_items ri
+    where ri.story_id = ${stories.id}
+      and ri.fetched_at >= now() - interval '24 hours'
+  )`;
   const rows = await db
-    .select()
+    .select({ ...getTableColumns(stories), arrivedToday })
     .from(stories)
     .where(
       and(
@@ -365,17 +398,74 @@ export async function recentStories(db: Db, options: BriefOptions = {}): Promise
      * morning is new to this reader, which is #148's sentence and the same
      * clock this query already uses.
      */
-    .orderBy(
-      desc(sql`exists (
-        select 1 from raw_items ri
-        where ri.story_id = ${stories.id}
-          and ri.fetched_at >= now() - interval '24 hours'
-      )`),
-      desc(stories.score),
-      desc(stories.id),
-    )
+    .orderBy(desc(arrivedToday), desc(stories.score), desc(stories.id))
     .limit(BRIEF_CANDIDATE_LIMIT);
-  return buildCards(db, rows);
+
+  // The rows carry one extra column, `arrivedToday`, beside the table's own.
+  // buildCards reads the fields it names and spreads nothing, so the extra
+  // column reaches no card and no response; it is read once, below, to keep
+  // the bucket.
+  const cards = await buildCards(db, rows);
+  return rerankForReader(
+    cards,
+    rows.map((r) => r.arrivedToday),
+    readerTopicKeys,
+    now,
+  );
+}
+
+/** What a card must carry to be re-sorted for a reader. */
+export interface RerankableCard {
+  id: number;
+  score: number;
+  firstSeenAt: string;
+  topics: readonly { key: string }[];
+}
+
+/**
+ * The reader's own topics, applied to the brief's order — #203.
+ *
+ * Sorts by the SAME three keys the query used — newest-first bucket, score,
+ * id — with the reader's topic bonus added to the score. So a reader with no
+ * topics gets the query's order back untouched, and a reader with topics sees
+ * their subjects rise WITHIN today's arrivals and within older ones, never
+ * across that line: the owner's ruling that today leads is not something a
+ * taste setting may override.
+ *
+ * `cards` and `arrivedToday` are parallel by index. buildCards preserves the
+ * order of the rows it is given (it looks each card up by id), which is the
+ * property this relies on and which its own tests pin.
+ *
+ * Exported for the fixture path and for tests; pure. Generic over the card
+ * because the live path and the fixture path carry two StoryCard types that
+ * agree on every field this needs and disagree on others; the shape below is
+ * the whole of what a card has to be to be re-sorted.
+ */
+export function rerankForReader<T extends RerankableCard>(
+  cards: T[],
+  arrivedToday: readonly boolean[],
+  readerTopicKeys: readonly string[],
+  now: Date,
+): T[] {
+  if (readerTopicKeys.length === 0) return cards;
+  const keyed = cards.map((card, i) => ({
+    card,
+    fresh: arrivedToday[i] ?? false,
+    score:
+      card.score +
+      readerTopicBonus(
+        card.topics.map((t) => t.key),
+        readerTopicKeys,
+        new Date(card.firstSeenAt),
+        now,
+      ),
+  }));
+  keyed.sort((a, b) => {
+    if (a.fresh !== b.fresh) return a.fresh ? -1 : 1;
+    if (a.score !== b.score) return b.score - a.score;
+    return b.card.id - a.card.id;
+  });
+  return keyed.map((k) => k.card);
 }
 
 /**

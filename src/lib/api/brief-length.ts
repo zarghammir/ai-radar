@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { BRIEF_LENGTH_COOKIE, VIEW_COOKIE } from "@/lib/api/fixture-store";
+import { BRIEF_LENGTH_COOKIE, TOPICS_COOKIE, VIEW_COOKIE } from "@/lib/api/fixture-store";
 import { asBriefLength } from "@/lib/api/preferences";
 import { parseView, type BriefView } from "@/lib/api/views";
 import type { BriefLengthParam } from "@/lib/api/types";
@@ -138,5 +138,57 @@ export async function defaultView(): Promise<BriefView> {
   } catch (error) {
     console.error("today: could not read the preferred view", error);
     return DEFAULT_VIEW;
+  }
+}
+
+/** The most topics a reader may send; matches the old server schema's cap. */
+export const MAX_READER_TOPICS = 100;
+
+/**
+ * Topic keys are slugs — `agents`, `open-source`, `hugging-face` — and nothing
+ * else is a key. Anything that fails this is dropped rather than refused:
+ * the cookie is reader-writable, so it is untrusted input, and a feed that
+ * refused to render because of a stray character in a cookie would be the
+ * wrong answer to a reader who never typed it.
+ */
+const TOPIC_KEY = /^[a-z0-9][a-z0-9-]{0,62}$/;
+
+/**
+ * Parses a comma-separated list of topic keys into a clean, deduplicated,
+ * capped list. Pure, so a test can feed it every shape a cookie can take.
+ */
+export function parseTopicKeys(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const part of raw.split(",")) {
+    const key = part.trim();
+    if (!TOPIC_KEY.test(key) || seen.has(key)) continue;
+    seen.add(key);
+    out.push(key);
+    if (out.length >= MAX_READER_TOPICS) break;
+  }
+  return out;
+}
+
+/**
+ * The topics THIS READER follows, read the way a server component must — #203.
+ *
+ * Same cookie mechanism as the brief length and the view, for the same reason:
+ * the reader's topics live on their device since #203, and a page rendered on
+ * the server before that device runs any JavaScript can only learn them from
+ * a cookie. `explicit` is an override for the one caller that has a better
+ * source — the API route, when a client sent `?topics=` — so a test can drive
+ * the route without a cookie jar.
+ */
+export async function readerTopicKeys(explicit?: string | null): Promise<string[]> {
+  if (explicit !== undefined && explicit !== null) return parseTopicKeys(explicit);
+  try {
+    const jar = await cookies();
+    const stored = jar.get(TOPICS_COOKIE)?.value;
+    return parseTopicKeys(stored ? decodeURIComponent(stored) : "");
+  } catch (error) {
+    console.error("today: could not read the followed topics", error);
+    return [];
   }
 }

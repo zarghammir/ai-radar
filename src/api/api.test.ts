@@ -1107,73 +1107,92 @@ withDb("API routes", () => {
       const { GET } = await import("@/app/api/preferences/route");
       const data = await body(await GET());
       expect(data).toMatchObject({ briefTime: "07:30", timezone: "UTC" });
-      expect(data.topicKeys).toEqual([]);
 
-      // #94: what this row must NO LONGER carry. These are the reader's, not
-      // the instance's, and one shared row served them to every reader of it —
-      // the email being personal data collected for a feature that does not
-      // exist. Asserting their ABSENCE is the guard: without it, putting any of
-      // them back would ship silently and this test would still pass.
-      for (const gone of ["email", "briefLength", "theme", "onboardedAt"]) {
+      // What this row must NO LONGER carry. #94 moved email, briefLength, theme
+      // and onboardedAt to the device; #203 moved topicKeys there too, after
+      // one visitor's welcome-screen pick turned up in another visitor's
+      // Settings — the ranker was reading this row for everyone. Asserting
+      // their ABSENCE is the guard: without it, putting any of them back would
+      // ship silently and this test would still pass.
+      for (const gone of ["email", "briefLength", "theme", "onboardedAt", "topicKeys"]) {
         expect(data, `${gone} is back in the shared preferences row`).not.toHaveProperty(gone);
       }
     });
 
-    it("updates only the fields it is given", async () => {
-      await topic("openai", "OpenAI");
-      const { GET, PUT } = await import("@/app/api/preferences/route");
+    /**
+     * THE PUBLIC ROUTE IS READ-ONLY — #203. The write sat here with no guard,
+     * so anyone on the internet could change when every reader's brief is cut.
+     * Asserted on the MODULE rather than on a 405 from a request: a route file
+     * with no PUT export is how Next answers 405, and a test that imported the
+     * handler to call it would be a test that could not be written. The
+     * absence of the export is the property.
+     */
+    it("exposes no public write at all", async () => {
+      const mod = await import("@/app/api/preferences/route");
+      expect("PUT" in mod).toBe(false);
+      expect("POST" in mod).toBe(false);
+      expect("PATCH" in mod).toBe(false);
+    });
+  });
+
+  describe("PUT /api/internal/preferences", () => {
+    const put = async (patch: unknown, secret?: string) => {
+      const { PUT } = await import("@/app/api/internal/preferences/route");
+      return PUT(
+        new Request(`${BASE}/api/internal/preferences`, {
+          method: "PUT",
+          headers: {
+            "content-type": "application/json",
+            ...(secret ? { "x-internal-secret": secret } : {}),
+          },
+          body: JSON.stringify(patch),
+        }) as never,
+      );
+    };
+
+    it("refuses without the secret, and the row is unchanged", async () => {
+      const { GET } = await import("@/app/api/preferences/route");
+      const before = await body(await GET());
+      const res = await put({ timezone: "Europe/Lisbon" });
+      expect(res.status).toBe(401);
+      expect(await body(await GET())).toMatchObject({ timezone: before.timezone });
+    });
+
+    it("refuses a wrong secret", async () => {
+      const res = await put({ timezone: "Europe/Lisbon" }, "f".repeat(64));
+      expect(res.status).toBe(401);
+    });
+
+    it("updates only the fields it is given, with the secret", async () => {
+      const { GET } = await import("@/app/api/preferences/route");
       await GET();
-      const res = await PUT(
-        new Request(`${BASE}/api/preferences`, {
-          method: "PUT",
-          body: JSON.stringify({ timezone: "Europe/Lisbon", topicKeys: ["openai"] }),
-        }) as never,
-      );
+      const res = await put({ timezone: "Europe/Lisbon" }, SECRET);
       expect(res.status).toBe(200);
-      const data = await body(res);
       // The one it was given changed; the one it was not kept its default.
-      expect(data).toMatchObject({ timezone: "Europe/Lisbon", briefTime: "07:30" });
-      expect(data.topicKeys).toEqual(["openai"]);
-
-      // And a field that moved to the device is REFUSED rather than ignored.
-      // preferencesPatchSchema is .strict(), so this is the difference between
-      // the column being gone and the write being quietly dropped — a dropped
-      // write is a preference the reader believes they set.
-      const refused = await PUT(
-        new Request(`${BASE}/api/preferences`, {
-          method: "PUT",
-          body: JSON.stringify({ briefLength: "5" }),
-        }) as never,
-      );
-      expect(refused.status).toBe(400);
+      expect(await body(res)).toMatchObject({ timezone: "Europe/Lisbon", briefTime: "07:30" });
     });
 
-    it("rejects an unknown topic rather than dropping it", async () => {
-      const { PUT } = await import("@/app/api/preferences/route");
-      const res = await PUT(
-        new Request(`${BASE}/api/preferences`, {
-          method: "PUT",
-          body: JSON.stringify({ topicKeys: ["nope"] }),
-        }) as never,
-      );
-      expect(res.status).toBe(400);
-      expect(((await body(res)).error as unknown as { message: string }).message).toContain("nope");
-    });
-
-    it("rejects a bad time, a bad zone, a bad theme and an unknown field", async () => {
-      const { PUT } = await import("@/app/api/preferences/route");
+    /**
+     * A FIELD THAT MOVED TO THE DEVICE IS REFUSED, NOT DROPPED. The schema is
+     * .strict(), so this is the difference between a column nobody writes and
+     * a write that is quietly discarded — a dropped write is a preference the
+     * operator believes they set. topicKeys joins the list in #203.
+     */
+    it("refuses the fields that are the reader's own, even with the secret", async () => {
       for (const patch of [
-        { briefTime: "7:30" },
-        { timezone: "Mars/Olympus" },
-        { theme: "neon" },
-        { somethingElse: true },
+        { topicKeys: ["openai"] },
+        { briefLength: "5" },
+        { theme: "dark" },
+        { onboardedAt: "2026-01-01T00:00:00.000Z" },
       ]) {
-        const res = await PUT(
-          new Request(`${BASE}/api/preferences`, {
-            method: "PUT",
-            body: JSON.stringify(patch),
-          }) as never,
-        );
+        const res = await put(patch, SECRET);
+        expect(res.status, JSON.stringify(patch)).toBe(400);
+      }
+    });
+
+    it("rejects a bad time, a bad zone and an unknown field", async () => {
+      for (const patch of [{ briefTime: "7:30" }, { timezone: "Mars/Olympus" }, { nope: true }]) {
+        const res = await put(patch, SECRET);
         expect(res.status, JSON.stringify(patch)).toBe(400);
       }
     });
@@ -1182,6 +1201,56 @@ withDb("API routes", () => {
   // ── Brief ─────────────────────────────────────────────────────────────────
 
   describe("GET /api/brief", () => {
+    /**
+     * THE WHOLE OF #203 IN ONE REQUEST. Two stories, same source, same age,
+     * same stored score; one carries the topic. A reader who follows it sees
+     * that story first. A reader who follows nothing sees the stored order. A
+     * reader who follows something ELSE sees the stored order too — which is
+     * the assertion that distinguishes "re-ranked for me" from "re-ranked for
+     * whoever last touched a shared row".
+     *
+     * The stored order is pinned by score: the untagged story is given the
+     * higher base score, so a pass that ignored `?topics=` would put it first
+     * and this test would go red for the right reason.
+     */
+    it("ranks a followed topic up for the reader who follows it, and nobody else", async () => {
+      const src = await source("verge-ai");
+      const agents = await topic("agents");
+      const minute = new Date(Date.now() - 60_000);
+      await story({ slug: "untagged", sourceIds: [src], lastActivityAt: minute, score: 30 });
+      await story({
+        slug: "tagged",
+        sourceIds: [src],
+        lastActivityAt: minute,
+        score: 25,
+        topicIds: [agents],
+      });
+      const { GET } = await import("@/app/api/brief/route");
+      const order = async (query: string) =>
+        (
+          (await body(await GET(req(`/api/brief${query}`)))).stories as unknown as {
+            slug: string;
+          }[]
+        ).map((s) => s.slug);
+
+      expect(await order("")).toEqual(["untagged", "tagged"]);
+      expect(await order("?topics=agents")).toEqual(["tagged", "untagged"]);
+      expect(await order("?topics=robotics")).toEqual(["untagged", "tagged"]);
+      // Garbage in the list is dropped, not fatal — the cookie is reader-writable.
+      expect(await order("?topics=agents,%3Cscript%3E,,agents")).toEqual(["tagged", "untagged"]);
+    });
+
+    it("says which topics it ranked for", async () => {
+      const src = await source("verge-ai");
+      await story({ slug: "a", sourceIds: [src], lastActivityAt: new Date(Date.now() - 60_000) });
+      const { GET } = await import("@/app/api/brief/route");
+      expect((await body(await GET(req("/api/brief?topics=agents,openai")))).topics).toEqual([
+        "agents",
+        "openai",
+      ]);
+      expect((await body(await GET(req("/api/brief")))).topics).toEqual([]);
+    });
+
     it("returns a window, a count and the reading time of what it returned", async () => {
       const src = await source("verge-ai");
       await story({ slug: "a", sourceIds: [src], lastActivityAt: new Date(Date.now() - 60_000) });

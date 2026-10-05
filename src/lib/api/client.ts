@@ -288,7 +288,14 @@ export type PreferencesPatch = Partial<Omit<Preferences, "updatedAt">>;
  * score the worker writes ahead of time, so moving it would mean ranking at
  * read time. That one is the remaining half of #94.
  */
-const DEVICE_FIELDS = ["briefLength", "theme", "onboardedAt"] as const;
+/**
+ * `topicKeys` joined this list in #203. It was the last preference that was
+ * written by every reader into one shared row, and the ranker read that row
+ * for everyone — so visitor A's pick on the welcome screen was visitor B's
+ * feed. Now each device keeps its own and mirrors it to a cookie the server
+ * reads per request (fixture-store.ts, brief-length.ts).
+ */
+const DEVICE_FIELDS = ["briefLength", "theme", "onboardedAt", "topicKeys"] as const;
 
 function splitPatch(patch: PreferencesPatch) {
   const device: PreferencesPatch = {};
@@ -308,6 +315,12 @@ function splitPatch(patch: PreferencesPatch) {
 export async function getPreferences(): Promise<Preferences> {
   if (USING_FIXTURES) return localPreferences();
   const server = await json<Partial<Preferences>>("/api/preferences");
+  // The device's fields are the device's whatever the server says. Since #203
+  // the route no longer sends topicKeys, but a server one deploy behind this
+  // client would, and spread order alone would let its shared list overwrite
+  // the reader's own. Stripping by the same list the write path splits on
+  // makes the two directions agree about what the server is allowed to say.
+  for (const field of DEVICE_FIELDS) delete server[field];
   return { ...localPreferences(), ...server };
 }
 
@@ -319,10 +332,15 @@ export async function putPreferences(patch: PreferencesPatch): Promise<Preferenc
   // than from here.
   if (Object.keys(device).length > 0) patchLocalPreferences(device);
   if (Object.keys(server).length > 0) {
-    await json<Partial<Preferences>>("/api/preferences", {
-      method: "PUT",
-      body: JSON.stringify(server),
-    });
+    // What is left after the device's fields are taken out is the instance's
+    // own configuration — when the brief is cut, in which zone — and since
+    // #203 only whoever runs the instance may change that, with the internal
+    // secret, through /api/internal/preferences. The screen never sends these
+    // (its controls are disabled with the reason beside them), so reaching
+    // here is a programming error and is said so, not sent and refused.
+    throw new Error(
+      `${Object.keys(server).join(", ")} can only be changed by whoever runs this copy`,
+    );
   }
   return getPreferences();
 }

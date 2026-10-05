@@ -1,7 +1,7 @@
-import { eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
 import type { Db } from "@/db/client";
-import { topics, userPreferences } from "@/db/schema";
+import { userPreferences } from "@/db/schema";
 import { ApiError } from "./http";
 import type { StoryCard } from "./stories";
 
@@ -27,8 +27,20 @@ export interface SavedCard extends StoryCard {
 
 // ── Preferences ──────────────────────────────────────────────────────────────
 
+/**
+ * What the ONE shared row still carries: when the brief is cut and in which
+ * zone. That is the instance's configuration — the same clock for every
+ * reader, because there is one collector and one window — and since #203 it
+ * is written only through the secret-guarded internal route.
+ *
+ * NO topicKeys, since #203. They were the last field every reader wrote into
+ * this row and the ranker read back out for everyone, which made one visitor's
+ * welcome-screen pick another visitor's feed. They live on the device now,
+ * beside briefLength, theme and onboardedAt (#94), and reach the server as a
+ * cookie per request. The column is still in the table; nothing writes or
+ * reads it, and dropping it waits for the destructive migration in #190.
+ */
 export interface Preferences {
-  topicKeys: string[];
   briefTime: string;
   timezone: string;
   updatedAt: string;
@@ -36,11 +48,12 @@ export interface Preferences {
 
 export const preferencesPatchSchema = z
   .object({
-    topicKeys: z.array(z.string().min(1)).max(100),
     briefTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "briefTime must be HH:MM"),
     timezone: z.string().min(1),
   })
   .partial()
+  // strict() is what turns "a field that moved to the device" into a 400
+  // rather than a silently dropped write. topicKeys is now one of those.
   .strict();
 
 const DEFAULTS = {
@@ -56,7 +69,6 @@ const DEFAULTS = {
 
 function serialise(row: typeof userPreferences.$inferSelect): Preferences {
   return {
-    topicKeys: row.topicKeys,
     briefTime: row.briefTime,
     timezone: row.timezone,
     updatedAt: row.updatedAt.toISOString(),
@@ -90,18 +102,6 @@ export async function updatePreferences(
   db: Db,
   patch: z.infer<typeof preferencesPatchSchema>,
 ): Promise<Preferences> {
-  if (patch.topicKeys?.length) {
-    const known = await db
-      .select({ key: topics.key })
-      .from(topics)
-      .where(inArray(topics.key, patch.topicKeys));
-    const found = new Set(known.map((k) => k.key));
-    const missing = patch.topicKeys.filter((k) => !found.has(k));
-    // A silently dropped key is a preference the reader believes they set.
-    if (missing.length) {
-      throw new ApiError("VALIDATION_ERROR", `unknown topic: ${missing.join(", ")}`);
-    }
-  }
   if (patch.timezone !== undefined) {
     try {
       new Intl.DateTimeFormat("en-US", { timeZone: patch.timezone });
