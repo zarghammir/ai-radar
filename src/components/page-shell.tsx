@@ -14,7 +14,8 @@ export function PageShell({
   children,
 }: {
   eyebrow: ReactNode;
-  title: string;
+  /** A node so Today can greet by the reader's own clock (LocalGreeting). */
+  title: ReactNode;
   /** A node rather than a string so a page can put structure in it. */
   summary?: ReactNode;
   /** Optional controls under the heading, e.g. the reading-length switch. */

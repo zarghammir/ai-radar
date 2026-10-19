@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { LocalDate } from "@/components/local-date";
+import { LocalGreeting } from "@/components/local-greeting";
 import { PageShell } from "@/components/page-shell";
 import { ContentTypeBadge, VerificationChip } from "@/components/story/badges";
 import { StoryActions } from "@/components/story/story-actions";
@@ -46,7 +47,7 @@ export default async function StoryPage({ params }: PageProps<"/story/[slug]">) 
     return (
       <PageShell
         eyebrow={<LocalDate />}
-        title="Good morning"
+        title={<LocalGreeting />}
         summary={<span>This story is out of reach</span>}
         state="unreachable"
       >
