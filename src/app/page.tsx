@@ -2,6 +2,7 @@ import { BriefList } from "@/components/today/brief-list";
 import { ReadingMode } from "@/components/today/reading-mode";
 import { EmptyState, PageShell } from "@/components/page-shell";
 import { LocalDate } from "@/components/local-date";
+import { LocalGreeting } from "@/components/local-greeting";
 import { briefSummary, emptyBriefReason } from "@/lib/api/brief-summary";
 import { loadBrief } from "@/lib/api/brief-server";
 import { defaultBriefLength, readerTopicKeys } from "@/lib/api/brief-length";
@@ -88,7 +89,7 @@ export default async function TodayPage({ searchParams }: PageProps<"/">) {
     return (
       <PageShell
         eyebrow={<LocalDate />}
-        title="Good morning"
+        title={<LocalGreeting />}
         summary={<span>Your stories are out of reach</span>}
         state="unreachable"
       >
@@ -110,7 +111,7 @@ export default async function TodayPage({ searchParams }: PageProps<"/">) {
   return (
     <PageShell
       eyebrow={<LocalDate />}
-      title="Good morning"
+      title={<LocalGreeting />}
       summary={
         brief.count === 0 ? (
           <span>Nothing in this brief yet</span>
